@@ -1,0 +1,27 @@
+name: elixir
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        otp: ['28']
+        elixir: ['1.19']
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+      - run: mix deps.get
+      - run: mix test
