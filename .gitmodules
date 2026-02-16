@@ -1,6 +1,0 @@
-[submodule "test/fixtures/JSON-Schema-Test-Suite"]
-	path = test/fixtures/JSON-Schema-Test-Suite
-	url = https://github.com/json-schema-org/JSON-Schema-Test-Suite.git
-[submodule "test/fixtures/uritemplate-test"]
-	path = test/fixtures/uritemplate-test
-	url = https://github.com/uri-templates/uritemplate-test
