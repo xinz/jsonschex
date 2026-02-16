@@ -1,15 +1,22 @@
 defmodule JSONSchex.MixProject do
   use Mix.Project
 
+  @source_url "https://github.com/xinz/jsonschex"
+  @version "0.1.0"
+  @description "A JSON Schema validator with complete support for the draft2020-12 and latest specifications."
+
   def project do
     [
       app: :jsonschex,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      docs: docs()
+      docs: docs(),
+      description: @description,
+      package: package(),
+      source_url: @source_url
     ]
   end
 
@@ -79,6 +86,16 @@ defmodule JSONSchex.MixProject do
         JSONSchex.Validator,
         JSONSchex.Formats
       ]
+    ]
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => @source_url
+      },
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE.md)
     ]
   end
 

@@ -1,6 +1,8 @@
 # JSONSchex
 
-JSONSchex is a [JSON Schema specification](https://json-schema.org/specification) implementation in Elixir. It fully supports [Draft 2020-12](https://json-schema.org/draft/2020-12), and its design focuses on practical performance.
+[![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
+
+JSONSchex is a [JSON Schema specification](https://json-schema.org/specification) implementation in Elixir. It fully supports [Draft 2020-12](https://json-schema.org/draft/2020-12) and latest specifications, and its design focuses on practical performance.
 
 ## Installation
 
