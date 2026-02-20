@@ -154,11 +154,11 @@ defmodule JSONSchex.Validator.Keywords do
   Validates data against all schemas in an `allOf` array.
   """
   def validate_allOf(data, schemas, path, root, _evaluated) do
-    reduce_allOf(schemas, data, path, root, @empty_mapset, [])
+    reduce_allOf(schemas, data, path, root, [], [])
   end
 
   defp reduce_allOf([], _data, _path, _root, acc_keys, []) do
-    {:ok, acc_keys}
+    {:ok, MapSet.new(List.flatten(acc_keys))}
   end
 
   defp reduce_allOf([], _data, _path, _root, _acc_keys, error_lists) do
@@ -167,15 +167,10 @@ defmodule JSONSchex.Validator.Keywords do
 
   defp reduce_allOf([schema | rest], data, path, root, acc_keys, error_lists) do
     case Validator.validate_entry(schema, data, path, root, @empty_mapset) do
+      {:ok, %MapSet{map: m}} when map_size(m) == 0 ->
+        reduce_allOf(rest, data, path, root, acc_keys, error_lists)
       {:ok, new_keys} ->
-        merged =
-          cond do
-            map_size(new_keys.map) == 0 -> acc_keys
-            map_size(acc_keys.map) == 0 -> new_keys
-            true -> MapSet.union(acc_keys, new_keys)
-          end
-
-        reduce_allOf(rest, data, path, root, merged, error_lists)
+        reduce_allOf(rest, data, path, root, [MapSet.to_list(new_keys) | acc_keys], error_lists)
 
       {:error, errs} ->
         reduce_allOf(rest, data, path, root, acc_keys, [errs | error_lists])
@@ -186,11 +181,11 @@ defmodule JSONSchex.Validator.Keywords do
   Validates data against schemas in an `anyOf` array.
   """
   def validate_anyOf(data, schemas, path, root, evaluated) do
-    reduce_anyOf(schemas, data, path, root, evaluated, 0, @empty_mapset, [])
+    reduce_anyOf(schemas, data, path, root, evaluated, 0, [], [])
   end
 
   defp reduce_anyOf([], _data, _path, _root, _evaluated, count, merged_keys, _error_lists) when count > 0 do
-    {:ok, merged_keys}
+    {:ok, MapSet.new(List.flatten(merged_keys))}
   end
 
   defp reduce_anyOf([], _data, _path, _root, _evaluated, 0, _merged_keys, error_lists) do
@@ -199,16 +194,10 @@ defmodule JSONSchex.Validator.Keywords do
 
   defp reduce_anyOf([schema | rest], data, path, root, evaluated, count, acc_keys, acc_errs) do
     case Validator.validate_entry(schema, data, path, root, evaluated) do
+      {:ok, %MapSet{map: m}} when map_size(m) == 0 ->
+        reduce_anyOf(rest, data, path, root, evaluated, count + 1, acc_keys, acc_errs)
       {:ok, keys} ->
-        merged =
-          cond do
-            map_size(keys.map) == 0 -> acc_keys
-            map_size(acc_keys.map) == 0 -> keys
-            true -> MapSet.union(acc_keys, keys)
-          end
-
-        reduce_anyOf(rest, data, path, root, evaluated, count + 1, merged, acc_errs)
-
+        reduce_anyOf(rest, data, path, root, evaluated, count + 1, [MapSet.to_list(keys) | acc_keys], acc_errs)
       {:error, errs} ->
         new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
         reduce_anyOf(rest, data, path, root, evaluated, count, acc_keys, new_errs)
@@ -485,12 +474,12 @@ defmodule JSONSchex.Validator.Keywords do
   Also used by the legacy `dependencies` keyword for schema-valued entries.
   """
   def validate_dependent_schemas(data, compiled_deps, path, root) when is_map(data) do
-    reduce_dependent_schemas(Map.to_list(compiled_deps), data, path, root, [], @empty_mapset)
+    reduce_dependent_schemas(Map.to_list(compiled_deps), data, path, root, [], [])
   end
   def validate_dependent_schemas(_, _, _, _), do: :ok
 
   defp reduce_dependent_schemas([], _data, _path, _root, [], eval_keys) do
-    {:ok, eval_keys}
+    {:ok, MapSet.new(List.flatten(eval_keys))}
   end
   defp reduce_dependent_schemas([], _data, _path, _root, errs, _eval_keys) do
     {:error, List.flatten(errs)}
@@ -498,9 +487,10 @@ defmodule JSONSchex.Validator.Keywords do
   defp reduce_dependent_schemas([{prop, schema} | rest], data, path, root, errs, eval_keys) do
     if Map.has_key?(data, prop) do
       case Validator.validate_entry(schema, data, path, root) do
+        {:ok, %MapSet{map: m}} when map_size(m) == 0 ->
+          reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
         {:ok, new_keys} ->
-          new_eval = if MapSet.size(new_keys) == 0, do: eval_keys, else: MapSet.union(eval_keys, new_keys)
-          reduce_dependent_schemas(rest, data, path, root, errs, new_eval)
+          reduce_dependent_schemas(rest, data, path, root, errs, [MapSet.to_list(new_keys) | eval_keys])
         {:error, new_errs} ->
           reduce_dependent_schemas(rest, data, path, root, [new_errs | errs], eval_keys)
       end
