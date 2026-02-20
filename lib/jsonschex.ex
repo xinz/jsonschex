@@ -29,7 +29,7 @@ defmodule JSONSchex do
 
   alias JSONSchex.Compiler
   alias JSONSchex.Validator
-  alias JSONSchex.Types.{Schema, Error}
+  alias JSONSchex.Types.{Schema, Error, CompileError}
 
   @doc """
   Compiles a raw JSON Schema into a reusable `Schema` struct.
@@ -93,7 +93,27 @@ defmodule JSONSchex do
       iex> JSONSchex.format_error(error)
       "At /user/age: Value -5 is less than minimum 0"
 
+      iex> {:error, error} = JSONSchex.compile(%{"type" => "1"})
+      iex> JSONSchex.format_error(error)
+      ~s(Keyword 'type' must be one of [string, integer, number, boolean, object, array, null], got: "1")
+
+      iex> {:error, error} = JSONSchex.compile(%{"minimum" => "five"})
+      iex> JSONSchex.format_error(error)
+      ~s(Keyword 'minimum' must be a number, got: "five")
+
+      iex> {:error, error} = JSONSchex.compile(%{"multipleOf" => -3})
+      iex> JSONSchex.format_error(error)
+      ~s(Keyword 'multipleOf' must be a strictly positive number, got: -3)
+
+      iex> {:error, error} = JSONSchex.compile(%{"minLength" => -1})
+      iex> JSONSchex.format_error(error)
+      ~s(Keyword 'minLength' must be a non-negative integer, got: -1)
+
+      iex> {:error, error} = JSONSchex.compile(%{"uniqueItems" => "yes"})
+      iex> JSONSchex.format_error(error)
+      ~s(Keyword 'uniqueItems' must be a boolean, got: "yes")
   """
-  @spec format_error(Error.t()) :: String.t()
+  @spec format_error(Error.t() | CompileError.t()) :: String.t()
   defdelegate format_error(error), to: JSONSchex.ErrorFormatter, as: :format
+
 end

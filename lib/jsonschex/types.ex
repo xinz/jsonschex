@@ -84,7 +84,7 @@ defmodule JSONSchex.Types do
     @moduledoc """
     An error encountered during schema compilation.
     """
-    @type error :: :unsupported_vocabulary | :invalid_regex
+    @type error :: :unsupported_vocabulary | :invalid_regex | :invalid_keyword_value
 
 
     @type t :: %__MODULE__{
@@ -94,6 +94,28 @@ defmodule JSONSchex.Types do
       message: term() | nil
     }
     defstruct [:error, :path, :value, :message]
+
+    @non_neg_int_keywords ~w(minLength maxLength minProperties maxProperties minItems maxItems)
+    @numeric_keywords ~w(minimum maximum exclusiveMinimum exclusiveMaximum)
+    @valid_types ~w(string integer number boolean object array null)
+
+    @doc false
+    defguard is_non_neg_int_keywords?(value) when value in @non_neg_int_keywords
+
+    @doc false
+    defguard is_numeric_keywords?(value) when value in @numeric_keywords
+
+    @doc false
+    def valid_types, do: @valid_types
+
+    @doc false
+    defguard is_valid_types?(value) when value in @valid_types
+
+    defimpl String.Chars do
+      def to_string(t) do
+        JSONSchex.ErrorFormatter.format(t)
+      end
+    end
 
   end
 end

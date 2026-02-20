@@ -1,8 +1,33 @@
 defmodule JSONSchex.ErrorFormatter do
-  @moduledoc "Formats `JSONSchex.Types.Error` structs into human-readable strings."
+  @moduledoc """
+  Formats `JSONSchex.Types.Error` and `JSONSchex.Types.CompileError` structs
+  into human-readable strings.
+  """
   alias JSONSchex.Types.Error
+  alias JSONSchex.Types.CompileError
 
-  @doc "Returns a human-readable message for the given error."
+  import CompileError, only: [is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1]
+
+  @doc """
+  Returns a human-readable message for the given `Error` or `CompileError`.
+  """
+  def format(%CompileError{error: :invalid_keyword_value, path: path, value: value}) do
+    keyword = List.last(path)
+    "#{format_invalid_keyword(keyword, value)}"
+  end
+
+  def format(%CompileError{error: :unsupported_vocabulary, path: path}) do
+    "Unsupported required vocabulary: #{List.last(path)}"
+  end
+
+  def format(%CompileError{error: :invalid_regex, path: path, message: msg}) do
+    "Invalid regex at schema #{format_path(path)}: #{msg}"
+  end
+
+  def format(%CompileError{error: error}) do
+    "Schema compile error: #{inspect(error)}"
+  end
+
   def format(%Error{} = error) do
     path = format_path(error.path)
     msg = format_message(error)
@@ -129,4 +154,38 @@ defmodule JSONSchex.ErrorFormatter do
     IO.iodata_to_binary(iodata)
   end
   defp format_path(_), do: "/"
+
+  defp format_invalid_keyword("type", value) when is_binary(value) do
+    valid = Enum.join(CompileError.valid_types(), ", ")
+    "Keyword 'type' must be one of [#{valid}], got: #{inspect(value)}"
+  end
+
+  defp format_invalid_keyword("type", value) when is_list(value) do
+    invalid = Enum.reject(value, &(is_binary(&1) and &1 in CompileError.valid_types()))
+    "Keyword 'type' contains unknown type(s): #{Enum.join(invalid, ", ")}"
+  end
+
+  defp format_invalid_keyword("type", value) do
+    "Keyword 'type' must be a type string or an array of type strings, got: #{inspect(value)}"
+  end
+
+  defp format_invalid_keyword("multipleOf", value) do
+    "Keyword 'multipleOf' must be a strictly positive number, got: #{inspect(value)}"
+  end
+
+  defp format_invalid_keyword("uniqueItems", value) do
+    "Keyword 'uniqueItems' must be a boolean, got: #{inspect(value)}"
+  end
+
+  defp format_invalid_keyword(kw, value) when is_numeric_keywords?(kw) do
+    "Keyword '#{kw}' must be a number, got: #{inspect(value)}"
+  end
+
+  defp format_invalid_keyword(kw, value) when is_non_neg_int_keywords?(kw) do
+    "Keyword '#{kw}' must be a non-negative integer, got: #{inspect(value)}"
+  end
+
+  defp format_invalid_keyword(kw, value) do
+    "Keyword '#{kw}' has an invalid value: #{inspect(value)}"
+  end
 end

@@ -27,8 +27,11 @@ defmodule JSONSchex.Compiler do
   alias JSONSchex.Vocabulary
   alias JSONSchex.URIUtil
 
-  @default_vocabs_list Vocabulary.defaults()
+  import CompileError, only: [
+    is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1, is_valid_types?: 1
+    ]
 
+  @default_vocabs_list Vocabulary.defaults()
 
   @doc """
   Compiles a raw JSON Schema into an executable `Schema` struct.
@@ -377,12 +380,47 @@ defmodule JSONSchex.Compiler do
 
   defp compile_keyword({"$dynamicAnchor", _}, _, _base, _vocabs, _ctx), do: {:ok, nil}
 
-  defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :type, params: t, validator: fn d, _ -> Predicates.check_type(d, t) end}}
+  defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx) when is_binary(t) and is_valid_types?(t) do
+    {:ok, %Rule{name: :type, params: t, validator: fn d, _ -> Predicates.check_type(d, t) end}}
+  end
+
+  defp compile_keyword({"type", types}, _, _base, _vocabs, _ctx) when is_list(types) do
+    invalid = Enum.reject(types, &(is_binary(&1) and &1 in CompileError.valid_types()))
+    if invalid == [] do
+      {:ok, %Rule{name: :type, params: types, validator: fn d, _ -> Predicates.check_type(d, types) end}}
+    else
+      {:error, %CompileError{error: :invalid_keyword_value, path: ["type"], value: types}}
+    end
+  end
+
+  defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx) do
+    {:error, %CompileError{error: :invalid_keyword_value, path: ["type"], value: t}}
+  end
+
+  defp compile_keyword({kw, m}, _, _base, _vocabs, _ctx)
+       when is_numeric_keywords?(kw) and not is_number(m) do
+    {:error, %CompileError{error: :invalid_keyword_value, path: [kw], value: m}}
+  end
+
   defp compile_keyword({"minimum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minimum, params: m, validator: fn d, _ -> Predicates.check_minimum(d, m) end}}
   defp compile_keyword({"maximum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maximum, params: m, validator: fn d, _ -> Predicates.check_maximum(d, m) end}}
   defp compile_keyword({"exclusiveMinimum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :exclusiveMinimum, params: m, validator: fn d, _ -> Predicates.check_exclusive_minimum(d, m) end}}
   defp compile_keyword({"exclusiveMaximum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :exclusiveMaximum, params: m, validator: fn d, _ -> Predicates.check_exclusive_maximum(d, m) end}}
+
+  # "multipleOf" — value must be a strictly positive number
+  defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx)
+       when not is_number(m) or m <= 0 do
+    {:error, %CompileError{error: :invalid_keyword_value, path: ["multipleOf"], value: m}}
+  end
+
   defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :multipleOf, params: m, validator: fn d, _ -> Predicates.check_multiple_of(d, m) end}}
+
+  defp compile_keyword({kw, m}, _, _base, _vocabs, _ctx)
+       when is_non_neg_int_keywords?(kw) and
+            not (is_integer(m) and m >= 0) and
+            not (is_float(m) and m >= 0.0 and trunc(m) == m) do
+    {:error, %CompileError{error: :invalid_keyword_value, path: [kw], value: m}}
+  end
 
   defp compile_keyword({"minLength", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minLength, params: m, validator: fn d, _ -> Predicates.check_min_length(d, m) end}}
   defp compile_keyword({"maxLength", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maxLength, params: m, validator: fn d, _ -> Predicates.check_max_length(d, m) end}}
@@ -401,6 +439,11 @@ defmodule JSONSchex.Compiler do
 
   defp compile_keyword({"minItems", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minItems, params: m, validator: fn d, _ -> Predicates.check_min_items(d, m) end}}
   defp compile_keyword({"maxItems", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maxItems, params: m, validator: fn d, _ -> Predicates.check_max_items(d, m) end}}
+
+  defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx) when not is_boolean(b) do
+    {:error, %CompileError{error: :invalid_keyword_value, path: ["uniqueItems"], value: b}}
+  end
+
   defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :uniqueItems, params: b, validator: fn d, _ -> Predicates.check_unique_items(d, b) end}}
 
   defp compile_keyword({"enum", v}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :enum, params: v, validator: fn d, _ -> Predicates.check_enum(d, v) end}}
