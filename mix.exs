@@ -95,7 +95,7 @@ defmodule JSONSchex.MixProject do
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
-        "Changelog" => "https://hexdocs.pm/jsonschex/changelog.html"
+        "Changelog" => "#{source_url}/blob/main/CHANGELOG.md"
       },
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE.md)
     ]
