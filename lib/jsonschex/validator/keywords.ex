@@ -45,30 +45,43 @@ defmodule JSONSchex.Validator.Keywords do
   Validates unevaluated properties against a schema.
   """
   def validate_unevaluated_props(data, sub_schema, path, evaluated_keys, root) when is_map(data) do
-    {errors, uneval_keys} =
-      Enum.reduce(data, {[], []}, fn {key, val}, {acc_errs, acc_uneval} ->
-        if MapSet.member?(evaluated_keys, key) do
-          {acc_errs, acc_uneval}
-        else
-          case Validator.validate_entry(sub_schema, val, [key | path], root) do
-            {:error, new_errs} -> {[new_errs | acc_errs], [key | acc_uneval]}
-            _ok_case -> {acc_errs, [key | acc_uneval]}
-          end
-        end
-      end)
-
-    if errors == [], do: {:ok, MapSet.new(uneval_keys)}, else: {:error, List.flatten(errors)}
+    reduce_unevaluated_props(Map.to_list(data), sub_schema, path, evaluated_keys, root, [], [])
   end
 
   def validate_unevaluated_props(_, _, _, _, _), do: :ok
+
+  defp reduce_unevaluated_props([], _sub_schema, _path, _evaluated_keys, _root, [], []),
+    do: {:ok, @empty_mapset}
+
+  defp reduce_unevaluated_props([], _sub_schema, _path, _evaluated_keys, _root, [], uneval),
+    do: {:ok, MapSet.new(uneval)}
+
+  defp reduce_unevaluated_props([], _sub_schema, _path, _evaluated_keys, _root, errs, _uneval),
+    do: {:error, List.flatten(errs)}
+
+  defp reduce_unevaluated_props([{key, val} | rest], sub_schema, path, evaluated_keys, root, errs, uneval) do
+    if MapSet.member?(evaluated_keys, key) do
+      reduce_unevaluated_props(rest, sub_schema, path, evaluated_keys, root, errs, uneval)
+    else
+      case Validator.validate_entry(sub_schema, val, [key | path], root) do
+        {:ok, _} ->
+          reduce_unevaluated_props(rest, sub_schema, path, evaluated_keys, root, errs, [key | uneval])
+
+        {:error, new_errs} ->
+          reduce_unevaluated_props(rest, sub_schema, path, evaluated_keys, root, [new_errs | errs], [key | uneval])
+      end
+    end
+  end
 
   @doc """
   Validates array items against prefix schemas (`prefixItems`).
   """
   def validate_prefix_items(data, schemas, path, root) when is_list(data) do
-    {errs, evaluated} = reduce_prefix_items(schemas, data, path, root, 0, {[], @empty_mapset})
-
-    if errs == [], do: {:ok, evaluated}, else: {:error, List.flatten(errs)}
+    case reduce_prefix_items(schemas, data, path, root, 0, {[], []}) do
+      {[], []}       -> {:ok, @empty_mapset}
+      {[], evaluated} -> {:ok, MapSet.new(evaluated)}
+      {errs, _}      -> {:error, List.flatten(errs)}
+    end
   end
   def validate_prefix_items(_, _, _, _), do: :ok
 
@@ -77,7 +90,7 @@ defmodule JSONSchex.Validator.Keywords do
   defp reduce_prefix_items([schema | rest_schemas], [item | rest_data], path, root, index, {errs, evaluated}) do
     case Validator.validate_entry(schema, item, [index | path], root) do
       {:ok, _} ->
-        reduce_prefix_items(rest_schemas, rest_data, path, root, index + 1, {errs, MapSet.put(evaluated, index)})
+        reduce_prefix_items(rest_schemas, rest_data, path, root, index + 1, {errs, [index | evaluated]})
 
       {:error, new_errs} ->
         reduce_prefix_items(rest_schemas, rest_data, path, root, index + 1, {[new_errs | errs], evaluated})
@@ -88,9 +101,11 @@ defmodule JSONSchex.Validator.Keywords do
   Validates array items starting from a given index (`items`).
   """
   def validate_items_array(data, schema, start_index, path, root) when is_list(data) do
-    {errs, evaluated} = reduce_items_array(data, schema, start_index, path, root, 0, {[], @empty_mapset})
-
-    if errs == [], do: {:ok, evaluated}, else: {:error, List.flatten(errs)}
+    case reduce_items_array(data, schema, start_index, path, root, 0, {[], []}) do
+      {[], []}        -> {:ok, @empty_mapset}
+      {[], evaluated} -> {:ok, MapSet.new(evaluated)}
+      {errs, _}       -> {:error, List.flatten(errs)}
+    end
   end
   def validate_items_array(_, _, _, _, _), do: :ok
 
@@ -101,7 +116,7 @@ defmodule JSONSchex.Validator.Keywords do
   defp reduce_items_array([val | rest], schema, start_index, path, root, index, {errs, evaluated}) do
     case Validator.validate_entry(schema, val, [index | path], root) do
       {:ok, _} ->
-        reduce_items_array(rest, schema, start_index, path, root, index + 1, {errs, MapSet.put(evaluated, index)})
+        reduce_items_array(rest, schema, start_index, path, root, index + 1, {errs, [index | evaluated]})
 
       {:error, new_errs} ->
         reduce_items_array(rest, schema, start_index, path, root, index + 1, {[new_errs | errs], evaluated})
@@ -112,10 +127,11 @@ defmodule JSONSchex.Validator.Keywords do
   Validates unevaluated array items against a schema.
   """
   def validate_unevaluated_items(data, schema, path, evaluated_indices, root) when is_list(data) do
-    {errors, unevaluated} =
-      reduce_unevaluated_items(data, schema, path, evaluated_indices, root, 0, {[], @empty_mapset})
-
-    if errors == [], do: {:ok, unevaluated}, else: {:error, List.flatten(errors)}
+    case reduce_unevaluated_items(data, schema, path, evaluated_indices, root, 0, {[], []}) do
+      {[], []}          -> {:ok, @empty_mapset}
+      {[], unevaluated} -> {:ok, MapSet.new(unevaluated)}
+      {errors, _}       -> {:error, List.flatten(errors)}
+    end
   end
   def validate_unevaluated_items(_, _, _, _, _), do: :ok
 
@@ -126,10 +142,10 @@ defmodule JSONSchex.Validator.Keywords do
     else
       case Validator.validate_entry(schema, val, [index | path], root) do
         {:ok, _} ->
-          reduce_unevaluated_items(rest, schema, path, evaluated_indices, root, index + 1, {acc_errs, MapSet.put(acc_uneval, index)})
+          reduce_unevaluated_items(rest, schema, path, evaluated_indices, root, index + 1, {acc_errs, [index | acc_uneval]})
 
         {:error, new_errs} ->
-          reduce_unevaluated_items(rest, schema, path, evaluated_indices, root, index + 1, {[new_errs | acc_errs], MapSet.put(acc_uneval, index)})
+          reduce_unevaluated_items(rest, schema, path, evaluated_indices, root, index + 1, {[new_errs | acc_errs], [index | acc_uneval]})
       end
     end
   end
@@ -256,18 +272,7 @@ defmodule JSONSchex.Validator.Keywords do
   Validates array items against a `contains` schema with min/max constraints.
   """
   def validate_contains(data, schema, min, max, path, root) when is_list(data) do
-    {match_count, matching_indices, _index} =
-      Enum.reduce(data, {0, @empty_mapset, 0}, fn item, {count, acc_indices, index} ->
-        next =
-          case Validator.validate_entry(schema, item, [index | path], root) do
-            {:error, _} ->
-              {count, acc_indices}
-            {:ok, _} ->
-              {count + 1, MapSet.put(acc_indices, index)}
-          end
-
-        {elem(next, 0), elem(next, 1), index + 1}
-      end)
+    {match_count, matching_indices} = reduce_contains(data, schema, min, max, path, root, 0, 0, [])
 
     cond do
       match_count < min ->
@@ -277,10 +282,29 @@ defmodule JSONSchex.Validator.Keywords do
         {:error, %{max: max, count: match_count}}
 
       true ->
-        {:ok, matching_indices}
+        {:ok, if(matching_indices == [], do: @empty_mapset, else: MapSet.new(matching_indices))}
     end
   end
   def validate_contains(_, _, _, _, _, _), do: :ok
+
+  defp reduce_contains(_data, _schema, _min, max, _path, _root, _index, count, indices)
+       when is_integer(max) and count > max do
+    {count, indices}
+  end
+
+  defp reduce_contains([], _schema, _min, _max, _path, _root, _index, count, indices) do
+    {count, indices}
+  end
+
+  defp reduce_contains([item | rest], schema, min, max, path, root, index, count, indices) do
+    case Validator.validate_entry(schema, item, [index | path], root) do
+      {:error, _} ->
+        reduce_contains(rest, schema, min, max, path, root, index + 1, count, indices)
+
+      {:ok, _} ->
+        reduce_contains(rest, schema, min, max, path, root, index + 1, count + 1, [index | indices])
+    end
+  end
 
   @doc """
   Validates object properties against pattern-based schemas (`patternProperties`).
@@ -403,49 +427,58 @@ defmodule JSONSchex.Validator.Keywords do
   Validates property names against a schema (`propertyNames`).
   """
   def validate_property_names(data, compiled_sub, path, root) when is_map(data) do
-    errors =
-      Enum.reduce(data, [], fn {key, _}, acc ->
-        case Validator.validate_entry(compiled_sub, key, [key | path], root) do
-          {:ok, _} ->
-            acc
-
-          {:error, new_errs} ->
-            [new_errs | acc]
-        end
-      end)
-
-    case errors do
-      [] -> :ok
-      errs -> {:error, List.flatten(errs)}
-    end
+    reduce_property_names(Map.to_list(data), compiled_sub, path, root, [])
   end
   def validate_property_names(_, _, _, _), do: :ok
+
+  defp reduce_property_names([], _compiled_sub, _path, _root, []), do: :ok
+  defp reduce_property_names([], _compiled_sub, _path, _root, errs), do: {:error, List.flatten(errs)}
+
+  defp reduce_property_names([{key, _} | rest], compiled_sub, path, root, errs) do
+    case Validator.validate_entry(compiled_sub, key, [key | path], root) do
+      {:ok, _} ->
+        reduce_property_names(rest, compiled_sub, path, root, errs)
+
+      {:error, new_errs} ->
+        reduce_property_names(rest, compiled_sub, path, root, [new_errs | errs])
+    end
+  end
 
   @doc """
   Validates dependent required properties (`dependentRequired`).
   """
   def validate_dependent_required(data, deps, path, _root) when is_map(data) do
-    errors =
-      Enum.reduce(deps, [], fn {prop, required_keys}, acc ->
-        if Map.has_key?(data, prop) do
-          missing = Enum.filter(required_keys, fn req -> not Map.has_key?(data, req) end)
-
-          if missing == [] do
-            acc
-          else
-            [build_error(path, :dependentRequired, %{property: prop, missing: missing}) | acc]
-          end
-        else
-          acc
-        end
-      end)
-
-    case errors do
-      [] -> :ok
-      errs -> {:error, errs}
-    end
+    reduce_dependent_required(Map.to_list(deps), data, path, [])
   end
   def validate_dependent_required(_, _, _, _), do: :ok
+
+  defp reduce_dependent_required([], _data, _path, []), do: :ok
+  defp reduce_dependent_required([], _data, _path, errs), do: {:error, errs}
+
+  defp reduce_dependent_required([{prop, required_keys} | rest], data, path, errs) do
+    if Map.has_key?(data, prop) do
+      case collect_missing_keys(required_keys, data, []) do
+        [] ->
+          reduce_dependent_required(rest, data, path, errs)
+
+        missing ->
+          err = build_error(path, :dependentRequired, %{property: prop, missing: missing})
+          reduce_dependent_required(rest, data, path, [err | errs])
+      end
+    else
+      reduce_dependent_required(rest, data, path, errs)
+    end
+  end
+
+  defp collect_missing_keys([], _data, acc), do: acc
+
+  defp collect_missing_keys([req | rest], data, acc) do
+    if Map.has_key?(data, req) do
+      collect_missing_keys(rest, data, acc)
+    else
+      collect_missing_keys(rest, data, [req | acc])
+    end
+  end
 
   @doc """
   Validates an object against dependent schemas (`dependentSchemas`).
@@ -456,14 +489,11 @@ defmodule JSONSchex.Validator.Keywords do
   end
   def validate_dependent_schemas(_, _, _, _), do: :ok
 
-  defp reduce_dependent_schemas([], _data, _path, _root, [], []) do
-    {:ok, @empty_mapset}
-  end
   defp reduce_dependent_schemas([], _data, _path, _root, [], eval_keys) do
     {:ok, eval_keys}
   end
   defp reduce_dependent_schemas([], _data, _path, _root, errs, _eval_keys) do
-    {:error, errs}
+    {:error, List.flatten(errs)}
   end
   defp reduce_dependent_schemas([{prop, schema} | rest], data, path, root, errs, eval_keys) do
     if Map.has_key?(data, prop) do
@@ -472,7 +502,7 @@ defmodule JSONSchex.Validator.Keywords do
           new_eval = if MapSet.size(new_keys) == 0, do: eval_keys, else: MapSet.union(eval_keys, new_keys)
           reduce_dependent_schemas(rest, data, path, root, errs, new_eval)
         {:error, new_errs} ->
-          reduce_dependent_schemas(rest, data, path, root, new_errs ++ errs, eval_keys)
+          reduce_dependent_schemas(rest, data, path, root, [new_errs | errs], eval_keys)
       end
     else
       reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
