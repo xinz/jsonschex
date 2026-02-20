@@ -6,16 +6,16 @@ JSONSchex is a [JSON Schema specification](https://json-schema.org/specification
 
 ## Features
 
-- Implements [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords
-- Passes 100% of the [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) for Draft 2020-12
-- Designed for performance and simplicity: compile a schema once into an executable `Schema` struct, then validate data repeatedly with no repeated parsing overhead
+- Implements [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords.
+- Passes 100% of the [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) for Draft 2020-12.
+- Designed for performance and simplicity: compile a schema once into an executable `Schema` struct, then validate data repeatedly with no repeated parsing overhead.
 
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.1.0"}
+    {:jsonschex, "~> 0.2.0"}
   ]
 end
 ```
@@ -129,7 +129,7 @@ def deps do
     {:jsonschex, "~> 0.1.0"},
     {:jason, "~> 1.4"},
     {:decimal, "~> 2.0"},
-    {:idna, "~> 6.0 or 7.1"}
+    {:idna, "~> 6.0 or ~> 7.1"}
   ]
 end
 ```

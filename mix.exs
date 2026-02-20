@@ -2,7 +2,7 @@ defmodule JSONSchex.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/xinz/jsonschex"
-  @version "0.1.0"
+  @version "0.2.0"
   @description "A JSON Schema validator with complete support for the draft 2020-12 and latest specifications."
 
   def project do
@@ -28,6 +28,7 @@ defmodule JSONSchex.MixProject do
       main: "readme",
       extras: [
         "README.md",
+        "CHANGELOG.md",
         "guide/loader.md",
         "guide/dialect_and_vocabulary.md",
         "guide/feature_matrix.md",
@@ -93,7 +94,8 @@ defmodule JSONSchex.MixProject do
     [
       licenses: ["MIT"],
       links: %{
-        "GitHub" => @source_url
+        "GitHub" => @source_url,
+        "Changelog" => "https://hexdocs.pm/jsonschex/changelog.html"
       },
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE.md)
     ]
@@ -113,7 +115,6 @@ defmodule JSONSchex.MixProject do
       {:jason, "~> 1.4", optional: true},
       {:decimal, "~> 2.0", optional: true},
       {:idna, "~> 6.0 or ~> 7.1", optional: true},
-      {:benchee, "~> 1.0", only: :dev, runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
