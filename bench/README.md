@@ -27,4 +27,4 @@ BENCH=ref mix run libs_comparison.exs
 BENCH=format mix run libs_comparison.exs
 ```
 
-Results are printed to stdout via [Benchee](https://github.com/bencheeorg/benchee).
+Results are printed to stdout via [Benchee](https://github.com/bencheeorg/benchee), and my local benchmark results are [here](./results.md).

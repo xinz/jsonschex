@@ -27,7 +27,7 @@ defmodule Bench.MixProject do
   defp deps do
     [
       {:jsv, github: "lud/jsv"},
-      {:ex_jsonschema, "~> 0.1"},
+      {:json_xema, github: "hrzndhrn/json_xema"},
       {:jsonschex, path: "../", override: true},
       {:benchee, "~> 1.5", only: :dev, runtime: false}
     ]
