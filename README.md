@@ -4,6 +4,12 @@
 
 JSONSchex is a [JSON Schema specification](https://json-schema.org/specification) implementation in Elixir. It fully supports [Draft 2020-12](https://json-schema.org/draft/2020-12) and latest specifications, and its design focuses on practical performance.
 
+## Features
+
+- Implements [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords
+- Passes 100% of the [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) for Draft 2020-12
+- Designed for performance and simplicity: compile a schema once into an executable `Schema` struct, then validate data repeatedly with no repeated parsing overhead
+
 ## Installation
 
 ```elixir
@@ -113,7 +119,7 @@ JSONSchex has these optional dependencies that enable additional functionality:
 
 - **`decimal` (~> 2.0)**: Required for arbitrary precision decimal validation in the `multipleOf` keyword. Without this dependency, `multipleOf` validation may have precision issues with very large or very small decimal numbers.
 
-- **`idna` (~> 6.0)**: Required for internationalized domain name (IDN) support. Enables validation of `idn-hostname` and `idn-email` formats. Without this dependency, these formats may not be validated in expected ways.
+- **`idna` (~> 6.0 or ~> 7.1)**: Required for internationalized domain name (IDN) support. Enables validation of `idn-hostname` and `idn-email` formats. Without this dependency, these formats may not be validated in expected ways.
 
 To include these dependencies, add them to your `mix.exs`:
 
@@ -123,7 +129,7 @@ def deps do
     {:jsonschex, "~> 0.1.0"},
     {:jason, "~> 1.4"},
     {:decimal, "~> 2.0"},
-    {:idna, "~> 6.0"}
+    {:idna, "~> 6.0 or 7.1"}
   ]
 end
 ```
