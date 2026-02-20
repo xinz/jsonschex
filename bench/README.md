@@ -1,4 +1,4 @@
-# Benchmarks
+# Benchmark
 
 Performance testing is for reference and verification of this implementation only. It does not imply exclusivity over other approaches. Choosing the appropriate tool for your scenario is the right approach.
 
@@ -27,4 +27,4 @@ BENCH=ref mix run libs_comparison.exs
 BENCH=format mix run libs_comparison.exs
 ```
 
-Results are printed to stdout via [Benchee](https://github.com/bencheeorg/benchee), and my local benchmark results are [here](./results.txt).
+Results are printed to stdout via [Benchee](https://github.com/bencheeorg/benchee), and some benchmark results from my local are [here](./results.txt).
