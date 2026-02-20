@@ -176,3 +176,8 @@ JSONSchex runs the JSON Schema Test Suite for Draft 2020-12, all tests passing.
   - `optional/cross-draft`
 
 Debug test files can selectively run single suite files for focused investigation.
+
+
+## Benchmark
+
+More about the benchmark can be found at [bench](https://github.com/xinz/jsonschex/tree/main/bench).
