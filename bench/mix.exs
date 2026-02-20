@@ -8,7 +8,6 @@ defmodule Bench.MixProject do
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      #aliases: aliases()
     ]
   end
 
@@ -17,12 +16,6 @@ defmodule Bench.MixProject do
       extra_applications: [:logger]
     ]
   end
-
-  #defp aliases() do
-  #  [
-  #    "bench.xml_to_map": ["run xml_to_map.exs"]
-  #  ]
-  #end
 
   defp deps do
     [
