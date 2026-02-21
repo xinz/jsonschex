@@ -7,6 +7,7 @@ defmodule JSONSchex.Validator.Reference do
   alias JSONSchex.Validator
   alias JSONSchex.Compiler
   alias JSONSchex.URIUtil
+  alias JSONSchex.Types.ErrorContext
 
   @doc """
   Resolves a `$dynamicRef` by checking if the static target has a matching
@@ -205,15 +206,15 @@ defmodule JSONSchex.Validator.Reference do
                 Validator.validate_entry(compiled_remote, data, current_path, updated_context, evaluated)
               end
 
-            {:error, msg} ->
-              {:error, %{error: :compile_remote, uri: uri, detail: msg}}
+            {:error, error} ->
+              {:error, %ErrorContext{contrast: "compile_remote", input: uri, error_detail: error}}
           end
         :halt ->
           :halt
         {:error, reason} ->
-          {:error, %{error: :load_remote, uri: uri, detail: reason}}
+          {:error, %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}
         _ ->
-          {:error, %{error: :invalid_loader_response, uri: uri}}
+          {:error, %ErrorContext{contrast: "invalid_loader_response", input: uri}}
       end
     end
   end
@@ -230,12 +231,12 @@ defmodule JSONSchex.Validator.Reference do
           {:ok, compiled_fragment} ->
             Validator.validate_entry(compiled_fragment, data, current_path, validation_context, evaluated)
 
-          {:error, msg} ->
-            {:error, %{error: :invalid_schema, pointer: pointer, detail: msg}}
+          {:error, error} ->
+            {:error, %ErrorContext{contrast: "invalid_schema", input: pointer, error_detail: error}}
         end
 
       {:error, _token} ->
-        {:error, %{error: :ref_not_found, pointer: pointer}}
+        {:error, %ErrorContext{contrast: "ref_not_found", input: pointer}}
     end
   end
 end

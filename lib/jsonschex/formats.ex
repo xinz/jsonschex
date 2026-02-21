@@ -21,6 +21,8 @@ defmodule JSONSchex.Formats do
   - Unknown format values pass validation by default (per the JSON Schema specification).
   """
 
+  alias JSONSchex.Types.ErrorContext
+
   @doc """
   Validates data against the specified format.
 
@@ -32,7 +34,7 @@ defmodule JSONSchex.Formats do
       :ok
 
       iex> JSONSchex.Formats.validate("email", "not-an-email")
-      {:error, "Format mismatch: email"}
+      {:error, %JSONSchex.Types.ErrorContext{contrast: "email", input: "not-an-email"}}
 
       iex> JSONSchex.Formats.validate("email", 123)
       :ok
@@ -40,7 +42,7 @@ defmodule JSONSchex.Formats do
   """
 
   def validate(format, data) when is_binary(data) do
-    if valid?(format, data), do: :ok, else: {:error, "Format mismatch: #{format}"}
+    if valid?(format, data), do: :ok, else: {:error, %ErrorContext{contrast: format, input: data}}
   end
   def validate(_, _), do: :ok
 

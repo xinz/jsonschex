@@ -259,7 +259,7 @@ defmodule JSONSchex.Test.CompilerErrorTest do
       assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
       assert error.error == :invalid_regex
       assert error.path == ["pattern"]
-      assert List.starts_with?(error.message, ~c"missing terminating ]") == true
+      assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
 
     test "returns structured error for invalid patternProperties regex" do
@@ -271,7 +271,7 @@ defmodule JSONSchex.Test.CompilerErrorTest do
       assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
       assert error.error == :invalid_regex
       assert error.path == ["patternProperties", "["]
-      assert List.starts_with?(error.message, ~c"missing terminating ]") == true
+      assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
 
     test "returns structured error for invalid regex in additionalProperties dependency" do
@@ -286,7 +286,7 @@ defmodule JSONSchex.Test.CompilerErrorTest do
       assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
       assert error.error == :invalid_regex
       assert error.path == ["patternProperties", "["]
-      assert List.starts_with?(error.message, ~c"missing terminating ]") == true
+      assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
   end
 
@@ -317,7 +317,7 @@ defmodule JSONSchex.Test.CompilerErrorTest do
       assert error.error == :invalid_regex
       assert error.path == ["$defs", "bad_def", "pattern"]
       assert error.value == "["
-      assert List.starts_with?(error.message, ~c"missing terminating ]") == true
+      assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
   end
 end

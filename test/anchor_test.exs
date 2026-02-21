@@ -17,7 +17,7 @@ defmodule JSONSchex.Test.Anchor do
     assert :ok == JSONSchex.validate(c, 1)
     assert {:error, [error]} = JSONSchex.validate(c, "1")
     assert error.rule == :type
-    assert JSONSchex.format_error(error) =~ "Expected type \"integer\", got \"string\""
+    assert JSONSchex.format_error(error) =~ "Expected type integer, got string"
   end
 
 end

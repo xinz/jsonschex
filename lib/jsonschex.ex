@@ -24,7 +24,7 @@ defmodule JSONSchex do
       iex> error.rule
       :format
       iex> JSONSchex.format_error(error)
-      "Format mismatch: email"
+      ~s(Invalid email format: "not-an-email")
   """
 
   alias JSONSchex.Compiler
@@ -78,7 +78,7 @@ defmodule JSONSchex do
       iex> error.path
       []
       iex> JSONSchex.format_error(error)
-      "Expected type \\"integer\\", got \\"string\\""
+      "Expected type integer, got string"
 
   """
   @spec validate(Schema.t(), term()) :: :ok | {:error, list(Error.t())}
@@ -89,7 +89,7 @@ defmodule JSONSchex do
 
   ## Examples
 
-      iex> error = %JSONSchex.Types.Error{path: ["age", "user"], rule: :minimum, context: %{minimum: 0, actual: -5}}
+      iex> error = %JSONSchex.Types.Error{path: ["age", "user"], rule: :minimum, context: %JSONSchex.Types.ErrorContext{contrast: 0, input: -5}}
       iex> JSONSchex.format_error(error)
       "At /user/age: Value -5 is less than minimum 0"
 

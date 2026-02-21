@@ -7,7 +7,7 @@ defmodule JSONSchex.Validator.Keywords do
   """
 
   alias JSONSchex.Validator
-  alias JSONSchex.Types.Error
+  alias JSONSchex.Types.{Error, ErrorContext}
 
   @empty_mapset MapSet.new()
 
@@ -21,7 +21,7 @@ defmodule JSONSchex.Validator.Keywords do
 
   def validate_properties_map(_, _, _, _), do: :ok
 
-  defp reduce_props([], _data, _path, _root, [], []), do: {:ok, @empty_mapset}
+  defp reduce_props([], _data, _path, _root, [], []), do: :ok
   defp reduce_props([], _data, _path, _root, [], eval_keys), do: {:ok, MapSet.new(eval_keys)}
   defp reduce_props([], _data, _path, _root, errs, _eval_keys), do: {:error, List.flatten(errs)}
 
@@ -78,7 +78,7 @@ defmodule JSONSchex.Validator.Keywords do
   """
   def validate_prefix_items(data, schemas, path, root) when is_list(data) do
     case reduce_prefix_items(schemas, data, path, root, 0, {[], []}) do
-      {[], []}       -> {:ok, @empty_mapset}
+      {[], []}       -> :ok
       {[], evaluated} -> {:ok, MapSet.new(evaluated)}
       {errs, _}      -> {:error, List.flatten(errs)}
     end
@@ -102,7 +102,7 @@ defmodule JSONSchex.Validator.Keywords do
   """
   def validate_items_array(data, schema, start_index, path, root) when is_list(data) do
     case reduce_items_array(data, schema, start_index, path, root, 0, {[], []}) do
-      {[], []}        -> {:ok, @empty_mapset}
+      {[], []}        -> :ok
       {[], evaluated} -> {:ok, MapSet.new(evaluated)}
       {errs, _}       -> {:error, List.flatten(errs)}
     end
@@ -128,7 +128,7 @@ defmodule JSONSchex.Validator.Keywords do
   """
   def validate_unevaluated_items(data, schema, path, evaluated_indices, root) when is_list(data) do
     case reduce_unevaluated_items(data, schema, path, evaluated_indices, root, 0, {[], []}) do
-      {[], []}          -> {:ok, @empty_mapset}
+      {[], []}          -> :ok
       {[], unevaluated} -> {:ok, MapSet.new(unevaluated)}
       {errors, _}       -> {:error, List.flatten(errors)}
     end
@@ -171,7 +171,6 @@ defmodule JSONSchex.Validator.Keywords do
         reduce_allOf(rest, data, path, root, acc_keys, error_lists)
       {:ok, new_keys} ->
         reduce_allOf(rest, data, path, root, [MapSet.to_list(new_keys) | acc_keys], error_lists)
-
       {:error, errs} ->
         reduce_allOf(rest, data, path, root, acc_keys, [errs | error_lists])
     end
@@ -229,7 +228,10 @@ defmodule JSONSchex.Validator.Keywords do
           error = %Error{
             path: path,
             rule: :oneOf,
-            message: "Value matched more than one schema"
+            context: %ErrorContext{
+              contrast: 1,
+              input: data
+            }
           }
           {:error, [error]}
         end
@@ -251,7 +253,7 @@ defmodule JSONSchex.Validator.Keywords do
         error = %Error{
           path: path,
           rule: :not,
-          message: "Value should not match schema"
+          context: %ErrorContext{input: data}
         }
         {:error, [error]}
     end
@@ -265,13 +267,13 @@ defmodule JSONSchex.Validator.Keywords do
 
     cond do
       match_count < min ->
-        {:error, %{min: min, count: match_count}}
+        {:error, %ErrorContext{contrast: min, input: match_count, error_detail: "min"}}
 
       max != nil and match_count > max ->
-        {:error, %{max: max, count: match_count}}
+        {:error, %ErrorContext{contrast: max, input: match_count, error_detail: "max"}}
 
       true ->
-        {:ok, if(matching_indices == [], do: @empty_mapset, else: MapSet.new(matching_indices))}
+        if matching_indices == [], do: :ok, else: {:ok, MapSet.new(matching_indices)}
     end
   end
   def validate_contains(_, _, _, _, _, _), do: :ok
@@ -304,7 +306,7 @@ defmodule JSONSchex.Validator.Keywords do
   end
   def validate_pattern_properties(_, _, _, _), do: :ok
 
-  defp reduce_patterns([], _data_list, _path, _root, [], []), do: {:ok, @empty_mapset}
+  defp reduce_patterns([], _data_list, _path, _root, [], []), do: :ok
   defp reduce_patterns([], _data_list, _path, _root, [], eval_keys), do: {:ok, MapSet.new(eval_keys)}
   defp reduce_patterns([], _data_list, _path, _root, errs, _eval_keys), do: {:error, List.flatten(errs)}
 
@@ -336,7 +338,7 @@ defmodule JSONSchex.Validator.Keywords do
   end
   def validate_additional_properties(_, _, _, _, _, _), do: :ok
 
-  defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], []), do: {:ok, @empty_mapset}
+  defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], []), do: :ok
   defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], eval_keys), do: {:ok, MapSet.new(eval_keys)}
   defp reduce_additional([], _schema, _known, _patterns, _path, _root, errs, _eval_keys), do: {:error, List.flatten(errs)}
 
@@ -369,7 +371,7 @@ defmodule JSONSchex.Validator.Keywords do
 
   def collect_additional_keys(_, _, _), do: :ok
 
-  defp reduce_collect_additional([], _known, _patterns, []), do: {:ok, @empty_mapset}
+  defp reduce_collect_additional([], _known, _patterns, []), do: :ok
   defp reduce_collect_additional([], _known, _patterns, eval_keys), do: {:ok, MapSet.new(eval_keys)}
 
   defp reduce_collect_additional([{key, _val} | rest], known, patterns, eval_keys) do
@@ -451,7 +453,7 @@ defmodule JSONSchex.Validator.Keywords do
           reduce_dependent_required(rest, data, path, errs)
 
         missing ->
-          err = build_error(path, :dependentRequired, %{property: prop, missing: missing})
+          err = build_error(path, :dependentRequired, %ErrorContext{input: prop, contrast: missing})
           reduce_dependent_required(rest, data, path, [err | errs])
       end
     else
@@ -556,7 +558,7 @@ defmodule JSONSchex.Validator.Keywords do
       {:ok, decoded} ->
         {:ok, decoded}
       :error ->
-        {:error, {:contentEncoding, %{encoding: "base64"}}}
+        {:error, {:contentEncoding, %ErrorContext{contrast: "base64"}}}
     end
   end
   defp decode_content(data, "base64url") do
@@ -567,23 +569,27 @@ defmodule JSONSchex.Validator.Keywords do
         {:ok, decoded}
       :error ->
         case Base.url_decode64(data, padding: true) do
-          {:ok, decoded} -> {:ok, decoded}
-          :error -> {:error, {:contentEncoding, %{encoding: "base64url"}}}
+          {:ok, decoded} ->
+            {:ok, decoded}
+          :error ->
+            {:error, {:contentEncoding, %ErrorContext{contrast: "base64url"}}}
         end
     end
   end
   defp decode_content(_data, encoding),
-    do: {:error, {:contentEncoding, "Unsupported contentEncoding: #{encoding}"}}
+    do: {:error, {:contentEncoding, %ErrorContext{contrast: "Unsupported", input: encoding}}}
 
   defp parse_content(data, nil), do: {:ok, data}
   defp parse_content(data, media_type) do
     if json_media_type?(media_type) do
       case JSONSchex.JSON.decode(data) do
-        {:ok, json} -> {:ok, json}
-        {:error, _} -> {:error, {:contentMediaType, %{media_type: media_type, error: :invalid_json}}}
+        {:ok, json} ->
+          {:ok, json}
+        {:error, error} ->
+          {:error, {:contentMediaType, %ErrorContext{contrast: media_type, input: "invalid", error_detail: error}}}
       end
     else
-      {:error, {:contentMediaType, %{media_type: media_type, error: :unsupported}}}
+      {:error, {:contentMediaType, %ErrorContext{contrast: media_type, input: "unsupported"}}}
     end
   end
 

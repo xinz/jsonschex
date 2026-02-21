@@ -67,10 +67,10 @@ defmodule JSONSchex.Types do
     @type t :: %__MODULE__{
       path: list(),
       rule: atom(),
-      message: String.t() | nil,
-      context: map() | nil
+      context: JSONSchex.Types.ErrorContext.t() | nil,
+      value: term() | nil
     }
-    defstruct [:path, :rule, :message, :context, :value]
+    defstruct [:path, :rule, :context, :value]
 
     defimpl String.Chars do
       def to_string(t) do
@@ -80,20 +80,50 @@ defmodule JSONSchex.Types do
 
   end
 
+  defmodule ErrorContext do
+    @moduledoc """
+    Structured detail carried by `JSONSchex.Types.Error` and `JSONSchex.Types.CompileError`.
+
+    The three fields have consistent, role-based meanings across all validation rules:
+
+    - `contrast` — The **schema constraint** that was not satisfied.
+      Examples: the expected type (`"integer"`), a numeric limit (`10`),
+      a list of allowed values, the required regex pattern.
+
+    - `input` — The **processed representation** of the failing value.
+      This is not always the raw input; it may be a derived quantity such as
+      a string's codepoint length (for `minLength`/`maxLength`) or the inferred
+      type name (for `type`). For remote-ref errors it holds the URI string.
+
+    - `error_detail` — **Ancillary detail** needed to disambiguate error variants
+      or carry supplementary information. Examples: a regex compilation error
+      message, the string `"min"` / `"max"` to distinguish `contains` violations,
+      or a nested `CompileError` from a remote schema.
+
+    Use `JSONSchex.format_error/1` (or `to_string/1`) to turn an error into a
+    human-readable message rather than inspecting these fields directly.
+    """
+    @type t :: %__MODULE__{
+      contrast: term() | nil,
+      input: term() | nil,
+      error_detail: term() | nil
+    }
+    defstruct [:contrast, :input, :error_detail]
+  end
+
   defmodule CompileError do
     @moduledoc """
     An error encountered during schema compilation.
     """
     @type error :: :unsupported_vocabulary | :invalid_regex | :invalid_keyword_value
 
-
     @type t :: %__MODULE__{
       error: error(),
       path: list() | nil,
       value: term() | nil,
-      message: term() | nil
+      context: ErrorContext.t() | nil
     }
-    defstruct [:error, :path, :value, :message]
+    defstruct [:error, :path, :value, :context]
 
     @non_neg_int_keywords ~w(minLength maxLength minProperties maxProperties minItems maxItems)
     @numeric_keywords ~w(minimum maximum exclusiveMinimum exclusiveMaximum)

@@ -41,13 +41,13 @@ defmodule JSONSchex.Validator do
 
   """
   @spec validate(Schema.t(), term()) :: :ok | {:error, list(Error.t())}
-  def validate(%Schema{} = root_schema, data) do
-    initial_stack = if root_schema.source_id, do: [root_schema.source_id], else: []
+  def validate(%Schema{source_id: id} = root_schema, data) do
+    initial_stack = if id != nil, do: [id], else: []
 
     ctx = %ValidationContext{
       root_schema: root_schema,
       scope_stack: initial_stack,
-      source_id: root_schema.source_id,
+      source_id: id,
       raw: root_schema.raw
     }
 
@@ -59,13 +59,10 @@ defmodule JSONSchex.Validator do
 
         formatted_errors =
           Enum.map(flat_errors, fn
-            {path, rule, msg} when is_binary(msg) ->
-              %Error{path: path, rule: rule, message: msg}
-
             {path, rule, context} when is_map(context) ->
-              %Error{path: path, rule: rule, context: context}
-
-            %Error{} = e -> e
+              %Error{path: path, rule: rule, context: context, value: data}
+            %Error{} = e ->
+              e
           end)
 
         {:error, formatted_errors}
@@ -104,11 +101,8 @@ defmodule JSONSchex.Validator do
       {:error, new_errs} when is_list(new_errs) ->
         {:error, new_errs}
 
-      {:error, msg} when is_binary(msg) ->
-        {:error, [%Error{path: path, message: msg, rule: rule.name}]}
-
-      {:error, err_context} when is_map(err_context) ->
-        {:error, [%Error{path: path, rule: rule.name, context: err_context, message: nil}]}
+      {:error, error_context} when is_map(error_context) ->
+        {:error, [%Error{path: path, rule: rule.name, context: error_context, value: data}]}
     end
   end
 
@@ -121,14 +115,15 @@ defmodule JSONSchex.Validator do
         {:ok, new_keys} ->
           new_eval = MapSet.union(evaluated, new_keys)
           {new_eval, {path, new_eval, context}, nil}
-        {:error, e} -> {evaluated, ctx, to_error_entry(e, path, rule1.name)}
+        {:error, e} ->
+          {evaluated, ctx, to_error_entry(e, path, rule1.name, data)}
       end
 
     {eval2, err2} =
       case rule2.validator.(data, ctx1) do
         :ok -> {eval1, nil}
         {:ok, new_keys} -> {MapSet.union(eval1, new_keys), nil}
-        {:error, e} -> {eval1, to_error_entry(e, path, rule2.name)}
+        {:error, e} -> {eval1, to_error_entry(e, path, rule2.name, data)}
       end
 
     case {err1, err2} do
@@ -151,12 +146,9 @@ defmodule JSONSchex.Validator do
     run_rules(rules, data, path, current_context, initial_evaluated, initial_ctx, [])
   end
 
-  @compile {:inline, to_error_entry: 3}
-  defp to_error_entry(errs, _path, _rule_name) when is_list(errs), do: errs
-  defp to_error_entry(msg, path, rule_name) when is_binary(msg),
-    do: [%Error{path: path, message: msg, rule: rule_name}]
-  defp to_error_entry(err_ctx, path, rule_name) when is_map(err_ctx),
-    do: [%Error{path: path, rule: rule_name, context: err_ctx, message: nil}]
+  defp to_error_entry(errs, _path, _rule_name, _data) when is_list(errs), do: errs
+  defp to_error_entry(err_ctx, path, rule_name, data) when is_map(err_ctx),
+    do: [%Error{path: path, rule: rule_name, context: err_ctx, value: data}]
 
   defp run_rules([], _data, _path, _context, evaluated, _ctx, []) do
     {:ok, evaluated}
@@ -189,12 +181,8 @@ defmodule JSONSchex.Validator do
       {:error, new_errs} when is_list(new_errs) ->
         run_rules(rest, data, path, context, evaluated, ctx, [new_errs | errors])
 
-      {:error, msg} when is_binary(msg) ->
-        e = %Error{path: path, message: msg, rule: rule.name}
-        run_rules(rest, data, path, context, evaluated, ctx, [e | errors])
-
       {:error, err_context} when is_map(err_context) ->
-        e = %Error{path: path, rule: rule.name, context: err_context, message: nil}
+        e = %Error{path: path, rule: rule.name, context: err_context, value: data}
         run_rules(rest, data, path, context, evaluated, ctx, [e | errors])
     end
   end

@@ -6,6 +6,8 @@ defmodule JSONSchex.Compiler.Predicates do
   pass validation (e.g., pattern checking on non-strings).
   """
 
+  alias JSONSchex.Types.ErrorContext
+
   @doc """
   Checks if data matches the specified JSON Schema type(s).
   """
@@ -13,7 +15,7 @@ defmodule JSONSchex.Compiler.Predicates do
   def check_type(data, "string") when is_binary(data), do: :ok
   def check_type(data, "integer") when is_integer(data), do: :ok
   def check_type(data, "integer") when is_float(data) do
-    if data == trunc(data), do: :ok, else: {:error, %{expected: "integer", actual: "float", value: data}}
+    if data == trunc(data), do: :ok, else: {:error, %ErrorContext{contrast: "integer", input: "float"}}
   end
   def check_type(data, "boolean") when is_boolean(data), do: :ok
   def check_type(data, "object") when is_map(data), do: :ok
@@ -24,44 +26,44 @@ defmodule JSONSchex.Compiler.Predicates do
     if Enum.any?(types, fn type -> check_type(data, type) == :ok end) do
       :ok
     else
-      {:error, %{expected: types, actual: infer_type(data), value: data}}
+      {:error, %ErrorContext{contrast: types, input: infer_type(data)}}
     end
   end
   def check_type(data, expected) do
     actual = infer_type(data)
-    {:error, %{expected: expected, actual: actual, value: data}}
+    {:error, %ErrorContext{contrast: expected, input: actual}}
   end
 
   @doc "Checks `maximum`."
   def check_maximum(data, max) when is_number(data) and data <= max, do: :ok
-  def check_maximum(data, max) when is_number(data), do: {:error, %{maximum: max, actual: data}}
+  def check_maximum(data, max) when is_number(data), do: {:error, %ErrorContext{contrast: max, input: data}}
   def check_maximum(_, _), do: :ok
 
   @doc "Checks `minimum`."
   @spec check_minimum(number(), number()) :: :ok | {:error, map()}
   def check_minimum(data, min) when is_number(data) and data < min do
-    {:error, %{minimum: min, actual: data}}
+    {:error, %ErrorContext{contrast: min, input: data}}
   end
   def check_minimum(_, _), do: :ok
 
   @doc "Checks `exclusiveMaximum`."
   def check_exclusive_maximum(data, limit) when is_number(data) and data < limit, do: :ok
-  def check_exclusive_maximum(data, limit) when is_number(data), do: {:error, %{maximum: limit, actual: data}}
+  def check_exclusive_maximum(data, limit) when is_number(data), do: {:error, %ErrorContext{contrast: limit, input: data}}
   def check_exclusive_maximum(_, _), do: :ok
 
   @doc "Checks `exclusiveMinimum`."
   def check_exclusive_minimum(data, limit) when is_number(data) and data > limit, do: :ok
-  def check_exclusive_minimum(data, limit) when is_number(data), do: {:error, %{minimum: limit, actual: data}}
+  def check_exclusive_minimum(data, limit) when is_number(data), do: {:error, %ErrorContext{contrast: limit, input: data}}
   def check_exclusive_minimum(_, _), do: :ok
 
   @doc "Checks `multipleOf`."
-  def check_multiple_of(_data, 0), do: {:error, %{multipleOf: 0, actual: "invalid_factor"}}
-  def check_multiple_of(_data, +0.0), do: {:error, %{multipleOf: 0, actual: "invalid_factor"}}
+  def check_multiple_of(data, 0), do: {:error, %ErrorContext{contrast: "invalid_factor", input: data}}
+  def check_multiple_of(data, +0.0), do: {:error, %ErrorContext{contrast: "invalid_factor", input: data}}
   def check_multiple_of(data, factor) when is_number(data) do
     if JSONSchex.Compiler.Predicates.MultipleOf.valid?(data, factor) do
       :ok
     else
-      {:error, %{multipleOf: factor, actual: data}}
+      {:error, %ErrorContext{contrast: factor, input: data}}
     end
   end
   def check_multiple_of(_, _), do: :ok
@@ -69,48 +71,48 @@ defmodule JSONSchex.Compiler.Predicates do
   @doc "Checks `const`."
   @spec check_const(term(), term()) :: :ok | {:error, map()}
   def check_const(data, const) do
-    if data == const, do: :ok, else: {:error, %{expected: const, value: data}}
+    if data == const, do: :ok, else: {:error, %ErrorContext{contrast: const, input: data}}
   end
 
   @doc "Checks `minLength`."
   def check_min_length(data, min) when is_binary(data) do
     len = codepoint_length(data)
-    if len >= min, do: :ok, else: {:error, %{min: min, length: len, value: data}}
+    if len >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: len}}
   end
   def check_min_length(_, _), do: :ok
 
   @doc "Checks `maxLength`."
   def check_max_length(data, max) when is_binary(data) do
     len = codepoint_length(data)
-    if len <= max, do: :ok, else: {:error, %{max: max, length: len, value: data}}
+    if len <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: len}}
   end
   def check_max_length(_, _), do: :ok
 
   @doc "Checks `minProperties`."
   def check_min_properties(data, min) when is_map(data) do
     size = map_size(data)
-    if size >= min, do: :ok, else: {:error, %{min: min, length: size}}
+    if size >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: size}}
   end
   def check_min_properties(_, _), do: :ok
 
   @doc "Checks `maxProperties`."
   def check_max_properties(data, max) when is_map(data) do
     size = map_size(data)
-    if size <= max, do: :ok, else: {:error, %{max: max, length: size}}
+    if size <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: size}}
   end
   def check_max_properties(_, _), do: :ok
 
   @doc "Checks `minItems`."
   def check_min_items(data, min) when is_list(data) do
     len = length(data)
-    if len >= min, do: :ok, else: {:error, %{min: min, length: len}}
+    if len >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: len}}
   end
   def check_min_items(_, _), do: :ok
 
   @doc "Checks `maxItems`."
   def check_max_items(data, max) when is_list(data) do
     len = length(data)
-    if len <= max, do: :ok, else: {:error, %{max: max, length: len}}
+    if len <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: len}}
   end
   def check_max_items(_, _), do: :ok
 
@@ -138,7 +140,7 @@ defmodule JSONSchex.Compiler.Predicates do
       end) == true
 
     if has_duplicates do
-      {:error, %{uniqueItems: true, value: data}}
+      {:error, %ErrorContext{contrast: true, input: data}}
     else
       :ok
     end
@@ -177,7 +179,7 @@ defmodule JSONSchex.Compiler.Predicates do
     if Enum.any?(values, fn v -> v == data end) do
       :ok
     else
-      {:error, %{allowed: values, value: data}}
+      {:error, %ErrorContext{contrast: values, input: data}}
     end
   end
 
@@ -187,7 +189,7 @@ defmodule JSONSchex.Compiler.Predicates do
     if Regex.match?(regex, data) do
       :ok
     else
-      {:error, %{pattern: regex, value: data}}
+      {:error, %ErrorContext{contrast: regex, input: data}}
     end
   end
   def check_pattern(_, _), do: :ok

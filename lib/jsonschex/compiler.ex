@@ -19,7 +19,7 @@ defmodule JSONSchex.Compiler do
       1
 
   """
-  alias JSONSchex.Types.{Schema, Rule, Error, CompileError}
+  alias JSONSchex.Types.{Schema, Rule, Error, CompileError, ErrorContext}
   alias JSONSchex.Compiler.Predicates
   alias JSONSchex.Validator
   alias JSONSchex.Validator.Keywords
@@ -361,7 +361,6 @@ defmodule JSONSchex.Compiler do
         }
       }
     else
-      # Format is annotation-only — skip emitting a rule entirely.
       {:ok, nil}
     end
   end
@@ -429,8 +428,8 @@ defmodule JSONSchex.Compiler do
     case JSONSchex.Compiler.ECMARegex.compile(p) do
       {:ok, regex} ->
         {:ok, %Rule{name: :pattern, params: p, validator: fn d, _ -> Predicates.check_pattern(d, regex) end}}
-      {:error, {msg, _pos}} ->
-        {:error, %CompileError{error: :invalid_regex, path: ["pattern"], value: p, message: msg}}
+      {:error, {err, _pos}} ->
+        {:error, %CompileError{error: :invalid_regex, path: ["pattern"], value: p, context: %ErrorContext{error_detail: err}}}
     end
   end
 
@@ -459,7 +458,7 @@ defmodule JSONSchex.Compiler do
             :ok
           else
             missing = Enum.reject(req, &Map.has_key?(data, &1))
-            {:error, [%Error{path: path, rule: :required, context: %{missing: missing}}]}
+            {:error, [%Error{path: path, rule: :required, context: %ErrorContext{contrast: missing}}]}
           end
         else
           :ok
@@ -498,7 +497,8 @@ defmodule JSONSchex.Compiler do
             path = err.path || []
             {:halt, {:error, %{err | path: path ++ [pattern]}}}
           {:error, {regex_term, _}} ->
-            {:halt, {:error, %CompileError{error: :invalid_regex, path: ["patternProperties", pattern], message: regex_term}}}
+            {:halt, {:error, %CompileError{error: :invalid_regex, path: ["patternProperties", pattern],
+              context: %ErrorContext{contrast: "invalid_regex", input: pattern, error_detail: regex_term}}}}
         end
       end)
 
@@ -525,7 +525,8 @@ defmodule JSONSchex.Compiler do
           {:ok, r} ->
             {:cont, {:ok, [r | acc]}}
           {:error, {regex_term, _}} ->
-            {:halt, {:error, %CompileError{error: :invalid_regex, path: ["patternProperties", p], message: regex_term}}}
+            {:halt, {:error, %CompileError{error: :invalid_regex, path: ["patternProperties", p],
+              context: %ErrorContext{contrast: "invalid_regex", input: p, error_detail: regex_term}}}}
         end
       end)
 
@@ -804,7 +805,7 @@ defmodule JSONSchex.Compiler do
             :ok
           {:error, errors} when is_false_schema? ->
             rewritten_errors = Enum.map(errors, fn e ->
-              %{e | rule: :unevaluatedProperties, context: %{error: :not_allowed}, message: nil}
+              %{e | rule: :unevaluatedProperties, context: %ErrorContext{contrast: "not_allowed"}}
             end)
             {:error, rewritten_errors}
           error ->
@@ -831,7 +832,7 @@ defmodule JSONSchex.Compiler do
             :ok
 
           {:error, errors} when is_false_schema? ->
-             rewritten = Enum.map(errors, fn e -> %{e | rule: :unevaluatedItems, context: %{error: :not_allowed}, message: nil} end)
+            rewritten = Enum.map(errors, fn e -> %{e | rule: :unevaluatedItems, context: %ErrorContext{contrast: "not_allowed"}} end)
              {:error, rewritten}
 
           {:error, errors} -> {:error, errors}

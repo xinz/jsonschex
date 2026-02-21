@@ -38,7 +38,7 @@ defmodule JSONSchex.Test.ArrayValidation do
       assert {:error, [error]} = JSONSchex.validate(compiled, ["Gem", 1, "bad"])
       assert error.path == [2]
       assert error.rule == :type
-      assert JSONSchex.format_error(error) =~ "Expected type \"integer\", got \"string\""
+      assert JSONSchex.format_error(error) =~ "Expected type integer, got string"
     end
   end
 

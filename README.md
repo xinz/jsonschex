@@ -61,8 +61,8 @@ Each error contains:
 
 - `path` — List of path segments indicating where the error occurred (e.g., `["users", 0, "email"]`)
 - `rule` — Atom identifying the failed validation rule (e.g., `:type`, `:minimum`)
-- `context` — Map containing details about the failure (e.g., `%{expected: "integer", actual: "string"}`)
-- `message` — Optional string (often `nil`), populated only if explicitly set
+- `context` — Map containing details about the failure (e.g., `%JSONSchex.Types.ErrorContext{contrast: "integer", input: "string"}`)
+- `value` - The input value that caused the error
 
 **Example:**
 
@@ -83,22 +83,32 @@ schema = %{
 # Inspect raw errors
 # [
 #   %JSONSchex.Types.Error{
-#     path: [],
-#     rule: :required,
-#     context: %{missing: ["email"]}
-#   },
-#   %JSONSchex.Types.Error{
 #     path: ["age"],
 #     rule: :minimum,
-#     context: %{minimum: 0, actual: -5}
+#     context: %JSONSchex.Types.ErrorContext{
+#       contrast: 0,
+#       input: -5,
+#       error_detail: nil
+#     },
+#     value: -5
+#   },
+#   %JSONSchex.Types.Error{
+#     path: [],
+#     rule: :required,
+#     context: %JSONSchex.Types.ErrorContext{
+#       contrast: ["email"],
+#       input: nil,
+#       error_detail: nil
+#     },
+#     value: nil
 #   }
 # ]
 
 # Format errors for display
 Enum.map(errors, &JSONSchex.format_error/1)
 # [
-#   "Missing required properties: email",
-#   "At /age: Value -5 is less than minimum 0"
+#   "At /age: Value -5 is less than minimum 0",
+#   "Missing required properties: email"
 # ]
 ```
 

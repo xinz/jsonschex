@@ -2,7 +2,7 @@ defmodule JSONSchex.Compiler.PredicatesTest do
   use ExUnit.Case
 
   test "unique items that numbers are unique if mathematically unequal" do
-    assert {:error, %{uniqueItems: true}} = JSONSchex.Compiler.Predicates.check_unique_items([1.0, 1], true)
+    assert {:error, %JSONSchex.Types.ErrorContext{contrast: true}} = JSONSchex.Compiler.Predicates.check_unique_items([1.0, 1], true)
 
     schema =%{
       "$schema" => "https://json-schema.org/draft/2020-12/schema",
