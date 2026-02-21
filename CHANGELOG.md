@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0 (2025-02-21)
+
+### Bug Fixes and Improvements
+
+  * Refactor the error context to make it more consistent
+
 ## v0.2.1 (2025-02-20)
 
 ### Bug Fixes and Improvements

@@ -15,7 +15,7 @@ JSONSchex is a [JSON Schema specification](https://json-schema.org/specification
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.2.0"}
+    {:jsonschex, "~> 0.3.0"}
   ]
 end
 ```

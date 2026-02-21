@@ -2,7 +2,7 @@ defmodule JSONSchex.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/xinz/jsonschex"
-  @version "0.2.1"
+  @version "0.3.0"
   @description "A JSON Schema validator with complete support for the draft 2020-12 and latest specifications."
 
   def project do
