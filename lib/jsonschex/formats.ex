@@ -49,10 +49,7 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("date", data) do
-    case Date.from_iso8601(data) do
-      {:ok, _} -> true
-      _ -> false
-    end
+    match?({:ok, _}, Date.from_iso8601(data))
   end
 
   defp valid?("time", data) do
@@ -91,18 +88,11 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("uri", data) do
-    # Must be absolute (have scheme)
-    case URI.new(data) do
-      {:ok, %URI{scheme: s}} when s != nil and s != "" -> true
-      _ -> false
-    end
+    match?({:ok, %URI{scheme: s}} when s != nil and s != "", URI.new(data))
   end
 
   defp valid?("uri-reference", data) do
-    case URI.new(data) do
-      {:ok, _} -> true
-      {:error, _} -> false
-    end
+    match?({:ok, _}, URI.new(data))
   end
 
   defp valid?("iri", data) do
