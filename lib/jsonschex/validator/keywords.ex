@@ -577,7 +577,7 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
   defp decode_content(_data, encoding),
-    do: {:error, {:contentEncoding, %ErrorContext{contrast: "Unsupported", input: encoding}}}
+    do: {:error, {:contentEncoding, %ErrorContext{contrast: "unsupported", input: encoding}}}
 
   defp parse_content(data, nil), do: {:ok, data}
   defp parse_content(data, media_type) do

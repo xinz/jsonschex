@@ -109,7 +109,7 @@ defmodule JSONSchex.ErrorFormatter do
 
 
 
-  defp format_message(%Error{rule: :contentEncoding, context: %{contrast: "Unsupported", input: encoding}}) do
+  defp format_message(%Error{rule: :contentEncoding, context: %{contrast: "unsupported", input: encoding}}) do
     "Unsupported content encoding: #{encoding}"
   end
 
