@@ -82,6 +82,7 @@ defmodule JSONSchex.Test.ContentVocabulary do
 
     assert {:error, [error]} = JSONSchex.validate(compiled, "%%%")
     assert error.rule == :contentEncoding
+    assert JSONSchex.format_error(error) == ~s(Failed to decode string as 'base64': "%%%")
   end
 
   test "contentEncoding rejects invalid base64url when assertion enabled" do
@@ -98,6 +99,7 @@ defmodule JSONSchex.Test.ContentVocabulary do
 
     assert {:error, [error]} = JSONSchex.validate(compiled, "%%%")
     assert error.rule == :contentEncoding
+    assert JSONSchex.format_error(error) == ~s(Failed to decode string as 'base64url': "%%%")
   end
 
   test "contentSchema fails on unsupported contentMediaType when assertion enabled" do
@@ -128,6 +130,8 @@ defmodule JSONSchex.Test.ContentVocabulary do
 
     assert {:error, [error]} = JSONSchex.validate(compiled, "{not valid json")
     assert error.rule == :contentMediaType
+    assert JSONSchex.format_error(error) ==
+      ~s(Failed to decode as 'application/json': {:invalid_byte, 1, 110}, input: "{not valid json")
   end
 
   test "content keywords do not bypass base type validation" do

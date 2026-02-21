@@ -107,21 +107,19 @@ defmodule JSONSchex.ErrorFormatter do
     "Failed 'not' constraint: Value #{inspect(input)} is explicitly forbidden"
   end
 
-
-
   defp format_message(%Error{rule: :contentEncoding, context: %{contrast: "unsupported", input: encoding}}) do
     "Unsupported content encoding: #{encoding}"
   end
 
-  defp format_message(%Error{rule: :contentEncoding, context: %{contrast: encoding}}) do
-    "Failed to decode content as #{encoding}"
+  defp format_message(%Error{rule: :contentEncoding, context: %{contrast: encoding, input: input}}) do
+    "Failed to decode string as '#{encoding}': #{inspect(input)}"
   end
 
-  defp format_message(%Error{rule: :contentMediaType, context: %{contrast: media_type, input: "invalid"}}) do
-    "Invalid JSON contentMediaType: #{media_type}"
+  defp format_message(%Error{rule: :contentMediaType, value: value, context: %{contrast: "invalid", input: media_type, error_detail: error}}) do
+    "Failed to decode as '#{media_type}': #{inspect(error)}, input: #{inspect(value)}"
   end
 
-  defp format_message(%Error{rule: :contentMediaType, context: %{contrast: media_type, input: "unsupported"}}) do
+  defp format_message(%Error{rule: :contentMediaType, context: %{contrast: "unsupported", input: media_type}}) do
     "Unsupported contentMediaType: #{media_type}"
   end
 

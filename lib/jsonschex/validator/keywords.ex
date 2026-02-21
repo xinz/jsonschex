@@ -453,7 +453,7 @@ defmodule JSONSchex.Validator.Keywords do
           reduce_dependent_required(rest, data, path, errs)
 
         missing ->
-          err = build_error(path, :dependentRequired, %ErrorContext{input: prop, contrast: missing})
+          err = build_error(path, :dependentRequired, %ErrorContext{input: prop, contrast: missing}, data)
           reduce_dependent_required(rest, data, path, [err | errs])
       end
     else
@@ -518,16 +518,16 @@ defmodule JSONSchex.Validator.Keywords do
       end
     else
       {:error, {rule, context}} ->
-        {:error, [build_error(path, rule, context)]}
+        {:error, [build_error(path, rule, context, data)]}
 
       {:error, context} ->
-        {:error, [build_error(path, :contentSchema, context)]}
+        {:error, [build_error(path, :contentSchema, context, data)]}
     end
   end
   def validate_content_schema(_, _, _, _, _, _, _), do: :ok
 
-  defp build_error(path, rule, context) do
-    %Error{path: path, rule: rule, context: context}
+  defp build_error(path, rule, context, data) do
+    %Error{path: path, rule: rule, context: context, value: data}
   end
 
   defp normalize_content_encoding(nil), do: nil
@@ -558,7 +558,7 @@ defmodule JSONSchex.Validator.Keywords do
       {:ok, decoded} ->
         {:ok, decoded}
       :error ->
-        {:error, {:contentEncoding, %ErrorContext{contrast: "base64"}}}
+        {:error, {:contentEncoding, %ErrorContext{contrast: "base64", input: data}}}
     end
   end
   defp decode_content(data, "base64url") do
@@ -572,7 +572,7 @@ defmodule JSONSchex.Validator.Keywords do
           {:ok, decoded} ->
             {:ok, decoded}
           :error ->
-            {:error, {:contentEncoding, %ErrorContext{contrast: "base64url"}}}
+            {:error, {:contentEncoding, %ErrorContext{contrast: "base64url", input: data}}}
         end
     end
   end
@@ -586,10 +586,10 @@ defmodule JSONSchex.Validator.Keywords do
         {:ok, json} ->
           {:ok, json}
         {:error, error} ->
-          {:error, {:contentMediaType, %ErrorContext{contrast: media_type, input: "invalid", error_detail: error}}}
+          {:error, {:contentMediaType, %ErrorContext{contrast: "invalid", input: media_type, error_detail: error}}}
       end
     else
-      {:error, {:contentMediaType, %ErrorContext{contrast: media_type, input: "unsupported"}}}
+      {:error, {:contentMediaType, %ErrorContext{contrast: "unsupported", input: media_type}}}
     end
   end
 
