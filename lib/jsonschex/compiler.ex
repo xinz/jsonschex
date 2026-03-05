@@ -48,7 +48,6 @@ defmodule JSONSchex.Compiler do
 
     ctx = %{loader: external_loader, format_assertion: format_assertion, content_assertion: content_assertion}
 
-    # Step A: Compile the root using the recursive node logic
     with :ok <- check_vocabulary(raw_schema),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, external_loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
@@ -94,7 +93,6 @@ defmodule JSONSchex.Compiler do
         {:error, msg} ->
           {:error, msg}
         valid_defs ->
-          # Return the root schema with the ENRICHED registry
           {:ok, %{root_compiled | defs: valid_defs, external_loader: external_loader}}
       end
     end
@@ -164,19 +162,11 @@ defmodule JSONSchex.Compiler do
   end
 
   defp compile_schema_node(schema, parent_base, vocabs, ctx) when is_map(schema) do
-    current_vocabs =
-      if Map.has_key?(schema, "$schema") do
-        resolve_dialect(schema, ctx.loader, vocabs)
-      else
-        {:ok, vocabs}
-      end
-
     raw_id = Map.get(schema, "$id")
     base = resolve_uri(parent_base, raw_id)
 
-    with {:ok, current_vocabs} <- current_vocabs,
-         {:ok, compiled_defs} <- compile_local_defs(schema, base, current_vocabs, ctx),
-         {:ok, standard_rules} <- compile_standard_keywords(schema, base, current_vocabs, ctx) do
+    with {:ok, compiled_defs} <- compile_local_defs(schema, base, vocabs, ctx),
+         {:ok, standard_rules} <- compile_standard_keywords(schema, base, vocabs, ctx) do
 
         # Draft 2020-12 allows $ref to have sibling keywords
         rules =
@@ -204,7 +194,6 @@ defmodule JSONSchex.Compiler do
     raw_defs = Map.get(schema, "$defs", %{})
 
     Enum.reduce_while(raw_defs, {:ok, %{}}, fn {key, sub}, {:ok, acc} ->
-      # RECURSION: We call compile_schema_node, not compile_rules_only
       case compile_schema_node(sub, base, vocabs, ctx) do
         {:ok, compiled_sub} ->
           updated_acc =
