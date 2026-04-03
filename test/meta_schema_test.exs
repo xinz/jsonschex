@@ -6,11 +6,11 @@ defmodule JSONSchex.Test.MetaSchema do
       "$schema" => "https://json-schema.org/draft/2020-12/schema",
       "const" => %{"foo" => "bar", "baz" => "bax"}
     }
-    
+
     {:ok, compiled} = JSONSchex.compile(schema)
     data = %{"foo" => "bar", "baz" => "bax"}
     assert JSONSchex.validate(compiled, data) == :ok
-    
+
     data2 = %{"foo" => "bar"}
     assert {:error, [%{rule: :const}]} = JSONSchex.validate(compiled, data2)
   end
@@ -29,5 +29,72 @@ defmodule JSONSchex.Test.MetaSchema do
     assert {:ok, compiled} = JSONSchex.compile(schema)
     assert JSONSchex.validate(compiled, %{"nested" => "value"}) == :ok
     assert {:error, _} = JSONSchex.validate(compiled, %{"nested" => 123})
+  end
+
+  test "ensure draft2020-12 $schema won't trigger external loader in compile" do
+    schema = %{
+      "$schema" => "https://json-schema.org/draft/2020-12/schema",
+      "const" => %{"foo" => "bar", "baz" => "bax"}
+    }
+
+    loader = fn
+      uri ->
+        raise "#{uri} is unknown"
+    end
+
+    {:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+
+    data = %{"foo" => "bar", "baz" => "bax"}
+    assert JSONSchex.validate(compiled, data) == :ok
+
+    invalid_schema = "https://json-schema-unknown.org/dRaFt/2020-12/schema"
+
+    schema = %{
+      "$schema" => invalid_schema,
+      "const" => %{"foo" => "bar", "baz" => "bax"}
+    }
+
+    assert_raise RuntimeError, ~r/#{invalid_schema} is unknown/, fn ->
+      JSONSchex.compile(schema, external_loader: loader)
+    end
+  end
+
+  test "built-in draft2020-12 $schema honors explicit supported optional $vocabulary without loader" do
+    schema = %{
+      "$schema" => "https://json-schema.org/draft/2020-12/schema",
+      "$vocabulary" => %{
+        "https://json-schema.org/draft/2020-12/vocab/core" => true,
+        "https://json-schema.org/draft/2020-12/vocab/validation" => true,
+        "https://json-schema.org/draft/2020-12/vocab/format-annotation" => false
+      },
+      "type" => "string",
+      "format" => "email"
+    }
+
+    loader = fn
+      uri ->
+        raise "#{uri} is unknown"
+    end
+
+    assert {:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+    assert JSONSchex.validate(compiled, "not-an-email") == :ok
+  end
+
+  test "built-in draft2020-12 $schema rejects unsupported required $vocabulary without loader" do
+    schema = %{
+      "$schema" => "https://json-schema.org/draft/2020-12/schema",
+      "$vocabulary" => %{
+        "https://json-schema.org/draft/2020-12/vocab/core" => true,
+        "https://example.com/custom-vocab" => true
+      }
+    }
+
+    loader = fn
+      uri ->
+        raise "#{uri} is unknown"
+    end
+
+    assert {:error, %{error: :unsupported_vocabulary, path: ["$vocabulary", "https://example.com/custom-vocab"]}} =
+             JSONSchex.compile(schema, external_loader: loader)
   end
 end

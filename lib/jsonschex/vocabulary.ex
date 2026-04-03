@@ -1,7 +1,8 @@
 defmodule JSONSchex.Vocabulary do
   @moduledoc """
   Maps JSON Schema keywords to their Draft 2020-12 vocabulary URIs and defines
-  the default vocabulary list.
+  both the full supported vocabulary set and the built-in Draft 2020-12 default
+  active vocabulary set.
 
   Used by `JSONSchex.Compiler` to check whether a keyword is allowed based on the
   active vocabulary set, and to resolve `$vocabulary` declarations.
@@ -39,11 +40,26 @@ defmodule JSONSchex.Vocabulary do
     @vocab_meta_data
   ]
 
+  @draft2020_12_defaults List.delete(@known_vocabularies, @vocab_format_assertion)
+
   @doc """
-  Returns the list of default vocabularies supported by JSONSchex for Draft 2020-12.
+  Returns the full list of vocabularies supported by JSONSchex.
+
+  This is the implementation capability set used when validating required
+  `$vocabulary` declarations.
   """
   @spec defaults() :: list()
   def defaults(), do: @known_vocabularies
+
+  @doc """
+  Returns the built-in default active vocabularies for the standard Draft 2020-12
+  dialect.
+
+  This excludes `format-assertion`, which is not enabled by default for the
+  standard Draft 2020-12 dialect.
+  """
+  @spec draft2020_12_defaults() :: list()
+  def draft2020_12_defaults(), do: @draft2020_12_defaults
 
   @doc "Returns the format-annotation vocabulary URI."
   def format_annotation(), do: @vocab_format_annotation

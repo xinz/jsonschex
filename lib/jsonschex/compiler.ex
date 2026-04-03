@@ -108,6 +108,9 @@ defmodule JSONSchex.Compiler do
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
 
+  defp resolve_dialect(%{"$schema" => "https://json-schema.org/draft/2020-12/schema"} = schema, _loader, _current_vocabs) do
+    {:ok, fetch_enabled_vocabs(schema, Vocabulary.draft2020_12_defaults())}
+  end
   defp resolve_dialect(%{"$schema" => uri}, loader, current_vocabs) when is_function(loader) and is_binary(uri) do
     case loader.(uri) do
       {:ok, meta_schema} when is_map(meta_schema) ->
