@@ -26,39 +26,42 @@ defmodule JSONSchex.ScopeScanner do
   alias JSONSchex.URIUtil
 
   @doc """
-  Scans a raw schema and returns a registry map of `{absolute_uri => raw_schema}`.
-
-  ## Examples
-
-      iex> schema = %{"$id" => "https://example.com/root", "$anchor" => "root"}
-      iex> registry = JSONSchex.ScopeScanner.scan(schema)
-      iex> Map.keys(registry)
-      ["https://example.com/root", "https://example.com/root#root"]
-
+  Scans a raw schema and returns a tuple `{registry, refs}` where:
+  - `registry` is a map of `{absolute_uri => raw_schema}`.
+  - `refs` is a MapSet of explicitly defined references.
   """
   def scan(schema) do
-    do_scan(schema, nil, %{})
+    do_scan(schema, nil, {%{}, MapSet.new()})
   end
 
-  defp do_scan(schema, base_uri, acc) when is_map(schema) do
+  defp do_scan(schema, base_uri, {registry, refs}) when is_map(schema) do
     current_id = Map.get(schema, "$id")
-
     new_base_uri = URIUtil.resolve(base_uri, current_id) || ""
 
-    acc =
+    registry =
       if current_id do
-        Map.put(acc, new_base_uri, schema)
+        Map.put(registry, new_base_uri, schema)
       else
-        acc
+        registry
       end
 
-    acc =
-      acc
+    registry =
+      registry
       |> register_anchor(schema, "$anchor", new_base_uri)
       |> register_anchor(schema, "$dynamicAnchor", new_base_uri)
 
-    Enum.reduce(schema, acc, fn {key, value}, a ->
-      recurse_keyword(key, value, new_base_uri, a)
+    refs =
+      Enum.reduce(["$ref", "$dynamicRef"], refs, fn key, acc ->
+        case Map.get(schema, key) do
+          "#" <> _ = value ->
+            MapSet.put(acc, value)
+          _ ->
+            acc
+        end
+      end)
+
+    Enum.reduce(schema, {registry, refs}, fn {key, value}, acc ->
+      recurse_keyword(key, value, new_base_uri, acc)
     end)
   end
 
@@ -75,11 +78,11 @@ defmodule JSONSchex.ScopeScanner do
   end
 
   defp recurse_keyword(key, map, base, acc) when key in ["properties", "$defs", "definitions", "patternProperties", "dependentSchemas"] and is_map(map) do
-    Enum.reduce(map, acc, fn {_k, sub}, a -> do_scan(sub, base, a) end)
+    Enum.reduce(map, acc, fn {_k, sub}, inner_acc -> do_scan(sub, base, inner_acc) end)
   end
 
   defp recurse_keyword(key, list, base, acc) when key in ["allOf", "anyOf", "oneOf", "prefixItems"] and is_list(list) do
-    Enum.reduce(list, acc, fn sub, a -> do_scan(sub, base, a) end)
+    Enum.reduce(list, acc, fn sub, inner_acc -> do_scan(sub, base, inner_acc) end)
   end
 
   defp recurse_keyword(key, sub, base, acc) when key in ["items", "additionalProperties", "if", "then", "else", "not", "contains", "propertyNames", "unevaluatedItems", "unevaluatedProperties"] and is_map(sub) do

@@ -52,7 +52,7 @@ defmodule JSONSchex.Compiler do
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, external_loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
 
-      global_scopes = ScopeScanner.scan(raw_schema)
+      {global_scopes, explicit_refs} = ScopeScanner.scan(raw_schema)
 
       full_defs =
         Enum.reduce_while(global_scopes, root_compiled.defs, fn {id, sub_raw}, acc_defs ->
@@ -89,11 +89,13 @@ defmodule JSONSchex.Compiler do
           end
         end)
 
-      case full_defs do
-        {:error, msg} ->
-          {:error, msg}
-        valid_defs ->
-          {:ok, %{root_compiled | defs: valid_defs, external_loader: external_loader}}
+      resolved_runtime_defs = resolve_refs(raw_schema, MapSet.to_list(explicit_refs), root_vocabs, ctx)
+
+      case merge_defs(full_defs, resolved_runtime_defs) do
+        {:error, _} = error ->
+          error
+        defs ->
+          {:ok, %{root_compiled | defs: defs, external_loader: external_loader}}
       end
     end
   end
@@ -103,14 +105,17 @@ defmodule JSONSchex.Compiler do
     compile_schema_node(value, nil, @default_vocabs_list, %{loader: nil, format_assertion: format_assertion, content_assertion: content_assertion})
   end
 
+  defp merge_defs({:error, error}, _), do: {:error, error}
+  defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
+
   defp resolve_dialect(%{"$schema" => uri}, loader, current_vocabs) when is_function(loader) and is_binary(uri) do
     case loader.(uri) do
       {:ok, meta_schema} when is_map(meta_schema) ->
         with :ok <- check_vocabulary(meta_schema) do
           {:ok, fetch_enabled_vocabs(meta_schema, @default_vocabs_list)}
         end
-      {:error, msg} ->
-        {:error, msg}
+      {:error, reason} ->
+        {:error, %Error{context: %{contrast: "load_remote", input: uri, error_detail: reason}}}
       _ ->
         {:ok, current_vocabs}
     end
@@ -145,6 +150,24 @@ defmodule JSONSchex.Compiler do
     end)
   end
   defp check_vocabulary(_), do: :ok
+
+  defp resolve_refs(raw_schema, refs, vocabs, ctx) do
+    ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
+      case result do
+        {:ok, fragment} ->
+          case compile_schema_node(fragment, nil, vocabs, ctx) do
+            {:ok, compiled_sub} ->
+              Map.put(acc, ref, %{compiled_sub | raw: fragment})
+
+            _ ->
+              acc
+          end
+
+        {:error, _reason} ->
+          acc
+      end
+    end)
+  end
 
   defp compile_schema_node(true, _id, _vocabs, ctx) do
     {:ok, %Schema{rules: [], defs: %{}, format_assertion: ctx.format_assertion, content_assertion: ctx.content_assertion}}
@@ -829,5 +852,6 @@ defmodule JSONSchex.Compiler do
       end
     }
   end
+
 
 end

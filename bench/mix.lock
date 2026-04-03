@@ -3,7 +3,7 @@
   "benchee": {:hex, :benchee, "1.5.0", "4d812c31d54b0ec0167e91278e7de3f596324a78a096fd3d0bea68bb0c513b10", [:mix], [{:deep_merge, "~> 1.0", [hex: :deep_merge, repo: "hexpm", optional: false]}, {:statistex, "~> 1.1", [hex: :statistex, repo: "hexpm", optional: false]}, {:table, "~> 0.1.0", [hex: :table, repo: "hexpm", optional: true]}], "hexpm", "5b075393aea81b8ae74eadd1c28b1d87e8a63696c649d8293db7c4df3eb67535"},
   "conv_case": {:hex, :conv_case, "0.2.3", "c1455c27d3c1ffcdd5f17f1e91f40b8a0bc0a337805a6e8302f441af17118ed8", [:mix], [], "hexpm", "88f29a3d97d1742f9865f7e394ed3da011abb7c5e8cc104e676fdef6270d4b4a"},
   "deep_merge": {:hex, :deep_merge, "1.0.0", "b4aa1a0d1acac393bdf38b2291af38cb1d4a52806cf7a4906f718e1feb5ee961", [:mix], [], "hexpm", "ce708e5f094b9cd4e8f2be4f00d2f4250c4095be93f8cd6d018c753894885430"},
-  "ex_json_pointer": {:hex, :ex_json_pointer, "0.5.1", "289a043db2ccfa513fcfc264e8c8e0f70135736a86911b583c2f7b74b3ff51db", [:mix], [], "hexpm", "30b728202263399876296bed2446455c33c58cd476d4b7d071c084e71954840c"},
+  "ex_json_pointer": {:hex, :ex_json_pointer, "0.6.1", "ca6ddf7be8deba681ad406862b52799465c936df724ec16627fe7b26085d4725", [:mix], [], "hexpm", "313a3788314abeeddd6e1aba242d802c57772e11bcec3d19f2e7f96c62d8ddb1"},
   "idna": {:hex, :idna, "7.1.0", "1067a13043538129602d2f2ce6899d8713125c7d19734aa557ce2e3ea55bd4f1", [:rebar3], [], "hexpm", "6ae959a025bf36df61a8cab8508d9654891b5426a84c44d82deaffd6ddf8c71f"},
   "json_xema": {:git, "https://github.com/hrzndhrn/json_xema.git", "3c6bc5315f242945cf8d383401b49a4dbfa4cdb0", []},
   "jsv": {:git, "https://github.com/lud/jsv.git", "0635d8dd9ec2cb33dd5d13a8fb5e035afa9bd6a0", []},

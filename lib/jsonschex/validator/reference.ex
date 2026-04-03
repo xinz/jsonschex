@@ -74,9 +74,13 @@ defmodule JSONSchex.Validator.Reference do
              result <- load_remote_schema(data, uri_to_load, path, validation_context, evaluated) do
           result
         else
-          {base_schema, fragment} when is_map(base_schema) ->
-            updated_context = merge_defs_into_context(validation_context, base_schema.defs)
-            validate_ref(data, "#" <> fragment, {path, evaluated, updated_context})
+          {:ok, base_schema, fragment} when is_map(base_schema) ->
+            if base_schema.source_id == validation_context.source_id do
+              resolve_and_validate_jit(data, validation_context.raw, "#" <> fragment, path, validation_context, evaluated)
+            else
+              updated_context = merge_defs_into_context(validation_context, base_schema.defs)
+              validate_ref(data, "#" <> fragment, {path, evaluated, updated_context})
+            end
 
           :halt ->
             resolve_and_validate_jit(data, validation_context.raw, ref_string, path, validation_context, evaluated)
@@ -103,7 +107,7 @@ defmodule JSONSchex.Validator.Reference do
           nil ->
             nil
           schema ->
-            {schema, fragment}
+            {:ok, schema, fragment}
         end
       _ ->
         nil
@@ -193,7 +197,8 @@ defmodule JSONSchex.Validator.Reference do
                   validation_context.scope_stack
                 end
 
-              merged_context = merge_defs_into_context(validation_context, compiled_remote.defs || %{})
+              merged_defs = Map.put(compiled_remote.defs || %{}, base, compiled_remote)
+              merged_context = merge_defs_into_context(validation_context, merged_defs)
               updated_context = %{merged_context |
                 scope_stack: new_stack,
                 source_id: compiled_remote.source_id,

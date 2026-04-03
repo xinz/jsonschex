@@ -220,14 +220,14 @@ ref_invalid = %{
 }
 
 run_bench.("ref_valid", %{
-  "JSV" => fn -> {:ok, _} = JSV.validate(ref_valid, jsv_ref) end,
-  "JSONSchex" => fn -> :ok = JSONSchex.validate(jx_ref, ref_valid) end
+  "$ref/$id draft-2020-12 JSV" => fn -> {:ok, _} = JSV.validate(ref_valid, jsv_ref) end,
+  "$ref/$id draft-2020-12 JSONSchex" => fn -> :ok = JSONSchex.validate(jx_ref, ref_valid) end
   # JsonXema not supported
 })
 
 run_bench.("ref_invalid", %{
-  "JSV" => fn -> {:error, _} = JSV.validate(ref_invalid, jsv_ref) end,
-  "JSONSchex" => fn -> {:error, _} = JSONSchex.validate(jx_ref, ref_invalid) end
+  "$ref/$id draft-2020-12 JSV" => fn -> {:error, _} = JSV.validate(ref_invalid, jsv_ref) end,
+  "$ref/$id draft-2020-12 JSONSchex" => fn -> {:error, _} = JSONSchex.validate(jx_ref, ref_invalid) end
 })
 
 # =============================================================================
