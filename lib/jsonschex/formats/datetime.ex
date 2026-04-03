@@ -1,6 +1,6 @@
 defmodule JSONSchex.Formats.DateTime do
   @moduledoc """
-  Validates "date-time" format according to RFC 3339.
+  Validates RFC 3339 `date-time` and `time` formats.
   """
 
   def valid?(data) do
@@ -17,6 +17,17 @@ defmodule JSONSchex.Formats.DateTime do
 
       _ ->
         false
+    end
+  end
+
+  def valid_time?(data) do
+    # RFC 3339 uses period for decimal separation, not comma (which ISO 8601 allows)
+    if String.contains?(data, ",") do
+      false
+    else
+      # Prepend an arbitrary date so we can reuse the RFC 3339 date-time validation
+      # logic, including offset handling, case-insensitive Z normalization, and leap seconds.
+      valid?("2020-01-01T" <> data)
     end
   end
 

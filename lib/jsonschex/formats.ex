@@ -55,7 +55,7 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("time", data) do
-    JSONSchex.Formats.Time.valid?(data)
+    JSONSchex.Formats.DateTime.valid_time?(data)
   end
 
   defp valid?("duration", data) do

@@ -72,7 +72,6 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Formats.Hostname,
           JSONSchex.Formats.IP,
           JSONSchex.Formats.Regex,
-          JSONSchex.Formats.Time,
           JSONSchex.Formats.URITemplate
         ],
         "Internal": [
