@@ -2,7 +2,7 @@ defmodule JSONSchex.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/xinz/jsonschex"
-  @version "0.3.0"
+  @version "0.4.0"
   @description "An implementation of the JSON Schema draft 2020-12 and latest specification for Elixir"
 
   def project do
