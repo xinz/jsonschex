@@ -12,9 +12,11 @@ This guide explains how JSONSchex interprets `$schema` and `$vocabulary`, and ho
 
 JSONSchex resolves dialect in this order:
 
-1. If the root schema contains `$schema` and an `external_loader` is provided, JSONSchex attempts to load the meta-schema at that URI.
-2. If the meta-schema loads successfully, JSONSchex reads `$vocabulary` from it to build the enabled vocabulary set.
-3. If no loader is available or the meta-schema cannot be loaded, JSONSchex proceeds with the default vocabulary set.
+1. If the root schema declares the canonical Draft 2020-12 meta-schema URI (`https://json-schema.org/draft/2020-12/schema`), JSONSchex treats it as a built-in dialect and does not invoke the external loader for that URI.
+2. For the built-in Draft 2020-12 dialect, JSONSchex uses the standard Draft 2020-12 active vocabulary defaults, while still honoring an explicit root-level `$vocabulary` declaration when present.
+3. If the root schema contains another `$schema` URI and an `external_loader` is provided, JSONSchex attempts to load that meta-schema remotely.
+4. If a custom meta-schema loads successfully, JSONSchex reads `$vocabulary` from it to build the enabled vocabulary set.
+5. If no loader is available or the meta-schema cannot be loaded, JSONSchex proceeds with the implementation default capability set.
 
 ## $vocabulary Semantics
 
@@ -25,22 +27,42 @@ The `$vocabulary` object maps vocabulary URIs to a boolean:
 
 This behavior matches the Draft 2020-12 specification.
 
-## Default Vocabularies
+## Default vocabularies
 
-When no meta-schema can be loaded, JSONSchex uses its default vocabulary list. This includes the following 8 vocabulary URIs for Draft 2020-12:
+JSONSchex now distinguishes between two related vocabulary sets:
+
+### 1. Built-in Draft 2020-12 active defaults
+
+When a schema uses the canonical Draft 2020-12 meta-schema URI, JSONSchex activates the built-in Draft 2020-12 vocabulary set:
 
 1. `https://json-schema.org/draft/2020-12/vocab/core`
 2. `https://json-schema.org/draft/2020-12/vocab/applicator`
 3. `https://json-schema.org/draft/2020-12/vocab/validation`
 4. `https://json-schema.org/draft/2020-12/vocab/unevaluated`
 5. `https://json-schema.org/draft/2020-12/vocab/format-annotation`
-6. `https://json-schema.org/draft/2020-12/vocab/format-assertion`
-7. `https://json-schema.org/draft/2020-12/vocab/content`
-8. `https://json-schema.org/draft/2020-12/vocab/meta-data`
+6. `https://json-schema.org/draft/2020-12/vocab/content`
+7. `https://json-schema.org/draft/2020-12/vocab/meta-data`
 
-This default set provides reasonable behavior for local schemas without remote meta-schema access.
+Notably, this built-in active set does **not** enable `format-assertion` by default, which matches the expected Draft 2020-12 behavior.
 
-You can access these programmatically:
+You can access this set programmatically:
+
+```elixir
+iex> JSONSchex.Vocabulary.draft2020_12_defaults()
+[
+  "https://json-schema.org/draft/2020-12/vocab/core",
+  "https://json-schema.org/draft/2020-12/vocab/applicator",
+  "https://json-schema.org/draft/2020-12/vocab/validation",
+  "https://json-schema.org/draft/2020-12/vocab/unevaluated",
+  "https://json-schema.org/draft/2020-12/vocab/format-annotation",
+  "https://json-schema.org/draft/2020-12/vocab/content",
+  "https://json-schema.org/draft/2020-12/vocab/meta-data"
+]
+```
+
+### 2. Full supported vocabulary set
+
+JSONSchex also exposes the full set of vocabularies that the implementation understands. This capability set is used when validating required `$vocabulary` declarations:
 
 ```elixir
 iex> JSONSchex.Vocabulary.defaults()
@@ -60,7 +82,9 @@ iex> JSONSchex.Vocabulary.defaults()
 
 - Missing required vocabulary: compilation fails with an unsupported vocabulary error.
 - Optional vocabulary unsupported: compilation continues, but those keywords are ignored.
-- No loader available: `$schema` is not resolved remotely; defaults are used.
+- Canonical Draft 2020-12 `$schema`: handled internally without a remote meta-schema fetch.
+- Explicit root `$vocabulary`: honored even when the schema uses the built-in Draft 2020-12 dialect.
+- No loader available for a custom `$schema`: the meta-schema is not resolved remotely, so JSONSchex falls back to its implementation defaults.
 
 ## Examples
 
@@ -167,6 +191,8 @@ JSONSchex.validate(compiled2, "not-an-email")  # => {:error, [...]}
 
 ## Practical guidance
 
+- Use the canonical Draft 2020-12 `$schema` URI when you want standard behavior without requiring a remote meta-schema fetch.
 - If you rely on a custom meta-schema or vocabulary, provide an `external_loader`.
 - Use `$schema` to make the dialect explicit and predictable.
+- Use an explicit root `$vocabulary` only when you need to override the built-in active vocabulary set for the selected dialect.
 - Avoid mixing keywords from unsupported vocabularies unless you also ship a loader that resolves the meta-schema.

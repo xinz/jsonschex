@@ -90,37 +90,37 @@ JSONSchex.validate(compiled, valid_data)
 
 # Invalid case 1: Bad base64 encoding
 invalid_base64 = %{"encodedData" => "not-valid-base64!!!"}
-JSONSchex.validate(compiled, invalid_base64)
-# => {:error, [%JSONSchex.Types.Error{
-#      path: "/encodedData",
-#      rule: :contentEncoding,
-#      message: "Failed to decode contentEncoding: base64"
-#    }]}
+{:error, [error]} = JSONSchex.validate(compiled, invalid_base64)
+# error.path => ["encodedData"]
+# error.rule => :contentEncoding
+# JSONSchex.format_error(error)
+# => "At /encodedData: Failed to decode string as 'base64': \"not-valid-base64!!!\""
 
 # Invalid case 2: Valid base64 but not JSON
 non_json_base64 = Base.encode64("This is not JSON")
-JSONSchex.validate(compiled, %{"encodedData" => non_json_base64})
-# => {:error, [%JSONSchex.Types.Error{
-#      path: "/encodedData",
-#      rule: :contentMediaType,
-#      message: "Failed to decode contentMediaType: application/json"
-#    }]}
+{:error, [error]} = JSONSchex.validate(compiled, %{"encodedData" => non_json_base64})
+# error.path => ["encodedData"]
+# error.rule => :contentMediaType
+# JSONSchex.format_error(error)
+# => "At /encodedData: Failed to decode as 'application/json': ..."
 
 # Invalid case 3: Valid JSON but doesn't match contentSchema
 invalid_json = Jason.encode!(%{"name" => "Bob", "age" => -5})  # age is negative
 invalid_data = %{"encodedData" => Base.encode64(invalid_json)}
 {:error, [error]} = JSONSchex.validate(compiled, invalid_data)
-# error.path => "/encodedData"
+# error.path => ["encodedData", "age"]
 # error.rule => :minimum
-# error.message => "Value -5 is less than minimum 0"
+# JSONSchex.format_error(error)
+# => "At /encodedData/age: Value -5 is less than minimum 0"
 
 # Invalid case 4: Missing required field in content
 incomplete_json = Jason.encode!(%{"name" => "Charlie"})  # missing age
 incomplete_data = %{"encodedData" => Base.encode64(incomplete_json)}
 {:error, [error]} = JSONSchex.validate(compiled, incomplete_data)
-# error.path => "/encodedData"
+# error.path => ["encodedData"]
 # error.rule => :required
-# error.message => "Missing required properties: age"
+# JSONSchex.format_error(error)
+# => "At /encodedData: Missing required properties: age"
 ```
 
 ### Practical Use Cases
@@ -208,8 +208,10 @@ email_schema = %{"type" => "string", "format" => "email"}
 JSONSchex.validate(compiled, "user@example.com")
 # => :ok
 
-JSONSchex.validate(compiled, "not-an-email")
-# => {:error, [%JSONSchex.Types.Error{rule: :format, message: "Format mismatch: email"}]}
+{:error, [error]} = JSONSchex.validate(compiled, "not-an-email")
+# error.rule => :format
+# JSONSchex.format_error(error)
+# => "Invalid email format: \"not-an-email\""
 
 # UUID validation
 uuid_schema = %{"type" => "string", "format" => "uuid"}
@@ -218,8 +220,10 @@ uuid_schema = %{"type" => "string", "format" => "uuid"}
 JSONSchex.validate(compiled, "550e8400-e29b-41d4-a716-446655440000")
 # => :ok
 
-JSONSchex.validate(compiled, "not-a-uuid")
-# => {:error, [%JSONSchex.Types.Error{rule: :format, message: "Format mismatch: uuid"}]}
+{:error, [error]} = JSONSchex.validate(compiled, "not-a-uuid")
+# error.rule => :format
+# JSONSchex.format_error(error)
+# => "Invalid uuid format: \"not-a-uuid\""
 
 # Date-time validation
 datetime_schema = %{"type" => "string", "format" => "date-time"}
@@ -228,8 +232,10 @@ datetime_schema = %{"type" => "string", "format" => "date-time"}
 JSONSchex.validate(compiled, "2024-01-15T10:30:00Z")
 # => :ok
 
-JSONSchex.validate(compiled, "not a date")
-# => {:error, [%JSONSchex.Types.Error{rule: :format, message: "Format mismatch: date-time"}]}
+{:error, [error]} = JSONSchex.validate(compiled, "not a date")
+# error.rule => :format
+# JSONSchex.format_error(error)
+# => "Invalid date-time format: \"not a date\""
 
 # IPv4 validation
 ipv4_schema = %{"type" => "string", "format" => "ipv4"}
@@ -238,8 +244,10 @@ ipv4_schema = %{"type" => "string", "format" => "ipv4"}
 JSONSchex.validate(compiled, "192.168.1.1")
 # => :ok
 
-JSONSchex.validate(compiled, "999.999.999.999")
-# => {:error, [%JSONSchex.Types.Error{rule: :format, message: "Format mismatch: ipv4"}]}
+{:error, [error]} = JSONSchex.validate(compiled, "999.999.999.999")
+# error.rule => :format
+# JSONSchex.format_error(error)
+# => "Invalid ipv4 format: \"999.999.999.999\""
 ```
 
 ## Practical guidance

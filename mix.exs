@@ -3,7 +3,7 @@ defmodule JSONSchex.MixProject do
 
   @source_url "https://github.com/xinz/jsonschex"
   @version "0.3.0"
-  @description "A JSON Schema validator with complete support for the draft 2020-12 and latest specifications."
+  @description "An implementation of the JSON Schema draft 2020-12 and latest specification for Elixir"
 
   def project do
     [

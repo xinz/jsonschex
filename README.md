@@ -2,7 +2,7 @@
 
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
 
-JSONSchex is a [JSON Schema specification](https://json-schema.org/specification) implementation in Elixir. It fully supports [Draft 2020-12](https://json-schema.org/draft/2020-12) and latest specifications, and its design focuses on practical performance.
+JSONSchex is an implementation of the [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) and latest specification for Elixir, with a design that focuses on practical performance.
 
 ## Features
 
@@ -15,7 +15,7 @@ JSONSchex is a [JSON Schema specification](https://json-schema.org/specification
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.3.0"}
+    {:jsonschex, "~> 0.4.0"}
   ]
 end
 ```
@@ -38,9 +38,10 @@ end
 JSONSchex follows a **two-phase approach** for optimal performance:
 
 1. **Compile** — Parse and optimize a JSON Schema into an executable `Schema` struct. During compilation:
-   - All `$id` and anchor definitions are scanned and registered
+   - All `$id`, `$anchor`, and discovered local fragment references are scanned and registered
    - Keywords are converted into executable validation functions
    - Remote `$ref` schemas can be loaded via an external loader
+   - The built-in Draft 2020-12 dialect is recognized without requiring a remote meta-schema load
    - Vocabularies are resolved based on `$schema` and `$vocabulary` declarations
 
 2. **Validate** — Execute the compiled schema against data. During validation:
@@ -118,7 +119,7 @@ Enum.map(errors, &JSONSchex.format_error/1)
 
 - `:external_loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
 - `:base_uri` — Starting base URI for resolving relative references (see [Loader guide](guide/loader.md))
-- `:format_assertion` — Enable strict `format` validation (default: `false`, see [Content and format guide](guide/content_and_format.md))
+- `:format_assertion` — Enable strict `format` validation (default: `false`; the built-in Draft 2020-12 dialect keeps `format` annotation-only unless explicitly enabled, see [Content and format guide](guide/content_and_format.md))
 - `:content_assertion` — Enable strict content vocabulary validation (default: `false`, see [Content and format guide](guide/content_and_format.md))
 
 ## Optional Dependencies
@@ -136,7 +137,7 @@ To include these dependencies, add them to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.1.0"},
+    {:jsonschex, "~> 0.4"},
     {:jason, "~> 1.4"},
     {:decimal, "~> 2.0"},
     {:idna, "~> 6.0 or ~> 7.1"}
