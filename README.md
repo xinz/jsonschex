@@ -15,7 +15,7 @@ JSONSchex is an implementation of the [JSON Schema Draft 2020-12](https://json-s
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.4.0"}
+    {:jsonschex, "~> 0.4"}
   ]
 end
 ```
