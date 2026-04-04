@@ -1,31 +1,31 @@
 defmodule JSONSchex.ErrorFormatter do
   @moduledoc """
-  Formats `JSONSchex.Types.Error` and `JSONSchex.Types.CompileError` structs
-  into human-readable strings.
+  Formats `JSONSchex.Types.Error` structs into human-readable strings.
   """
+  alias JSONSchex.Types
   alias JSONSchex.Types.Error
-  alias JSONSchex.Types.CompileError
 
-  import CompileError, only: [is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1]
+  import Types, only: [is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1]
 
   @doc """
-  Returns a human-readable message for the given `Error` or `CompileError`.
+  Returns a human-readable message for the given `Error`.
   """
-  def format(%CompileError{error: :invalid_keyword_value, path: path, value: value}) do
+
+  def format(%Error{rule: :invalid_keyword_value, path: path, value: value, context: context}) do
     keyword = List.last(path)
-    "#{format_invalid_keyword(keyword, value)}"
+    format_invalid_keyword(keyword, value, context)
   end
 
-  def format(%CompileError{error: :unsupported_vocabulary, path: path}) do
-    "Unsupported required vocabulary: #{List.last(path)}"
+  def format(%Error{rule: :unsupported_vocabulary, path: path}) do
+    msg = "Unsupported required vocabulary: #{List.last(path)}"
+    formatted_path = format_path(path)
+    if formatted_path == "/", do: msg, else: "At #{formatted_path}: #{msg}"
   end
 
-  def format(%CompileError{error: :invalid_regex, path: path, context: %{error_detail: error}}) do
-    "Invalid regex at schema #{format_path(path)}: #{error}"
-  end
-
-  def format(%CompileError{error: error}) do
-    "Schema compile error: #{inspect(error)}"
+  def format(%Error{rule: :invalid_regex, path: path, context: %{error_detail: error}}) do
+    msg = "Invalid regex at schema #{format_path(path)}: #{error}"
+    formatted_path = format_path(path)
+    if formatted_path == "/", do: msg, else: "At #{formatted_path}: #{msg}"
   end
 
   def format(%Error{} = error) do
@@ -194,37 +194,37 @@ defmodule JSONSchex.ErrorFormatter do
   end
   defp format_path(_), do: "/"
 
-  defp format_invalid_keyword("type", value) when is_binary(value) do
-    valid = Enum.join(CompileError.valid_types(), ", ")
+  defp format_invalid_keyword("type", value, %{contrast: valid_types}) when is_binary(value) and is_list(valid_types) do
+    valid = Enum.join(valid_types, ", ")
     "Keyword 'type' must be one of [#{valid}], got: #{inspect(value)}"
   end
 
-  defp format_invalid_keyword("type", value) when is_list(value) do
-    invalid = Enum.reject(value, &(is_binary(&1) and &1 in CompileError.valid_types()))
+  defp format_invalid_keyword("type", value, %{contrast: valid_types}) when is_list(value) and is_list(valid_types) do
+    invalid = Enum.reject(value, &(is_binary(&1) and &1 in valid_types))
     "Keyword 'type' contains unknown type(s): #{Enum.join(invalid, ", ")}"
   end
 
-  defp format_invalid_keyword("type", value) do
+  defp format_invalid_keyword("type", value, _context) do
     "Keyword 'type' must be a type string or an array of type strings, got: #{inspect(value)}"
   end
 
-  defp format_invalid_keyword("multipleOf", value) do
+  defp format_invalid_keyword("multipleOf", value, %{contrast: "strictly_positive_number"}) do
     "Keyword 'multipleOf' must be a strictly positive number, got: #{inspect(value)}"
   end
 
-  defp format_invalid_keyword("uniqueItems", value) do
+  defp format_invalid_keyword("uniqueItems", value, %{contrast: "boolean"}) do
     "Keyword 'uniqueItems' must be a boolean, got: #{inspect(value)}"
   end
 
-  defp format_invalid_keyword(kw, value) when is_numeric_keywords?(kw) do
+  defp format_invalid_keyword(kw, value, %{contrast: "number"}) when is_numeric_keywords?(kw) do
     "Keyword '#{kw}' must be a number, got: #{inspect(value)}"
   end
 
-  defp format_invalid_keyword(kw, value) when is_non_neg_int_keywords?(kw) do
+  defp format_invalid_keyword(kw, value, %{contrast: "non_negative_integer"}) when is_non_neg_int_keywords?(kw) do
     "Keyword '#{kw}' must be a non-negative integer, got: #{inspect(value)}"
   end
 
-  defp format_invalid_keyword(kw, value) do
+  defp format_invalid_keyword(kw, value, _context) do
     "Keyword '#{kw}' has an invalid value: #{inspect(value)}"
   end
 end

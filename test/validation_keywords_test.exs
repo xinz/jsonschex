@@ -55,7 +55,7 @@ defmodule JSONSchex.Test.ValidationKeywords do
     }
 
     assert {:error, error} = JSONSchex.compile(schema)
-    assert error.error == :invalid_regex
+    assert error.rule == :invalid_regex
     assert error.value == "["
     assert error.path == ["dependentSchemas", "foo", "pattern"]
   end

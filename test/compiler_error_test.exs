@@ -1,25 +1,25 @@
 defmodule JSONSchex.Test.CompilerErrorTest do
   use ExUnit.Case
-  alias JSONSchex.Types.CompileError
+  alias JSONSchex.Types.Error
 
   describe "type keyword errors" do
     test "rejects an unknown type string" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"type" => "1"})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"type" => "1"})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["type"]
       assert error.value == "1"
     end
 
     test "rejects an array containing unknown type strings" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"type" => ["string", "foo"]})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"type" => ["string", "foo"]})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["type"]
       assert error.value == ["string", "foo"]
     end
 
     test "rejects a value that is neither a string nor an array" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"type" => 42})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"type" => 42})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["type"]
       assert error.value == 42
     end
@@ -38,27 +38,27 @@ defmodule JSONSchex.Test.CompilerErrorTest do
 
   describe "numeric keyword errors (minimum / maximum / exclusiveMinimum / exclusiveMaximum)" do
     test "rejects a string value for minimum" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"minimum" => "five"})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"minimum" => "five"})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["minimum"]
       assert error.value == "five"
     end
 
     test "rejects nil for maximum" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"maximum" => nil})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"maximum" => nil})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["maximum"]
     end
 
     test "rejects a list for exclusiveMinimum" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"exclusiveMinimum" => []})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"exclusiveMinimum" => []})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["exclusiveMinimum"]
     end
 
     test "rejects a string for exclusiveMaximum" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"exclusiveMaximum" => "3"})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"exclusiveMaximum" => "3"})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["exclusiveMaximum"]
     end
 
@@ -75,22 +75,22 @@ defmodule JSONSchex.Test.CompilerErrorTest do
 
   describe "multipleOf keyword errors" do
     test "rejects zero" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"multipleOf" => 0})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"multipleOf" => 0})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["multipleOf"]
       assert error.value == 0
     end
 
     test "rejects a negative number" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"multipleOf" => -1})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"multipleOf" => -1})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["multipleOf"]
       assert error.value == -1
     end
 
     test "rejects a non-number string" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"multipleOf" => "2"})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"multipleOf" => "2"})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["multipleOf"]
     end
 
@@ -108,10 +108,10 @@ defmodule JSONSchex.Test.CompilerErrorTest do
 
     test "rejects a negative integer for each keyword" do
       for kw <- @non_neg_int_keywords do
-        assert {:error, %CompileError{} = error} = JSONSchex.compile(%{kw => -1}),
+        assert {:error, %Error{} = error} = JSONSchex.compile(%{kw => -1}),
                "expected compile to fail for #{kw}=-1"
 
-        assert error.error == :invalid_keyword_value
+        assert error.rule == :invalid_keyword_value
         assert error.path == [kw]
         assert error.value == -1
       end
@@ -119,10 +119,10 @@ defmodule JSONSchex.Test.CompilerErrorTest do
 
     test "rejects a fractional float for each keyword" do
       for kw <- @non_neg_int_keywords do
-        assert {:error, %CompileError{} = error} = JSONSchex.compile(%{kw => 1.5}),
+        assert {:error, %Error{} = error} = JSONSchex.compile(%{kw => 1.5}),
                "expected compile to fail for #{kw}=1.5"
 
-        assert error.error == :invalid_keyword_value
+        assert error.rule == :invalid_keyword_value
         assert error.path == [kw]
         assert error.value == 1.5
       end
@@ -130,10 +130,10 @@ defmodule JSONSchex.Test.CompilerErrorTest do
 
     test "rejects a non-number string for each keyword" do
       for kw <- @non_neg_int_keywords do
-        assert {:error, %CompileError{} = error} = JSONSchex.compile(%{kw => "two"}),
+        assert {:error, %Error{} = error} = JSONSchex.compile(%{kw => "two"}),
                "expected compile to fail for #{kw}=\"two\""
 
-        assert error.error == :invalid_keyword_value
+        assert error.rule == :invalid_keyword_value
         assert error.path == [kw]
       end
     end
@@ -160,15 +160,15 @@ defmodule JSONSchex.Test.CompilerErrorTest do
 
   describe "uniqueItems keyword errors" do
     test "rejects a string value" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"uniqueItems" => "yes"})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"uniqueItems" => "yes"})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["uniqueItems"]
       assert error.value == "yes"
     end
 
     test "rejects an integer value" do
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(%{"uniqueItems" => 1})
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(%{"uniqueItems" => 1})
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["uniqueItems"]
     end
 
@@ -181,16 +181,16 @@ defmodule JSONSchex.Test.CompilerErrorTest do
   describe "invalid_keyword_value errors nested in $defs" do
     test "path is prefixed with $defs key for an invalid type" do
       schema = %{"$defs" => %{"item" => %{"type" => "bad"}}}
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["$defs", "item", "type"]
       assert error.value == "bad"
     end
 
     test "path is prefixed with $defs key for an invalid minimum" do
       schema = %{"$defs" => %{"item" => %{"minimum" => "x"}}}
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :invalid_keyword_value
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :invalid_keyword_value
       assert error.path == ["$defs", "item", "minimum"]
       assert error.value == "x"
     end
@@ -241,13 +241,13 @@ defmodule JSONSchex.Test.CompilerErrorTest do
     end
   end
 
-  describe "String.Chars protocol for CompileError" do
+  describe "String.Chars protocol for Error" do
     test "to_string/1 delegates to format_error/1" do
       {:error, error} = JSONSchex.compile(%{"type" => "1"})
       assert to_string(error) == JSONSchex.format_error(error)
     end
 
-    test "string interpolation works for CompileError" do
+    test "string interpolation works for Error" do
       {:error, error} = JSONSchex.compile(%{"minimum" => "bad"})
       assert "#{error}" == JSONSchex.format_error(error)
     end
@@ -256,8 +256,8 @@ defmodule JSONSchex.Test.CompilerErrorTest do
   describe "Regex compilation errors" do
     test "returns structured error for invalid pattern" do
       schema = %{"pattern" => "["}
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :invalid_regex
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :invalid_regex
       assert error.path == ["pattern"]
       assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
@@ -268,8 +268,8 @@ defmodule JSONSchex.Test.CompilerErrorTest do
           "[" => %{"type" => "string"}
         }
       }
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :invalid_regex
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :invalid_regex
       assert error.path == ["patternProperties", "["]
       assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
@@ -283,8 +283,8 @@ defmodule JSONSchex.Test.CompilerErrorTest do
         "additionalProperties" => false
       }
 
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :invalid_regex
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :invalid_regex
       assert error.path == ["patternProperties", "["]
       assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true
     end
@@ -299,8 +299,8 @@ defmodule JSONSchex.Test.CompilerErrorTest do
           "http://example.com/vocab/unknown" => true
         }
       }
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :unsupported_vocabulary
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :unsupported_vocabulary
       assert error.path == ["$vocabulary", "http://example.com/vocab/unknown"]
       assert error.value == true
     end
@@ -313,8 +313,8 @@ defmodule JSONSchex.Test.CompilerErrorTest do
           "bad_def" => %{"pattern" => "["}
         }
       }
-      assert {:error, %CompileError{} = error} = JSONSchex.compile(schema)
-      assert error.error == :invalid_regex
+      assert {:error, %Error{} = error} = JSONSchex.compile(schema)
+      assert error.rule == :invalid_regex
       assert error.path == ["$defs", "bad_def", "pattern"]
       assert error.value == "["
       assert List.starts_with?(error.context.error_detail, ~c"missing terminating ]") == true

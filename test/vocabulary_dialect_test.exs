@@ -32,7 +32,7 @@ defmodule JSONSchex.Test.VocabularyDialectTest do
 
     assert {:error, error} = JSONSchex.compile(schema, external_loader: loader)
 
-    assert error.error == :unsupported_vocabulary
+    assert error.rule == :unsupported_vocabulary
     assert error.path == ["$vocabulary", "http://localhost:1234/draft/2020-12/vocab/unknown-required"]
     assert error.value == true
   end
@@ -48,7 +48,7 @@ defmodule JSONSchex.Test.VocabularyDialectTest do
     }
 
     assert {:error, error} = JSONSchex.compile(schema)
-    assert error.error == :unsupported_vocabulary
+    assert error.rule == :unsupported_vocabulary
     assert error.path == ["$vocabulary", "http://localhost:1234/draft/2020-12/vocab/unknown-required-inline"]
     assert error.value == true
   end

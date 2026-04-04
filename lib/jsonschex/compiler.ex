@@ -19,7 +19,7 @@ defmodule JSONSchex.Compiler do
       1
 
   """
-  alias JSONSchex.Types.{Schema, Rule, Error, CompileError, ErrorContext}
+  alias JSONSchex.Types.{Schema, Rule, Error, ErrorContext}
   alias JSONSchex.Compiler.Predicates
   alias JSONSchex.Validator
   alias JSONSchex.Validator.Keywords
@@ -27,7 +27,7 @@ defmodule JSONSchex.Compiler do
   alias JSONSchex.Vocabulary
   alias JSONSchex.URIUtil
 
-  import CompileError, only: [
+  import JSONSchex.Types, only: [
     is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1, is_valid_types?: 1
     ]
 
@@ -75,12 +75,12 @@ defmodule JSONSchex.Compiler do
                         {:ok, compiled_sub} ->
                           compiled_sub = %{compiled_sub | raw: sub_raw}
                           {:cont, Map.put(acc_defs, id, compiled_sub)}
-                        {:error, msg} ->
-                          {:halt, {:error, msg}}
+                        {:error, error} ->
+                          {:halt, {:error, error}}
                       end
 
-                    {:error, msg} ->
-                      {:halt, {:error, msg}}
+                    {:error, error} ->
+                      {:halt, {:error, error}}
                   end
                 {:error, _msg} = error ->
                   {:halt, error}
@@ -118,7 +118,7 @@ defmodule JSONSchex.Compiler do
           {:ok, fetch_enabled_vocabs(meta_schema, @default_vocabs_list)}
         end
       {:error, reason} ->
-        {:error, %Error{context: %{contrast: "load_remote", input: uri, error_detail: reason}}}
+        {:error, %Error{context: %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}}
       _ ->
         {:ok, current_vocabs}
     end
@@ -146,7 +146,7 @@ defmodule JSONSchex.Compiler do
 
     Enum.reduce_while(vocab, :ok, fn {uri, required}, :ok ->
       if required == true and not vocab_supported?(supported, uri) do
-        {:halt, {:error, %CompileError{error: :unsupported_vocabulary, path: ["$vocabulary", uri], value: true}}}
+        {:halt, {:error, %Error{rule: :unsupported_vocabulary, path: ["$vocabulary", uri], value: true}}}
       else
         {:cont, :ok}
       end
@@ -180,8 +180,12 @@ defmodule JSONSchex.Compiler do
     rule = %Rule{
       name: :boolean_schema,
       params: false,
-      validator: fn _data, {path, _, _} ->
-        {:error, [%Error{path: path, rule: :boolean_schema}]}
+      validator: fn data, {path, _, _} ->
+        {:error, [%Error{
+          path: path,
+          rule: :boolean_schema,
+          context: %ErrorContext{contrast: false, input: data}
+        }]}
       end
     }
     {:ok, %Schema{rules: [rule], defs: %{}, format_assertion: ctx.format_assertion, content_assertion: ctx.content_assertion}}
@@ -228,8 +232,8 @@ defmodule JSONSchex.Compiler do
             |> register_id_alias(sub, compiled_sub)
           {:cont, {:ok, updated_acc}}
 
-        {:error, compile_error} ->
-          {:halt, {:error, %{compile_error | path: ["$defs", key] ++ compile_error.path}}}
+        {:error, error} ->
+          {:halt, {:error, %{error | path: ["$defs", key] ++ error.path}}}
       end
     end)
   end
@@ -264,7 +268,7 @@ defmodule JSONSchex.Compiler do
         case compile_keyword({k, v}, keywords_map, base, vocabs, ctx) do
           {:ok, nil} -> {:cont, {:ok, acc}}
           {:ok, rule} -> {:cont, {:ok, [rule | acc]}}
-          {:error, msg} -> {:halt, {:error, msg}}
+          {:error, error} -> {:halt, {:error, error}}
         end
       else
         {:cont, {:ok, acc}}
@@ -278,8 +282,8 @@ defmodule JSONSchex.Compiler do
       case compile_schema_node(sub_schema, base, vocabs, ctx) do
         {:ok, compiled} ->
           {:ok, build_unevaluated_props_rule(compiled)}
-        {:error, msg} ->
-          {:error, msg}
+        {:error, error} ->
+          {:error, error}
       end
     else
       {:ok, nil}
@@ -290,8 +294,8 @@ defmodule JSONSchex.Compiler do
       case compile_schema_node(sub_schema, base, vocabs, ctx) do
         {:ok, compiled} ->
           {:ok, build_unevaluated_items_rule(compiled)}
-        {:error, msg} ->
-          {:error, msg}
+        {:error, error} ->
+          {:error, error}
       end
     else
       {:ok, nil}
@@ -399,21 +403,36 @@ defmodule JSONSchex.Compiler do
   end
 
   defp compile_keyword({"type", types}, _, _base, _vocabs, _ctx) when is_list(types) do
-    invalid = Enum.reject(types, &(is_binary(&1) and &1 in CompileError.valid_types()))
+    invalid = Enum.reject(types, &(is_binary(&1) and &1 in JSONSchex.Types.valid_types()))
     if invalid == [] do
       {:ok, %Rule{name: :type, params: types, validator: fn d, _ -> Predicates.check_type(d, types) end}}
     else
-      {:error, %CompileError{error: :invalid_keyword_value, path: ["type"], value: types}}
+      {:error, %Error{
+        rule: :invalid_keyword_value,
+        path: ["type"],
+        value: types,
+        context: %ErrorContext{contrast: JSONSchex.Types.valid_types(), input: types}
+      }}
     end
   end
 
   defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx) do
-    {:error, %CompileError{error: :invalid_keyword_value, path: ["type"], value: t}}
+    {:error, %Error{
+      rule: :invalid_keyword_value,
+      path: ["type"],
+      value: t,
+      context: %ErrorContext{contrast: JSONSchex.Types.valid_types(), input: t}
+    }}
   end
 
   defp compile_keyword({kw, m}, _, _base, _vocabs, _ctx)
        when is_numeric_keywords?(kw) and not is_number(m) do
-    {:error, %CompileError{error: :invalid_keyword_value, path: [kw], value: m}}
+    {:error, %Error{
+      rule: :invalid_keyword_value,
+      path: [kw],
+      value: m,
+      context: %ErrorContext{contrast: "number", input: m}
+    }}
   end
 
   defp compile_keyword({"minimum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minimum, params: m, validator: fn d, _ -> Predicates.check_minimum(d, m) end}}
@@ -424,7 +443,12 @@ defmodule JSONSchex.Compiler do
   # "multipleOf" — value must be a strictly positive number
   defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx)
        when not is_number(m) or m <= 0 do
-    {:error, %CompileError{error: :invalid_keyword_value, path: ["multipleOf"], value: m}}
+    {:error, %Error{
+      rule: :invalid_keyword_value,
+      path: ["multipleOf"],
+      value: m,
+      context: %ErrorContext{contrast: "strictly_positive_number", input: m}
+    }}
   end
 
   defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :multipleOf, params: m, validator: fn d, _ -> Predicates.check_multiple_of(d, m) end}}
@@ -433,7 +457,12 @@ defmodule JSONSchex.Compiler do
        when is_non_neg_int_keywords?(kw) and
             not (is_integer(m) and m >= 0) and
             not (is_float(m) and m >= 0.0 and trunc(m) == m) do
-    {:error, %CompileError{error: :invalid_keyword_value, path: [kw], value: m}}
+    {:error, %Error{
+      rule: :invalid_keyword_value,
+      path: [kw],
+      value: m,
+      context: %ErrorContext{contrast: "non_negative_integer", input: m}
+    }}
   end
 
   defp compile_keyword({"minLength", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minLength, params: m, validator: fn d, _ -> Predicates.check_min_length(d, m) end}}
@@ -444,7 +473,7 @@ defmodule JSONSchex.Compiler do
       {:ok, regex} ->
         {:ok, %Rule{name: :pattern, params: p, validator: fn d, _ -> Predicates.check_pattern(d, regex) end}}
       {:error, {err, _pos}} ->
-        {:error, %CompileError{error: :invalid_regex, path: ["pattern"], value: p, context: %ErrorContext{error_detail: err}}}
+        {:error, %Error{rule: :invalid_regex, path: ["pattern"], value: p, context: %ErrorContext{error_detail: err}}}
     end
   end
 
@@ -455,7 +484,12 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"maxItems", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maxItems, params: m, validator: fn d, _ -> Predicates.check_max_items(d, m) end}}
 
   defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx) when not is_boolean(b) do
-    {:error, %CompileError{error: :invalid_keyword_value, path: ["uniqueItems"], value: b}}
+    {:error, %Error{
+      rule: :invalid_keyword_value,
+      path: ["uniqueItems"],
+      value: b,
+      context: %ErrorContext{contrast: "boolean", input: b}
+    }}
   end
 
   defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :uniqueItems, params: b, validator: fn d, _ -> Predicates.check_unique_items(d, b) end}}
@@ -508,11 +542,11 @@ defmodule JSONSchex.Compiler do
              {:ok, compiled_sub} <- compile_schema_node(sub, base, vocabs, ctx) do
           {:cont, {:ok, [{regex, compiled_sub} | acc]}}
         else
-          {:error, %CompileError{} = err} ->
-            path = err.path || []
-            {:halt, {:error, %{err | path: path ++ [pattern]}}}
+          {:error, %Error{} = error} ->
+            path = error.path || []
+            {:halt, {:error, %{error | path: path ++ [pattern]}}}
           {:error, {regex_term, _}} ->
-            {:halt, {:error, %CompileError{error: :invalid_regex, path: ["patternProperties", pattern],
+            {:halt, {:error, %Error{rule: :invalid_regex, path: ["patternProperties", pattern],
               context: %ErrorContext{contrast: "invalid_regex", input: pattern, error_detail: regex_term}}}}
         end
       end)
@@ -540,7 +574,7 @@ defmodule JSONSchex.Compiler do
           {:ok, r} ->
             {:cont, {:ok, [r | acc]}}
           {:error, {regex_term, _}} ->
-            {:halt, {:error, %CompileError{error: :invalid_regex, path: ["patternProperties", p],
+            {:halt, {:error, %Error{rule: :invalid_regex, path: ["patternProperties", p],
               context: %ErrorContext{contrast: "invalid_regex", input: p, error_detail: regex_term}}}}
         end
       end)
@@ -747,7 +781,7 @@ defmodule JSONSchex.Compiler do
         end
       }}
     else
-      {:error, %CompileError{} = error} ->
+      {:error, %Error{} = error} ->
         {:error, %{error | path: ["if"] ++ error.path}}
     end
   end

@@ -29,7 +29,7 @@ defmodule JSONSchex do
 
   alias JSONSchex.Compiler
   alias JSONSchex.Validator
-  alias JSONSchex.Types.{Schema, Error, CompileError}
+  alias JSONSchex.Types.{Schema, Error}
 
   @doc """
   Compiles a raw JSON Schema into a reusable `Schema` struct.
@@ -55,7 +55,7 @@ defmodule JSONSchex do
       :ok
 
   """
-  @spec compile(map() | boolean()) :: {:ok, Schema.t()} | {:error, JSONSchex.Types.CompileError.t()}
+  @spec compile(map() | boolean()) :: {:ok, Schema.t()} | {:error, Error.t()}
   defdelegate compile(schema, opts \\ []), to: Compiler
 
   @doc """
@@ -113,7 +113,7 @@ defmodule JSONSchex do
       iex> JSONSchex.format_error(error)
       ~s(Keyword 'uniqueItems' must be a boolean, got: "yes")
   """
-  @spec format_error(Error.t() | CompileError.t()) :: String.t()
+  @spec format_error(Error.t()) :: String.t()
   defdelegate format_error(error), to: JSONSchex.ErrorFormatter, as: :format
 
 end

@@ -94,7 +94,9 @@ defmodule JSONSchex.Test.MetaSchema do
         raise "#{uri} is unknown"
     end
 
-    assert {:error, %{error: :unsupported_vocabulary, path: ["$vocabulary", "https://example.com/custom-vocab"]}} =
-             JSONSchex.compile(schema, external_loader: loader)
+    assert {:error, error} = JSONSchex.compile(schema, external_loader: loader)
+    assert error.rule == :unsupported_vocabulary
+    assert error.path == ["$vocabulary", "https://example.com/custom-vocab"]
+    assert error.value == true
   end
 end

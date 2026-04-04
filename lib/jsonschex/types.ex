@@ -60,7 +60,7 @@ defmodule JSONSchex.Types do
 
   defmodule Error do
     @moduledoc """
-    A validation error with path, rule, and optional message/context.
+    An error encountered during validation or schema compilation.
 
     Use `JSONSchex.format_error/1` to produce a human-readable string.
     """
@@ -82,7 +82,7 @@ defmodule JSONSchex.Types do
 
   defmodule ErrorContext do
     @moduledoc """
-    Structured detail carried by `JSONSchex.Types.Error` and `JSONSchex.Types.CompileError`.
+    Structured detail carried by `JSONSchex.Types.Error`.
 
     The three fields have consistent, role-based meanings across all validation rules:
 
@@ -98,7 +98,7 @@ defmodule JSONSchex.Types do
     - `error_detail` — **Ancillary detail** needed to disambiguate error variants
       or carry supplementary information. Examples: a regex compilation error
       message, the string `"min"` / `"max"` to distinguish `contains` violations,
-      or a nested `CompileError` from a remote schema.
+      or a nested `Error` from a remote schema.
 
     Use `JSONSchex.format_error/1` (or `to_string/1`) to turn an error into a
     human-readable message rather than inspecting these fields directly.
@@ -111,41 +111,19 @@ defmodule JSONSchex.Types do
     defstruct [:contrast, :input, :error_detail]
   end
 
-  defmodule CompileError do
-    @moduledoc """
-    An error encountered during schema compilation.
-    """
-    @type error :: :unsupported_vocabulary | :invalid_regex | :invalid_keyword_value
+  @non_neg_int_keywords ~w(minLength maxLength minProperties maxProperties minItems maxItems)
+  @numeric_keywords ~w(minimum maximum exclusiveMinimum exclusiveMaximum)
+  @valid_types ~w(string integer number boolean object array null)
 
-    @type t :: %__MODULE__{
-      error: error(),
-      path: list() | nil,
-      value: term() | nil,
-      context: ErrorContext.t() | nil
-    }
-    defstruct [:error, :path, :value, :context]
+  @doc false
+  defguard is_non_neg_int_keywords?(value) when value in @non_neg_int_keywords
 
-    @non_neg_int_keywords ~w(minLength maxLength minProperties maxProperties minItems maxItems)
-    @numeric_keywords ~w(minimum maximum exclusiveMinimum exclusiveMaximum)
-    @valid_types ~w(string integer number boolean object array null)
+  @doc false
+  defguard is_numeric_keywords?(value) when value in @numeric_keywords
 
-    @doc false
-    defguard is_non_neg_int_keywords?(value) when value in @non_neg_int_keywords
+  @doc false
+  def valid_types, do: @valid_types
 
-    @doc false
-    defguard is_numeric_keywords?(value) when value in @numeric_keywords
-
-    @doc false
-    def valid_types, do: @valid_types
-
-    @doc false
-    defguard is_valid_types?(value) when value in @valid_types
-
-    defimpl String.Chars do
-      def to_string(t) do
-        JSONSchex.ErrorFormatter.format(t)
-      end
-    end
-
-  end
+  @doc false
+  defguard is_valid_types?(value) when value in @valid_types
 end
