@@ -1,0 +1,76 @@
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 18 s
+Excluding outliers: false
+
+Benchmarking JSONSchex compile ...
+Benchmarking JSV compile ...
+Calculating statistics...
+Formatting results...
+
+Name                        ips        average  deviation         median         99th %
+JSONSchex compile        707.60        1.41 ms    ±10.22%        1.37 ms        1.75 ms
+JSV compile              521.77        1.92 ms     ±5.34%        1.89 ms        2.18 ms
+
+Comparison:
+JSONSchex compile        707.60
+JSV compile              521.77 - 1.36x slower +0.50 ms
+
+Memory usage statistics:
+
+Name                 Memory usage
+JSONSchex compile         1.38 MB
+JSV compile               2.32 MB - 1.68x memory usage +0.95 MB
+
+**All measurements for memory usage were the same**
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 18 s
+Excluding outliers: false
+
+Benchmarking JSONSchex validate ...
+Benchmarking JSV validate ...
+Calculating statistics...
+Formatting results...
+
+Name                         ips        average  deviation         median         99th %
+JSONSchex validate       56.81 K       17.60 μs    ±19.74%       16.92 μs       32.79 μs
+JSV validate              9.64 K      103.69 μs    ±92.36%       46.67 μs         321 μs
+
+Comparison:
+JSONSchex validate       56.81 K
+JSV validate              9.64 K - 5.89x slower +86.09 μs
+
+Memory usage statistics:
+
+Name                  Memory usage
+JSONSchex validate        16.23 KB
+JSV validate              98.22 KB - 6.05x memory usage +81.99 KB
+
+**All measurements for memory usage were the same**

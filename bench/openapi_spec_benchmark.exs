@@ -4,7 +4,7 @@
 
 # copy from local /opt/homebrew/Cellar/bowtie/2026.2.6/libexec/lib/python3.14/site-packages/bowtie/benchmarks/openapi_spec_schema.json
 # https://github.com/bowtie-json-schema/bowtie/blob/main/bowtie/benchmarks/openapi_spec_schema.json
-file_path = ".priv/openapi_spec_schema.json"
+file_path = "./priv/openapi_spec_schema.json"
 content = File.read!(file_path)
 data = JSON.decode!(content)
 
