@@ -24,14 +24,17 @@ defmodule JSONSchex.Compiler do
   alias JSONSchex.Validator
   alias JSONSchex.Validator.Keywords
   alias JSONSchex.ScopeScanner
-  alias JSONSchex.Vocabulary
+  alias JSONSchex.Draft202012.{Vocabulary, Dialect}
   alias JSONSchex.URIUtil
 
   import JSONSchex.Types, only: [
     is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1, is_valid_types?: 1
     ]
 
-  @default_vocabs_list Vocabulary.defaults()
+  @default_vocabs_list Dialect.supported_vocabularies()
+
+  defp vocab_supported?(supported, uri) when is_list(supported), do: uri in supported
+  defp vocab_supported?(_, _), do: false
 
   @doc """
   Compiles a raw JSON Schema into an executable `Schema` struct.
@@ -48,7 +51,7 @@ defmodule JSONSchex.Compiler do
 
     ctx = %{loader: external_loader, format_assertion: format_assertion, content_assertion: content_assertion}
 
-    with :ok <- check_vocabulary(raw_schema),
+    with :ok <- Dialect.validate_required_vocabularies(raw_schema),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, external_loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
 
@@ -63,7 +66,7 @@ defmodule JSONSchex.Compiler do
               {:cont, Map.put(acc_defs, id, root_compiled)}
             else
 
-              case check_vocabulary(sub_raw) do
+              case Dialect.validate_required_vocabularies(sub_raw) do
                 :ok ->
 
                   case resolve_dialect(sub_raw, external_loader, root_vocabs) do
@@ -108,14 +111,20 @@ defmodule JSONSchex.Compiler do
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
 
-  defp resolve_dialect(%{"$schema" => "https://json-schema.org/draft/2020-12/schema"} = schema, _loader, _current_vocabs) do
-    {:ok, fetch_enabled_vocabs(schema, Vocabulary.draft2020_12_defaults())}
+  defp resolve_dialect(schema, loader, current_vocabs) do
+    case Dialect.resolve_builtin(schema) do
+      {:ok, vocabs} ->
+        {:ok, vocabs}
+
+      nil ->
+        resolve_dialect_fallback(schema, loader, current_vocabs)
+    end
   end
-  defp resolve_dialect(%{"$schema" => uri}, loader, current_vocabs) when is_function(loader) and is_binary(uri) do
+  defp resolve_dialect_fallback(%{"$schema" => uri}, loader, current_vocabs) when is_function(loader) and is_binary(uri) do
     case loader.(uri) do
       {:ok, meta_schema} when is_map(meta_schema) ->
-        with :ok <- check_vocabulary(meta_schema) do
-          {:ok, fetch_enabled_vocabs(meta_schema, @default_vocabs_list)}
+        with :ok <- Dialect.validate_required_vocabularies(meta_schema) do
+          {:ok, Dialect.enabled_vocabularies(meta_schema, @default_vocabs_list)}
         end
       {:error, reason} ->
         {:error, %Error{context: %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}}
@@ -123,36 +132,9 @@ defmodule JSONSchex.Compiler do
         {:ok, current_vocabs}
     end
   end
-  defp resolve_dialect(_, _, current_vocabs) do
+  defp resolve_dialect_fallback(_, _, current_vocabs) do
     {:ok, current_vocabs}
   end
-
-  defp fetch_enabled_vocabs(%{"$vocabulary" => vocabs_def}, supported) when is_map(vocabs_def) do
-    vocabs_def
-    |> Enum.filter(fn
-      {_, true} -> true
-      {uri, false} -> vocab_supported?(supported, uri)
-      _ -> false
-    end)
-    |> Enum.map(fn {v_uri, _} -> v_uri end)
-  end
-  defp fetch_enabled_vocabs(_, defaults), do: defaults
-
-  defp vocab_supported?(supported, uri) when is_list(supported), do: uri in supported
-  defp vocab_supported?(_, _), do: false
-
-  defp check_vocabulary(%{"$vocabulary" => vocab} = _schema) when is_map(vocab) do
-    supported = @default_vocabs_list
-
-    Enum.reduce_while(vocab, :ok, fn {uri, required}, :ok ->
-      if required == true and not vocab_supported?(supported, uri) do
-        {:halt, {:error, %Error{rule: :unsupported_vocabulary, path: ["$vocabulary", uri], value: true}}}
-      else
-        {:cont, :ok}
-      end
-    end)
-  end
-  defp check_vocabulary(_), do: :ok
 
   defp resolve_refs(raw_schema, refs, vocabs, ctx) do
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->

@@ -1,4 +1,4 @@
-defmodule JSONSchex.Vocabulary do
+defmodule JSONSchex.Draft202012.Vocabulary do
   @moduledoc """
   Maps JSON Schema keywords to their Draft 2020-12 vocabulary URIs and defines
   both the full supported vocabulary set and the built-in Draft 2020-12 default
@@ -9,13 +9,13 @@ defmodule JSONSchex.Vocabulary do
 
   ## Examples
 
-      iex> JSONSchex.Vocabulary.keyword("type")
+      iex> JSONSchex.Draft202012.Vocabulary.keyword("type")
       "https://json-schema.org/draft/2020-12/vocab/validation"
 
-      iex> JSONSchex.Vocabulary.keyword("properties")
+      iex> JSONSchex.Draft202012.Vocabulary.keyword("properties")
       "https://json-schema.org/draft/2020-12/vocab/applicator"
 
-      iex> JSONSchex.Vocabulary.keyword("unknown")
+      iex> JSONSchex.Draft202012.Vocabulary.keyword("unknown")
       nil
 
   """

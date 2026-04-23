@@ -16,11 +16,12 @@ defmodule JSONSchex.Draft202012.Schemas do
 
   alias JSONSchex.Compiler
   alias JSONSchex.ScopeScanner
+  alias JSONSchex.Draft202012.Dialect
 
   @compiled_defs_cache_key {__MODULE__, :draft2020_12_compiled_defs}
 
-  @draft2020_12_base_uri "https://json-schema.org/draft/2020-12"
-  @draft2020_12_schema_uri @draft2020_12_base_uri <> "/schema"
+  @draft2020_12_base_uri Dialect.base_uri()
+  @draft2020_12_schema_uri Dialect.builtin_schema_uri()
 
   @draft2020_12_meta_core_uri @draft2020_12_base_uri <> "/meta/core"
   @draft2020_12_meta_applicator_uri @draft2020_12_base_uri <> "/meta/applicator"
