@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0 (2026-04-23)
+
+### Bug Fixes and Improvements
+
+  * Embed the Draft 2020-12 built-in meta-schema family directly in code and cache compiled built-in defs for `$ref` and `$dynamicRef` resolution
+  * Refactor built-in Draft 2020-12 support into draft-specific modules: `JSONSchex.Draft202012.Schemas`, `JSONSchex.Draft202012.Vocabulary`, and `JSONSchex.Draft202012.Dialect`
+  * Simplify and de-duplicate reference resolution logic, including URI fragment handling and loaded-schema validation flow
+  * Fix built-in meta-schema validation so schemas can be validated against the canonical Draft 2020-12 meta-schema without an external loader
+  * Update official test suite, and adapt to pass the official Draft 2020-12 optional format cases for `duration`, `time`, and `uri`:
+    * Tighten `duration` format validation to match the RFC 3339 Appendix A grammar used by the official Draft 2020-12 optional format suite
+    * Accept RFC 3339 `time` values with unknown local offset (`-00:00`)
+    * Tighten `uri` and `uri-reference` format validation to reject invalid percent-encoding triplets
+
 ## v0.4.0 (2026-04-05)
 
 ### Bug Fixes and Improvements

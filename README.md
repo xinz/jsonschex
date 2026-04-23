@@ -6,7 +6,7 @@ JSONSchex is an implementation of the [JSON Schema Draft 2020-12](https://json-s
 
 ## Features
 
-- Implements [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords.
+- Implements JSON Schema Draft 2020-12 in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords.
 - Passes 100% of the [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) for Draft 2020-12.
 - Designed for performance and simplicity: compile a schema once into an executable `Schema` struct, then validate data repeatedly with no repeated parsing overhead.
 
@@ -15,7 +15,7 @@ JSONSchex is an implementation of the [JSON Schema Draft 2020-12](https://json-s
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.4"}
+    {:jsonschex, "~> 0.5"}
   ]
 end
 ```
@@ -163,6 +163,12 @@ Clone the repository and initialize the git submodules that provide the local te
 git clone https://github.com/xinz/jsonschex.git
 cd jsonschex
 git submodule update --init --recursive
+```
+
+Or update git remote submodules in the root directory of this repo:
+
+```sh
+git submodule update --remote -- test/fixtures/JSON-Schema-Test-Suite && git submodule status -- test/fixtures/JSON-Schema-Test-Suite
 ```
 
 This pulls two external test suites into `test/fixtures/`:
