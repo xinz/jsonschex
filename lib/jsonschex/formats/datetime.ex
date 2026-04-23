@@ -25,9 +25,19 @@ defmodule JSONSchex.Formats.DateTime do
     if String.contains?(data, ",") do
       false
     else
+      # RFC 3339 section 4.3 allows "-00:00" as an unknown local offset.
+      # `DateTime.from_iso8601/2` parses it as an invalid format, so normalize it to "+00:00" for
+      # structural validation while preserving the original acceptance semantics.
+      normalized_time =
+        if String.ends_with?(data, "-00:00") do
+          String.replace_suffix(data, "-00:00", "+00:00")
+        else
+          data
+        end
+
       # Prepend an arbitrary date so we can reuse the RFC 3339 date-time validation
       # logic, including offset handling, case-insensitive Z normalization, and leap seconds.
-      valid?("2020-01-01T" <> data)
+      valid?("2020-01-01T" <> normalized_time)
     end
   end
 
