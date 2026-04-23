@@ -93,11 +93,13 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("uri", data) do
-    match?({:ok, %URI{scheme: s}} when s != nil and s != "", URI.new(data))
+    valid_percent_encoding?(data) and
+      match?({:ok, %URI{scheme: s}} when s != nil and s != "", URI.new(data))
   end
 
   defp valid?("uri-reference", data) do
-    match?({:ok, _}, URI.new(data))
+    valid_percent_encoding?(data) and
+      match?({:ok, _}, URI.new(data))
   end
 
   defp valid?("iri", data) do
@@ -136,5 +138,9 @@ defmodule JSONSchex.Formats do
     Regex.replace(~r/[^\x00-\x7F]/u, data, fn c ->
       URI.encode(c)
     end)
+  end
+
+  defp valid_percent_encoding?(data) do
+    not Regex.match?(~r/%(?![0-9A-Fa-f]{2})/u, data)
   end
 end
