@@ -7,6 +7,7 @@ defmodule JSONSchex.Validator.Reference do
   alias JSONSchex.Validator
   alias JSONSchex.Compiler
   alias JSONSchex.URIUtil
+  alias JSONSchex.Draft202012.Schemas
   alias JSONSchex.Types.ErrorContext
 
   @doc """
@@ -15,11 +16,7 @@ defmodule JSONSchex.Validator.Reference do
   Falls back to static `$ref` resolution if no dynamic anchor is found.
   """
   def validate_dynamic_ref(data, ref_string, {path, evaluated, validation_context} = context) do
-    anchor =
-      case String.split(ref_string, "#", parts: 2) do
-        [_, a] when a != "" -> a
-        _ -> nil
-      end
+    anchor = URIUtil.fragment(ref_string)
 
     static_match = resolve_scoped_ref(validation_context.source_id, ref_string, validation_context.root_schema.defs)
 
@@ -31,7 +28,7 @@ defmodule JSONSchex.Validator.Reference do
         validation_context.scope_stack
         |> Enum.reverse()
         |> Enum.find_value(fn base_uri ->
-          candidate_uri = URIUtil.resolve(base_uri, "#" <> anchor)
+          candidate_uri = URIUtil.with_fragment(base_uri, anchor)
 
           case Map.get(validation_context.root_schema.defs, candidate_uri) do
             %{raw: raw} = schema when is_map(raw) ->
@@ -63,34 +60,54 @@ defmodule JSONSchex.Validator.Reference do
   Supports JSON Pointer references, anchor references, and absolute/relative URIs.
   """
   def validate_ref(data, ref_string, {path, evaluated, validation_context}) do
-    schema_match = resolve_scoped_ref(validation_context.source_id, ref_string, validation_context.root_schema.defs)
+    effective_context = effective_context_for_ref(validation_context, ref_string)
 
-    case schema_match do
+    case resolve_scoped_ref(effective_context.source_id, ref_string, effective_context.root_schema.defs) do
       nil ->
-        uri_to_load = resolve_relative_uri(validation_context.source_id, ref_string)
-
-        with nil <- check_registry_for_base(uri_to_load, validation_context.root_schema.defs),
-             :ok <- check_load_remote(validation_context.root_schema.external_loader, uri_to_load),
-             result <- load_remote_schema(data, uri_to_load, path, validation_context, evaluated) do
-          result
-        else
-          {:ok, base_schema, fragment} when is_map(base_schema) ->
-            if base_schema.source_id == validation_context.source_id do
-              resolve_and_validate_jit(data, validation_context.raw, "#" <> fragment, path, validation_context, evaluated)
-            else
-              updated_context = merge_defs_into_context(validation_context, base_schema.defs)
-              validate_ref(data, "#" <> fragment, {path, evaluated, updated_context})
-            end
-
-          :halt ->
-            resolve_and_validate_jit(data, validation_context.raw, ref_string, path, validation_context, evaluated)
-
-          {:error, _} = error ->
-            error
-        end
+        resolve_missing_ref(data, ref_string, path, effective_context, evaluated)
 
       schema ->
-        Validator.validate_entry(schema, data, path, validation_context, evaluated)
+        Validator.validate_entry(schema, data, path, effective_context, evaluated)
+    end
+  end
+
+  defp effective_context_for_ref(validation_context, ref_string) do
+    case built_in_defs_for_ref(validation_context.source_id, ref_string) do
+      nil ->
+        validation_context
+
+      defs ->
+        merge_defs_into_context(validation_context, defs)
+    end
+  end
+
+  defp resolve_missing_ref(data, ref_string, path, validation_context, evaluated) do
+    uri_to_load = resolve_relative_uri(validation_context.source_id, ref_string)
+
+    with nil <- check_registry_for_base(uri_to_load, validation_context.root_schema.defs),
+         :ok <- check_load_remote(validation_context.root_schema.external_loader, uri_to_load),
+         result <- load_remote_schema(data, uri_to_load, path, validation_context, evaluated) do
+      result
+    else
+      {:ok, base_schema, fragment} when is_map(base_schema) ->
+        resolve_registry_base_match(data, ref_string, path, validation_context, evaluated, base_schema, fragment)
+
+      :halt ->
+        resolve_and_validate_jit(data, validation_context.raw, ref_string, path, validation_context, evaluated)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp resolve_registry_base_match(data, _ref_string, path, validation_context, evaluated, base_schema, fragment) do
+    local_ref = URIUtil.local_ref(fragment)
+
+    if base_schema.source_id == validation_context.source_id do
+      resolve_and_validate_jit(data, validation_context.raw, local_ref, path, validation_context, evaluated)
+    else
+      updated_context = merge_defs_into_context(validation_context, base_schema.defs)
+      validate_ref(data, local_ref, {path, evaluated, updated_context})
     end
   end
 
@@ -101,16 +118,17 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp check_registry_for_base(uri, registry) do
-    case String.split(uri, "#", parts: 2) do
-      [base, fragment] ->
-        case Map.get(registry, base) do
-          nil ->
-            nil
-          schema ->
-            {:ok, schema, fragment}
-        end
-      _ ->
+    {base, fragment} = URIUtil.split_fragment(uri)
+
+    case {base, fragment, Map.get(registry, base)} do
+      {_, nil, _} ->
         nil
+
+      {_, _, nil} ->
+        nil
+
+      {_, fragment, schema} ->
+        {:ok, schema, fragment}
     end
   end
 
@@ -119,26 +137,29 @@ defmodule JSONSchex.Validator.Reference do
   end
   defp check_load_remote(_, _), do: :halt
 
+  defp built_in_defs_for_ref(_, nil), do: nil
+  defp built_in_defs_for_ref(base_uri, ref) do
+    uri = uri_to_resolve(base_uri, ref)
+    {base, _fragment} = URIUtil.split_fragment(uri)
+    Schemas.compiled_defs(base)
+  end
+
   defp resolve_scoped_ref(base_uri, ref, registry) when base_uri == ref do
     Map.get(registry, ref)
   end
   defp resolve_scoped_ref(base_uri, ref, registry) do
-    cond do
-      base_uri && String.starts_with?(ref, "#") ->
-        full_uri = base_uri <> ref
-        Map.get(registry, full_uri) || Map.get(registry, ref)
-
-      base_uri ->
-        resolved = resolve_relative_uri(base_uri, ref)
-        if resolved, do: Map.get(registry, resolved), else: nil
-
-      base_uri == nil and ref != nil ->
-        Map.get(registry, ref)
-
-      true ->
-        nil
-    end
+    uri = uri_to_resolve(base_uri, ref)
+    Map.get(registry, uri) || Map.get(registry, ref)
   end
+
+  defp uri_to_resolve(base_uri, "#" <> _ = ref) when base_uri != nil do
+    URIUtil.with_fragment(base_uri, URIUtil.fragment(ref))
+  end
+  defp uri_to_resolve(base_uri, ref) when base_uri != nil do
+    resolve_relative_uri(base_uri, ref)
+  end
+  defp uri_to_resolve(nil, ref) when ref != nil, do: ref
+  defp uri_to_resolve(_, _), do: nil
 
   defp resolve_relative_uri(nil, ref), do: ref
   defp resolve_relative_uri(base_uri, ref_string) do
@@ -161,67 +182,96 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp load_remote_schema(data, uri, current_path, validation_context, evaluated) do
-    {base, fragment} =
-      case String.split(uri, "#", parts: 2) do
-        [base, ""] ->
-          {base, nil}
-        [base, fragment] ->
-          {base, fragment}
-        [base] ->
-          {base, nil}
-      end
+    {base, fragment} = URIUtil.split_fragment(uri)
 
-    loaded_schema = Map.get(validation_context.root_schema.defs, base)
-    if loaded_schema do
-      updated_context = %{validation_context |
-        source_id: loaded_schema.source_id,
-        raw: loaded_schema.raw
-      }
-      local_ref = if fragment, do: "#" <> fragment, else: "#"
-      validate_ref(data, local_ref, {current_path, evaluated, updated_context})
-    else
-      case validation_context.root_schema.external_loader.(uri) do
-        {:ok, remote_raw_map} ->
-          opts = [
-            external_loader: validation_context.root_schema.external_loader,
-            base_uri: base,
-            format_assertion: validation_context.root_schema.format_assertion,
-            content_assertion: validation_context.root_schema.content_assertion
-          ]
-          case Compiler.compile(remote_raw_map, opts) do
-            {:ok, compiled_remote} ->
-              new_stack =
-                if compiled_remote.source_id do
-                  [compiled_remote.source_id | validation_context.scope_stack]
-                else
-                  validation_context.scope_stack
-                end
+    case Map.get(validation_context.root_schema.defs, base) do
+      nil ->
+        case Schemas.compiled_defs(base) do
+          built_in_defs when is_map(built_in_defs) ->
+            merged_context = merge_defs_into_context(validation_context, built_in_defs)
+            compiled_remote = Map.fetch!(merged_context.root_schema.defs, base)
+            validate_loaded_schema(data, compiled_remote, fragment, current_path, merged_context, evaluated)
 
-              merged_defs = Map.put(compiled_remote.defs || %{}, base, compiled_remote)
-              merged_context = merge_defs_into_context(validation_context, merged_defs)
-              updated_context = %{merged_context |
-                scope_stack: new_stack,
-                source_id: compiled_remote.source_id,
-                raw: compiled_remote.raw
-              }
+          nil ->
+            case load_external_schema(uri, base, validation_context) do
+              {:ok, compiled_remote, merged_context} ->
+                validate_loaded_schema(data, compiled_remote, fragment, current_path, merged_context, evaluated)
 
-              if fragment != nil do
-                validate_ref(data, "#" <> fragment, {current_path, evaluated, updated_context})
-              else
-                Validator.validate_entry(compiled_remote, data, current_path, updated_context, evaluated)
-              end
+              :halt ->
+                :halt
 
-            {:error, error} ->
-              {:error, %ErrorContext{contrast: "compile_remote", input: uri, error_detail: error}}
-          end
-        :halt ->
-          :halt
-        {:error, reason} ->
-          {:error, %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}
-        _ ->
-          {:error, %ErrorContext{contrast: "invalid_loader_response", input: uri}}
-      end
+              {:error, reason} ->
+                {:error, %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}
+
+              _ ->
+                {:error, %ErrorContext{contrast: "invalid_loader_response", input: uri}}
+            end
+        end
+
+      loaded_schema ->
+        updated_context = %{validation_context |
+          source_id: loaded_schema.source_id,
+          raw: loaded_schema.raw
+        }
+
+        validate_ref(data, URIUtil.local_ref(fragment), {current_path, evaluated, updated_context})
     end
+  end
+
+  defp load_external_schema(uri, base, validation_context) do
+    case validation_context.root_schema.external_loader do
+      loader when is_function(loader) ->
+        case loader.(uri) do
+          {:ok, remote_raw_map} ->
+            opts = [
+              external_loader: validation_context.root_schema.external_loader,
+              base_uri: base,
+              format_assertion: validation_context.root_schema.format_assertion,
+              content_assertion: validation_context.root_schema.content_assertion
+            ]
+
+            case Compiler.compile(remote_raw_map, opts) do
+              {:ok, compiled_remote} ->
+                merged_defs = Map.put(compiled_remote.defs || %{}, base, compiled_remote)
+                merged_context = merge_defs_into_context(validation_context, merged_defs)
+                {:ok, compiled_remote, merged_context}
+
+              {:error, error} ->
+                {:error, %ErrorContext{contrast: "compile_remote", input: uri, error_detail: error}}
+            end
+
+          other ->
+            other
+        end
+
+      _ ->
+        :halt
+    end
+  end
+
+  defp validate_loaded_schema(data, compiled_schema, fragment, current_path, validation_context, evaluated) do
+    updated_context = loaded_schema_context(validation_context, compiled_schema)
+
+    if fragment != nil do
+      validate_ref(data, URIUtil.local_ref(fragment), {current_path, evaluated, updated_context})
+    else
+      Validator.validate_entry(compiled_schema, data, current_path, updated_context, evaluated)
+    end
+  end
+
+  defp loaded_schema_context(validation_context, compiled_schema) do
+    new_stack =
+      if compiled_schema.source_id do
+        [compiled_schema.source_id | validation_context.scope_stack]
+      else
+        validation_context.scope_stack
+      end
+
+    %{validation_context |
+      scope_stack: new_stack,
+      source_id: compiled_schema.source_id,
+      raw: compiled_schema.raw
+    }
   end
 
   defp resolve_and_validate_jit(data, raw_root, pointer, current_path, validation_context, evaluated) do

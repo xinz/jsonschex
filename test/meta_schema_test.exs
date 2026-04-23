@@ -99,4 +99,55 @@ defmodule JSONSchex.Test.MetaSchema do
     assert error.path == ["$vocabulary", "https://example.com/custom-vocab"]
     assert error.value == true
   end
+
+  test "validate definition against meta schema" do
+    schema = %{
+      "$schema" => "https://json-schema.org/draft/2020-12/schema",
+      "$ref" => "https://json-schema.org/draft/2020-12/schema"
+    }
+
+    assert {:ok, compiled} = JSONSchex.compile(schema)
+
+    data = %{
+      "$defs" => %{
+        "foo" => %{
+          "type" => "integer"
+        }
+      }
+    }
+
+    assert JSONSchex.validate(compiled, data) == :ok
+
+    data = %{
+      "$defs" => %{
+        "foo" => %{
+          "type" => 1
+        }
+      }
+    }
+
+    assert {:error, _} = JSONSchex.validate(compiled, data)
+  end
+
+  test "remote ref, containing refs itself" do
+    schema = %{
+      "$schema" => "https://json-schema.org/draft/2020-12/schema",
+      "$ref" => "https://json-schema.org/draft/2020-12/schema"
+    }
+
+    assert {:ok, compiled} = JSONSchex.compile(schema)
+
+    data = %{
+      "minLength" => 1
+    }
+
+    assert :ok == JSONSchex.validate(compiled, data)
+
+    data = %{
+      "minLength" => -1
+    }
+
+    assert {:error, [e]} = JSONSchex.validate(compiled, data)
+    assert e.rule == :minimum and e.value == -1
+  end
 end
