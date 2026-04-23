@@ -59,10 +59,13 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("duration", data) do
-    # ISO 8601 duration
-    # weeks cannot be combined with other units.
+    # RFC 3339 Appendix A duration grammar.
+    # Weeks cannot be combined with other units.
+    # Date ordering is constrained to Y -> M -> D, but D cannot appear unless M is present
+    # when Y is also present. Time ordering is constrained to H -> M -> S, but S cannot
+    # appear unless M is present when H is also present.
     Regex.match?(~r/^P\d+W$/, data) or
-      Regex.match?(~r/^P(?!$)((\d+Y)?(\d+M)?(\d+D)?)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?$/, data)
+      Regex.match?(~r/^P(?:(?:\d+Y(?:\d+M(?:\d+D)?)?|\d+M(?:\d+D)?|\d+D)(?:T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S))?|T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S))$/, data)
   end
 
   defp valid?("email", data) do
