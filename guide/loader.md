@@ -45,7 +45,7 @@ end
 
 ### HTTP-based loader example
 
-For production use, you'll typically want to load schemas over HTTP. Here's a more complete example using a common HTTP client pattern:
+For production use, you'll typically want to load schemas over HTTP. Here's a more complete example using [`Req`](https://hex.pm/packages/req):
 
 ```elixir
 defmodule MyApp.SchemaLoader do
@@ -71,20 +71,14 @@ defmodule MyApp.SchemaLoader do
   end
 
   defp fetch_and_cache(uri) do
-    # Using your HTTP client of choice (e.g., HTTPoison, Finch, Req)
-    case HTTPoison.get(uri, [{"Accept", "application/json"}]) do
-      {:ok, %{status_code: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, schema} ->
-            # Cache the decoded schema
-            Agent.update(__MODULE__, &Map.put(&1, uri, schema))
-            {:ok, schema}
+    case Req.get(uri,
+           headers: [{"accept", "application/json"}]
+         ) do
+      {:ok, %Req.Response{status: 200, body: schema}} when is_map(schema) ->
+        Agent.update(__MODULE__, &Map.put(&1, uri, schema))
+        {:ok, schema}
 
-          {:error, _} = error ->
-            error
-        end
-
-      {:ok, %{status_code: status}} ->
+      {:ok, %Req.Response{status: status}} ->
         {:error, "HTTP #{status}"}
 
       {:error, reason} ->
