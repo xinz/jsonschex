@@ -57,6 +57,18 @@ You can also use the `~X` sigil from `JSONSchex.Sigil` for Elixir map literals r
 
 ```elixir
 defmodule MyApp.NumberSchema do
+  use JSONSchex
+
+  @schema ~X|%{"type" => "integer", "minimum" => 10}|
+
+  def schema, do: @schema
+end
+```
+
+If you prefer the explicit form, you can import the sigil directly:
+
+```elixir
+defmodule MyApp.NumberSchema do
   import JSONSchex.Sigil, only: [sigil_X: 2]
 
   @schema ~X|%{"type" => "integer", "minimum" => 10}|
@@ -65,7 +77,7 @@ defmodule MyApp.NumberSchema do
 end
 ```
 
-`~X` parses Elixir code, not JSON. It currently supports these modifiers:
+`use JSONSchex` imports `~X`, and `~X` parses Elixir code, not JSON. It currently supports these modifiers:
 
 - `f` — `format_assertion: true`
 - `c` — `content_assertion: true`
