@@ -77,7 +77,7 @@ defmodule MyApp.NumberSchema do
 end
 ```
 
-`use JSONSchex` imports `~X`, and `~X` parses Elixir code, not JSON. It currently supports these modifiers:
+The syntax `use JSONSchex` imports `~X` sigil, and `~X` parses Elixir code, not JSON format. It currently supports these modifiers:
 
 - `f` — `format_assertion: true`
 - `c` — `content_assertion: true`
