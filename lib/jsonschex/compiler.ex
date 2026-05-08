@@ -5,7 +5,7 @@ defmodule JSONSchex.Compiler do
   Compilation has two phases:
 
   1. **Node compilation** — Recursively converts keywords into `Rule` structs
-     (validation closures), resolves vocabularies, and compiles `$defs`.
+     (serializable rule descriptors), resolves vocabularies, and compiles `$defs`.
   2. **Scope scanning** — Discovers all `$id` and anchor definitions across the
      schema tree and registers them by absolute URI for reference resolution.
 
@@ -20,15 +20,15 @@ defmodule JSONSchex.Compiler do
 
   """
   alias JSONSchex.Types.{Schema, Rule, Error, ErrorContext}
-  alias JSONSchex.Compiler.Predicates
-  alias JSONSchex.Validator
-  alias JSONSchex.Validator.Keywords
   alias JSONSchex.ScopeScanner
   alias JSONSchex.Draft202012.{Vocabulary, Dialect}
   alias JSONSchex.URIUtil
 
-  import JSONSchex.Types, only: [
-    is_non_neg_int_keywords?: 1, is_numeric_keywords?: 1, is_valid_types?: 1
+  import JSONSchex.Types,
+    only: [
+      is_non_neg_int_keywords?: 1,
+      is_numeric_keywords?: 1,
+      is_valid_types?: 1
     ]
 
   @default_vocabs_list Dialect.supported_vocabularies()
@@ -43,18 +43,22 @@ defmodule JSONSchex.Compiler do
   """
   @spec compile(map() | boolean()) :: {:ok, Schema.t()} | {:error, String.t()}
   def compile(raw_schema, opts \\ [])
+
   def compile(raw_schema, opts) when is_map(raw_schema) do
     external_loader = Keyword.get(opts, :external_loader)
     init_base = Keyword.get(opts, :base_uri)
     format_assertion = Keyword.get(opts, :format_assertion, false)
     content_assertion = Keyword.get(opts, :content_assertion, false)
 
-    ctx = %{loader: external_loader, format_assertion: format_assertion, content_assertion: content_assertion}
+    ctx = %{
+      loader: external_loader,
+      format_assertion: format_assertion,
+      content_assertion: content_assertion
+    }
 
     with :ok <- Dialect.validate_required_vocabularies(raw_schema),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, external_loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
-
       {global_scopes, explicit_refs} = ScopeScanner.scan(raw_schema)
 
       full_defs =
@@ -65,10 +69,8 @@ defmodule JSONSchex.Compiler do
             if id == root_compiled.source_id do
               {:cont, Map.put(acc_defs, id, root_compiled)}
             else
-
               case Dialect.validate_required_vocabularies(sub_raw) do
                 :ok ->
-
                   case resolve_dialect(sub_raw, external_loader, root_vocabs) do
                     {:ok, sub_vocabs} ->
                       sub_raw
@@ -78,6 +80,7 @@ defmodule JSONSchex.Compiler do
                         {:ok, compiled_sub} ->
                           compiled_sub = %{compiled_sub | raw: sub_raw}
                           {:cont, Map.put(acc_defs, id, compiled_sub)}
+
                         {:error, error} ->
                           {:halt, {:error, error}}
                       end
@@ -85,6 +88,7 @@ defmodule JSONSchex.Compiler do
                     {:error, error} ->
                       {:halt, {:error, error}}
                   end
+
                 {:error, _msg} = error ->
                   {:halt, error}
               end
@@ -92,20 +96,28 @@ defmodule JSONSchex.Compiler do
           end
         end)
 
-      resolved_runtime_defs = resolve_refs(raw_schema, MapSet.to_list(explicit_refs), root_vocabs, ctx)
+      resolved_runtime_defs =
+        resolve_refs(raw_schema, MapSet.to_list(explicit_refs), root_vocabs, ctx)
 
       case merge_defs(full_defs, resolved_runtime_defs) do
         {:error, _} = error ->
           error
+
         defs ->
           {:ok, %{root_compiled | defs: defs, external_loader: external_loader}}
       end
     end
   end
+
   def compile(value, opts) when is_boolean(value) do
     format_assertion = Keyword.get(opts, :format_assertion, false)
     content_assertion = Keyword.get(opts, :content_assertion, false)
-    compile_schema_node(value, nil, @default_vocabs_list, %{loader: nil, format_assertion: format_assertion, content_assertion: content_assertion})
+
+    compile_schema_node(value, nil, @default_vocabs_list, %{
+      loader: nil,
+      format_assertion: format_assertion,
+      content_assertion: content_assertion
+    })
   end
 
   defp merge_defs({:error, error}, _), do: {:error, error}
@@ -120,18 +132,24 @@ defmodule JSONSchex.Compiler do
         resolve_dialect_fallback(schema, loader, current_vocabs)
     end
   end
-  defp resolve_dialect_fallback(%{"$schema" => uri}, loader, current_vocabs) when is_function(loader) and is_binary(uri) do
+
+  defp resolve_dialect_fallback(%{"$schema" => uri}, loader, current_vocabs)
+       when is_function(loader) and is_binary(uri) do
     case loader.(uri) do
       {:ok, meta_schema} when is_map(meta_schema) ->
         with :ok <- Dialect.validate_required_vocabularies(meta_schema) do
           {:ok, Dialect.enabled_vocabularies(meta_schema, @default_vocabs_list)}
         end
+
       {:error, reason} ->
-        {:error, %Error{context: %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}}
+        {:error,
+         %Error{context: %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}}
+
       _ ->
         {:ok, current_vocabs}
     end
   end
+
   defp resolve_dialect_fallback(_, _, current_vocabs) do
     {:ok, current_vocabs}
   end
@@ -155,22 +173,28 @@ defmodule JSONSchex.Compiler do
   end
 
   defp compile_schema_node(true, _id, _vocabs, ctx) do
-    {:ok, %Schema{rules: [], defs: %{}, format_assertion: ctx.format_assertion, content_assertion: ctx.content_assertion}}
+    {:ok,
+     %Schema{
+       rules: [],
+       defs: %{},
+       format_assertion: ctx.format_assertion,
+       content_assertion: ctx.content_assertion
+     }}
   end
 
   defp compile_schema_node(false, _id, _vocabs, ctx) do
     rule = %Rule{
       name: :boolean_schema,
-      params: false,
-      validator: fn data, {path, _, _} ->
-        {:error, [%Error{
-          path: path,
-          rule: :boolean_schema,
-          context: %ErrorContext{contrast: false, input: data}
-        }]}
-      end
+      params: false
     }
-    {:ok, %Schema{rules: [rule], defs: %{}, format_assertion: ctx.format_assertion, content_assertion: ctx.content_assertion}}
+
+    {:ok,
+     %Schema{
+       rules: [rule],
+       defs: %{},
+       format_assertion: ctx.format_assertion,
+       content_assertion: ctx.content_assertion
+     }}
   end
 
   defp compile_schema_node(schema, parent_base, vocabs, ctx) when is_map(schema) do
@@ -179,26 +203,26 @@ defmodule JSONSchex.Compiler do
 
     with {:ok, compiled_defs} <- compile_local_defs(schema, base, vocabs, ctx),
          {:ok, standard_rules} <- compile_standard_keywords(schema, base, vocabs, ctx) do
+      # Draft 2020-12 allows $ref to have sibling keywords
+      rules =
+        if Map.has_key?(schema, "$ref") do
+          [compile_ref(schema["$ref"], base) | standard_rules]
+        else
+          standard_rules
+        end
 
-        # Draft 2020-12 allows $ref to have sibling keywords
-        rules =
-          if Map.has_key?(schema, "$ref") do
-            [compile_ref(schema["$ref"], base) | standard_rules]
-          else
-            standard_rules
-          end
-
-        {:ok, %Schema{
-          rules: rules,
-          defs: compiled_defs,
-          source_id: base,
-          raw: schema,
-          external_loader: ctx.loader,
-          format_assertion: ctx.format_assertion,
-          content_assertion: ctx.content_assertion
-        }}
-      end
+      {:ok,
+       %Schema{
+         rules: rules,
+         defs: compiled_defs,
+         source_id: base,
+         raw: schema,
+         external_loader: ctx.loader,
+         format_assertion: ctx.format_assertion,
+         content_assertion: ctx.content_assertion
+       }}
     end
+  end
 
   defp resolve_uri(parent, id), do: URIUtil.resolve(parent, id)
 
@@ -212,6 +236,7 @@ defmodule JSONSchex.Compiler do
             acc
             |> Map.put("#/$defs/" <> key, compiled_sub)
             |> register_id_alias(sub, compiled_sub)
+
           {:cont, {:ok, updated_acc}}
 
         {:error, error} ->
@@ -226,6 +251,7 @@ defmodule JSONSchex.Compiler do
       _ -> registry
     end
   end
+
   defp register_id_alias(registry, _raw_sub_schema, _compiled_sub), do: registry
 
   defp compile_standard_keywords(schema, base, vocabs, ctx) do
@@ -233,9 +259,10 @@ defmodule JSONSchex.Compiler do
     {uneval_items, rest} = Map.pop(rest, "unevaluatedItems")
 
     with {:ok, base_rules} <- compile_keywords_list(rest, base, vocabs, ctx),
-         {:ok, props_rule} <- compile_unevaluted("unevaluatedProperties", uneval_props, base, vocabs, ctx),
-         {:ok, items_rule} <- compile_unevaluted("unevaluatedItems", uneval_items, base, vocabs, ctx) do
-
+         {:ok, props_rule} <-
+           compile_unevaluted("unevaluatedProperties", uneval_props, base, vocabs, ctx),
+         {:ok, items_rule} <-
+           compile_unevaluted("unevaluatedItems", uneval_items, base, vocabs, ctx) do
       finalizers = []
       finalizers = if props_rule, do: [props_rule | finalizers], else: finalizers
       finalizers = if items_rule, do: [items_rule | finalizers], else: finalizers
@@ -259,11 +286,13 @@ defmodule JSONSchex.Compiler do
   end
 
   defp compile_unevaluted(_, nil, _base, _vocabs, _ctx), do: {:ok, nil}
+
   defp compile_unevaluted("unevaluatedProperties" = keyword, sub_schema, base, vocabs, ctx) do
     if keyword_allowed?(keyword, vocabs, ctx) do
       case compile_schema_node(sub_schema, base, vocabs, ctx) do
         {:ok, compiled} ->
           {:ok, build_unevaluated_props_rule(compiled)}
+
         {:error, error} ->
           {:error, error}
       end
@@ -271,11 +300,13 @@ defmodule JSONSchex.Compiler do
       {:ok, nil}
     end
   end
+
   defp compile_unevaluted("unevaluatedItems" = keyword, sub_schema, base, vocabs, ctx) do
     if keyword_allowed?(keyword, vocabs, ctx) do
       case compile_schema_node(sub_schema, base, vocabs, ctx) do
         {:ok, compiled} ->
           {:ok, build_unevaluated_items_rule(compiled)}
+
         {:error, error} ->
           {:error, error}
       end
@@ -289,18 +320,23 @@ defmodule JSONSchex.Compiler do
       vocab_supported?(vocabs, Vocabulary.format_annotation()) or
       vocab_supported?(vocabs, Vocabulary.format_assertion())
   end
+
   defp keyword_allowed?(keyword, vocabs, ctx)
-      when keyword in ["contentMediaType", "contentEncoding", "contentSchema"] do
+       when keyword in ["contentMediaType", "contentEncoding", "contentSchema"] do
     ctx.content_assertion == true or
       vocab_supported?(vocabs, Vocabulary.keyword(keyword))
   end
+
   defp keyword_allowed?(keyword, vocabs, _ctx) do
     vocab = Vocabulary.keyword(keyword)
+
     cond do
       is_nil(vocab) ->
         true
+
       vocab_supported?(vocabs, vocab) ->
         true
+
       true ->
         false
     end
@@ -311,10 +347,7 @@ defmodule JSONSchex.Compiler do
 
     %Rule{
       name: :ref,
-      params: ref_string,
-      validator: fn data, ctx ->
-        Validator.validate_ref(data, ref_string, resolved_uri, ctx)
-      end
+      params: %{ref: ref_string, resolved_uri: resolved_uri}
     }
   end
 
@@ -334,14 +367,15 @@ defmodule JSONSchex.Compiler do
       case compile_schema_node(schema, base, vocabs, ctx) do
         {:ok, compiled_sub} ->
           {:ok,
-            %Rule{
-              name: :contentSchema,
-              params: %{schema: compiled_sub, media_type: content_media_type, encoding: content_encoding},
-              validator: fn data, {path, evaluated, root} ->
-                Keywords.validate_content_schema(data, compiled_sub, content_media_type, content_encoding, path, root, evaluated)
-              end
-            }
-          }
+           %Rule{
+             name: :contentSchema,
+             params: %{
+               schema: compiled_sub,
+               media_type: content_media_type,
+               encoding: content_encoding
+             }
+           }}
+
         {:error, error} ->
           {:error, error}
       end
@@ -353,14 +387,10 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"format", format}, _, _base, vocabs, ctx) do
     if ctx.format_assertion == true or vocab_supported?(vocabs, Vocabulary.format_assertion()) do
       {:ok,
-        %Rule{
-          name: :format,
-          params: format,
-          validator: fn data, _ctx ->
-            JSONSchex.Formats.validate(format, data)
-          end
-        }
-      }
+       %Rule{
+         name: :format,
+         params: format
+       }}
     else
       {:ok, nil}
     end
@@ -368,135 +398,161 @@ defmodule JSONSchex.Compiler do
 
   defp compile_keyword({"$dynamicRef", ref}, _, _base, _vocabs, _loader) do
     {:ok,
-      %Rule{
-        name: :dynamicRef,
-        params: ref,
-        validator: fn data, ctx ->
-          Validator.validate_dynamic_ref(data, ref, ctx)
-        end
-      }
-    }
+     %Rule{
+       name: :dynamicRef,
+       params: ref
+     }}
   end
 
   defp compile_keyword({"$dynamicAnchor", _}, _, _base, _vocabs, _ctx), do: {:ok, nil}
 
-  defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx) when is_binary(t) and is_valid_types?(t) do
-    {:ok, %Rule{name: :type, params: t, validator: fn d, _ -> Predicates.check_type(d, t) end}}
+  defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx)
+       when is_binary(t) and is_valid_types?(t) do
+    {:ok, %Rule{name: :type, params: t}}
   end
 
   defp compile_keyword({"type", types}, _, _base, _vocabs, _ctx) when is_list(types) do
     invalid = Enum.reject(types, &(is_binary(&1) and &1 in JSONSchex.Types.valid_types()))
+
     if invalid == [] do
-      {:ok, %Rule{name: :type, params: types, validator: fn d, _ -> Predicates.check_type(d, types) end}}
+      {:ok, %Rule{name: :type, params: types}}
     else
-      {:error, %Error{
-        rule: :invalid_keyword_value,
-        path: ["type"],
-        value: types,
-        context: %ErrorContext{contrast: JSONSchex.Types.valid_types(), input: types}
-      }}
+      {:error,
+       %Error{
+         rule: :invalid_keyword_value,
+         path: ["type"],
+         value: types,
+         context: %ErrorContext{contrast: JSONSchex.Types.valid_types(), input: types}
+       }}
     end
   end
 
   defp compile_keyword({"type", t}, _, _base, _vocabs, _ctx) do
-    {:error, %Error{
-      rule: :invalid_keyword_value,
-      path: ["type"],
-      value: t,
-      context: %ErrorContext{contrast: JSONSchex.Types.valid_types(), input: t}
-    }}
+    {:error,
+     %Error{
+       rule: :invalid_keyword_value,
+       path: ["type"],
+       value: t,
+       context: %ErrorContext{contrast: JSONSchex.Types.valid_types(), input: t}
+     }}
   end
 
   defp compile_keyword({kw, m}, _, _base, _vocabs, _ctx)
        when is_numeric_keywords?(kw) and not is_number(m) do
-    {:error, %Error{
-      rule: :invalid_keyword_value,
-      path: [kw],
-      value: m,
-      context: %ErrorContext{contrast: "number", input: m}
-    }}
+    {:error,
+     %Error{
+       rule: :invalid_keyword_value,
+       path: [kw],
+       value: m,
+       context: %ErrorContext{contrast: "number", input: m}
+     }}
   end
 
-  defp compile_keyword({"minimum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minimum, params: m, validator: fn d, _ -> Predicates.check_minimum(d, m) end}}
-  defp compile_keyword({"maximum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maximum, params: m, validator: fn d, _ -> Predicates.check_maximum(d, m) end}}
-  defp compile_keyword({"exclusiveMinimum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :exclusiveMinimum, params: m, validator: fn d, _ -> Predicates.check_exclusive_minimum(d, m) end}}
-  defp compile_keyword({"exclusiveMaximum", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :exclusiveMaximum, params: m, validator: fn d, _ -> Predicates.check_exclusive_maximum(d, m) end}}
+  defp compile_keyword({"minimum", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :minimum, params: m}}
+
+  defp compile_keyword({"maximum", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :maximum, params: m}}
+
+  defp compile_keyword({"exclusiveMinimum", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :exclusiveMinimum, params: m}}
+
+  defp compile_keyword({"exclusiveMaximum", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :exclusiveMaximum, params: m}}
 
   # "multipleOf" — value must be a strictly positive number
   defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx)
        when not is_number(m) or m <= 0 do
-    {:error, %Error{
-      rule: :invalid_keyword_value,
-      path: ["multipleOf"],
-      value: m,
-      context: %ErrorContext{contrast: "strictly_positive_number", input: m}
-    }}
+    {:error,
+     %Error{
+       rule: :invalid_keyword_value,
+       path: ["multipleOf"],
+       value: m,
+       context: %ErrorContext{contrast: "strictly_positive_number", input: m}
+     }}
   end
 
-  defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :multipleOf, params: m, validator: fn d, _ -> Predicates.check_multiple_of(d, m) end}}
+  defp compile_keyword({"multipleOf", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :multipleOf, params: m}}
 
   defp compile_keyword({kw, m}, _, _base, _vocabs, _ctx)
        when is_non_neg_int_keywords?(kw) and
-            not (is_integer(m) and m >= 0) and
-            not (is_float(m) and m >= 0.0 and trunc(m) == m) do
-    {:error, %Error{
-      rule: :invalid_keyword_value,
-      path: [kw],
-      value: m,
-      context: %ErrorContext{contrast: "non_negative_integer", input: m}
-    }}
+              not (is_integer(m) and m >= 0) and
+              not (is_float(m) and m >= 0.0 and trunc(m) == m) do
+    {:error,
+     %Error{
+       rule: :invalid_keyword_value,
+       path: [kw],
+       value: m,
+       context: %ErrorContext{contrast: "non_negative_integer", input: m}
+     }}
   end
 
-  defp compile_keyword({"minLength", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minLength, params: m, validator: fn d, _ -> Predicates.check_min_length(d, m) end}}
-  defp compile_keyword({"maxLength", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maxLength, params: m, validator: fn d, _ -> Predicates.check_max_length(d, m) end}}
+  defp compile_keyword({"minLength", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :minLength, params: m}}
+
+  defp compile_keyword({"maxLength", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :maxLength, params: m}}
 
   defp compile_keyword({"pattern", p}, _, _base, _vocabs, _ctx) do
     case JSONSchex.Compiler.ECMARegex.compile(p) do
       {:ok, regex} ->
-        {:ok, %Rule{name: :pattern, params: p, validator: fn d, _ -> Predicates.check_pattern(d, regex) end}}
+        {:ok, %Rule{name: :pattern, params: %{source: p, regex: regex}}}
+
       {:error, {err, _pos}} ->
-        {:error, %Error{rule: :invalid_regex, path: ["pattern"], value: p, context: %ErrorContext{error_detail: err}}}
+        {:error,
+         %Error{
+           rule: :invalid_regex,
+           path: ["pattern"],
+           value: p,
+           context: %ErrorContext{error_detail: err}
+         }}
     end
   end
 
-  defp compile_keyword({"minProperties", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minProperties, params: m, validator: fn d, _ -> Predicates.check_min_properties(d, m) end}}
-  defp compile_keyword({"maxProperties", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maxProperties, params: m, validator: fn d, _ -> Predicates.check_max_properties(d, m) end}}
+  defp compile_keyword({"minProperties", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :minProperties, params: m}}
 
-  defp compile_keyword({"minItems", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :minItems, params: m, validator: fn d, _ -> Predicates.check_min_items(d, m) end}}
-  defp compile_keyword({"maxItems", m}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :maxItems, params: m, validator: fn d, _ -> Predicates.check_max_items(d, m) end}}
+  defp compile_keyword({"maxProperties", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :maxProperties, params: m}}
+
+  defp compile_keyword({"minItems", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :minItems, params: m}}
+
+  defp compile_keyword({"maxItems", m}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :maxItems, params: m}}
 
   defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx) when not is_boolean(b) do
-    {:error, %Error{
-      rule: :invalid_keyword_value,
-      path: ["uniqueItems"],
-      value: b,
-      context: %ErrorContext{contrast: "boolean", input: b}
-    }}
+    {:error,
+     %Error{
+       rule: :invalid_keyword_value,
+       path: ["uniqueItems"],
+       value: b,
+       context: %ErrorContext{contrast: "boolean", input: b}
+     }}
   end
 
-  defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :uniqueItems, params: b, validator: fn d, _ -> Predicates.check_unique_items(d, b) end}}
+  defp compile_keyword({"uniqueItems", b}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :uniqueItems, params: b}}
 
-  defp compile_keyword({"enum", v}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :enum, params: v, validator: fn d, _ -> Predicates.check_enum(d, v) end}}
-  defp compile_keyword({"const", c}, _, _base, _vocabs, _ctx), do: {:ok, %Rule{name: :const, params: c, validator: fn d, _ -> Predicates.check_const(d, c) end}}
+  defp compile_keyword({"enum", v}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :enum, params: v}}
+
+  defp compile_keyword({"const", c}, _, _base, _vocabs, _ctx),
+    do: {:ok, %Rule{name: :const, params: c}}
+
+  defp compile_keyword({"required", []}, _, _base, _vocabs, _ctx), do: {:ok, nil}
 
   defp compile_keyword({"required", req}, _, _base, _vocabs, _ctx) do
-    {:ok, %Rule{
-      name: :required,
-      params: req,
-      validator: fn data, {path, _, _} ->
-        if is_map(data) do
-          if Enum.all?(req, &Map.has_key?(data, &1)) do
-            :ok
-          else
-            missing = Enum.reject(req, &Map.has_key?(data, &1))
-            {:error, [%Error{path: path, rule: :required, context: %ErrorContext{contrast: missing}}]}
-          end
-        else
-          :ok
-        end
-      end
-    }}
+    {:ok,
+     %Rule{
+       name: :required,
+       params: req
+     }}
   end
+
+  defp compile_keyword({"properties", props}, _, _base, _vocabs, _ctx) when map_size(props) == 0,
+    do: {:ok, nil}
 
   defp compile_keyword({"properties", props}, _, base, vocabs, ctx) do
     Enum.reduce_while(props, {:ok, []}, fn {key, sub}, {:ok, acc} ->
@@ -507,15 +563,20 @@ defmodule JSONSchex.Compiler do
     end)
     |> case do
       {:ok, compiled_props} ->
-        {:ok, %Rule{
-          name: :properties,
-          params: compiled_props,
-          validator: fn data, {path, _evaluated, root} -> Keywords.validate_properties_map(data, compiled_props, path, root) end
-        }}
+        {:ok,
+         %Rule{
+           name: :properties,
+           params: compiled_props
+         }}
+
       {:error, _} = err ->
         err
     end
   end
+
+  defp compile_keyword({"patternProperties", patterns}, _, _base, _vocabs, _ctx)
+       when map_size(patterns) == 0,
+       do: {:ok, nil}
 
   defp compile_keyword({"patternProperties", patterns}, _, base, vocabs, ctx) do
     result =
@@ -527,21 +588,30 @@ defmodule JSONSchex.Compiler do
           {:error, %Error{} = error} ->
             path = error.path || []
             {:halt, {:error, %{error | path: path ++ [pattern]}}}
+
           {:error, {regex_term, _}} ->
-            {:halt, {:error, %Error{rule: :invalid_regex, path: ["patternProperties", pattern],
-              context: %ErrorContext{contrast: "invalid_regex", input: pattern, error_detail: regex_term}}}}
+            {:halt,
+             {:error,
+              %Error{
+                rule: :invalid_regex,
+                path: ["patternProperties", pattern],
+                context: %ErrorContext{
+                  contrast: "invalid_regex",
+                  input: pattern,
+                  error_detail: regex_term
+                }
+              }}}
         end
       end)
 
     case result do
       {:ok, compiled_patterns} ->
-        {:ok, %Rule{
-          name: :patternProperties,
-          params: compiled_patterns,
-          validator: fn data, {path, _evaluated, root} ->
-            Keywords.validate_pattern_properties(data, compiled_patterns, path, root)
-          end
-        }}
+        {:ok,
+         %Rule{
+           name: :patternProperties,
+           params: compiled_patterns
+         }}
+
       error ->
         error
     end
@@ -555,31 +625,39 @@ defmodule JSONSchex.Compiler do
         case JSONSchex.Compiler.ECMARegex.compile(p) do
           {:ok, r} ->
             {:cont, {:ok, [r | acc]}}
+
           {:error, {regex_term, _}} ->
-            {:halt, {:error, %Error{rule: :invalid_regex, path: ["patternProperties", p],
-              context: %ErrorContext{contrast: "invalid_regex", input: p, error_detail: regex_term}}}}
+            {:halt,
+             {:error,
+              %Error{
+                rule: :invalid_regex,
+                path: ["patternProperties", p],
+                context: %ErrorContext{
+                  contrast: "invalid_regex",
+                  input: p,
+                  error_detail: regex_term
+                }
+              }}}
         end
       end)
 
     with {:ok, compiled_patterns} <- regex_compilation,
          {:ok, compiled_sub} <- compile_schema_node(sub_schema, base, vocabs, ctx) do
-
       known_props_set = Map.keys(Map.get(full_schema, "properties", %{})) |> MapSet.new()
       always_valid? = match?(%Schema{rules: []}, compiled_sub)
 
-      {:ok, %Rule{
-        name: :additionalProperties,
-        params: compiled_sub,
-        validator: fn
-          data, {_path, _evaluated, _root} when always_valid? == true ->
-            Keywords.collect_additional_keys(data, known_props_set, compiled_patterns)
-          data, {path, _evaluated, root} ->
-            Keywords.validate_additional_properties(data, compiled_sub, known_props_set, compiled_patterns, path, root)
-        end
-      }}
+      {:ok,
+       %Rule{
+         name: :additionalProperties,
+         params: %{
+           schema: compiled_sub,
+           known_props: known_props_set,
+           patterns: compiled_patterns,
+           always_valid?: always_valid?
+         }
+       }}
     end
   end
-
 
   # Pre-2019 compatibility: "dependencies" combines dependentRequired and dependentSchemas.
   defp compile_keyword({"dependencies", deps}, _, base, vocabs, ctx) do
@@ -588,7 +666,8 @@ defmodule JSONSchex.Compiler do
         {key, dep_list}, {req_acc, schema_acc} when is_list(dep_list) ->
           {Map.put(req_acc, key, dep_list), schema_acc}
 
-        {key, dep_schema}, {req_acc, schema_acc} when is_map(dep_schema) or is_boolean(dep_schema) ->
+        {key, dep_schema}, {req_acc, schema_acc}
+        when is_map(dep_schema) or is_boolean(dep_schema) ->
           {req_acc, Map.put(schema_acc, key, dep_schema)}
       end)
 
@@ -596,75 +675,41 @@ defmodule JSONSchex.Compiler do
 
     case compiled_schema_deps do
       {:ok, compiled_schemas} ->
-        has_required = map_size(required_deps) > 0
-        has_schemas = map_size(compiled_schemas) > 0
-
-        {:ok, %Rule{
-          name: :dependencies,
-          params: deps,
-          validator: fn
-            data, {_path, _evaluated, _root} when is_map(data)
-              and has_required == false
-              and has_schemas == false ->
-              :ok
-            data, {path, _evaluated, root} when is_map(data)
-              and has_required == true
-              and has_schemas == false ->
-              Keywords.validate_dependent_required(data, required_deps, path, root)
-            data, {path, _evaluated, root} when is_map(data)
-              and has_required == false
-              and has_schemas == true ->
-              Keywords.validate_dependent_schemas(data, compiled_schemas, path, root)
-            data, {path, _evaluated, root} when is_map(data)
-              and has_required == true
-              and has_schemas == true ->
-
-              required_result =
-                Keywords.validate_dependent_required(data, required_deps, path, root)
-
-              schema_result =
-                Keywords.validate_dependent_schemas(data, compiled_schemas, path, root)
-
-              case {required_result, schema_result} do
-                {:ok, :ok} -> :ok
-                {:ok, {:ok, evaluated}} -> {:ok, evaluated}
-                {:ok, {:error, errs}} -> {:error, errs}
-                {{:error, req_errs}, :ok} -> {:error, req_errs}
-                {{:error, req_errs}, {:ok, _}} -> {:error, req_errs}
-                {{:error, req_errs}, {:error, schema_errs}} -> {:error, schema_errs ++ req_errs}
-              end
-
-            _, _ ->
-              :ok
-          end
-        }}
+        {:ok,
+         %Rule{
+           name: :dependencies,
+           params: build_dependencies_params(required_deps, compiled_schemas)
+         }}
 
       {:error, error, key} ->
         {:error, %{error | path: ["dependencies", key] ++ error.path}}
     end
   end
 
+  defp compile_keyword({"dependentRequired", deps}, _, _base, _vocabs, _ctx)
+       when map_size(deps) == 0,
+       do: {:ok, nil}
+
   defp compile_keyword({"dependentRequired", deps}, _, _base, _vocabs, _ctx) do
-    {:ok, %Rule{
-      name: :dependentRequired,
-      params: deps,
-      validator: fn data, {path, _evaluated, root} ->
-        Keywords.validate_dependent_required(data, deps, path, root)
-      end
-    }}
+    {:ok,
+     %Rule{
+       name: :dependentRequired,
+       params: deps
+     }}
   end
+
+  defp compile_keyword({"dependentSchemas", deps}, _, _base, _vocabs, _ctx)
+       when map_size(deps) == 0,
+       do: {:ok, nil}
 
   defp compile_keyword({"dependentSchemas", deps}, _, base, vocabs, ctx) do
     case compile_dependent_schemas_map(deps, base, vocabs, ctx) do
       {:ok, compiled_deps} ->
-        {:ok, %Rule{
-          name: :dependentSchemas,
-          params: compiled_deps,
-          validator: fn
-            data, {path, _evaluated, root} ->
-              Keywords.validate_dependent_schemas(data, compiled_deps, path, root)
-          end
-        }}
+        {:ok,
+         %Rule{
+           name: :dependentSchemas,
+           params: compiled_deps
+         }}
 
       {:error, error, key} ->
         {:error, %{error | path: ["dependentSchemas", key] ++ error.path}}
@@ -674,41 +719,47 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"propertyNames", schema}, _, base, vocabs, ctx) do
     case compile_schema_node(schema, base, vocabs, ctx) do
       {:ok, compiled_sub} ->
-        {:ok, %Rule{
-          name: :propertyNames,
-          params: compiled_sub,
-          validator: fn data, {path, _evaluated, root} ->
-            Keywords.validate_property_names(data, compiled_sub, path, root)
-          end
-        }}
+        {:ok,
+         %Rule{
+           name: :propertyNames,
+           params: compiled_sub
+         }}
 
       {:error, error} ->
         {:error, %{error | path: ["propertyNames"] ++ error.path}}
     end
   end
 
+  defp compile_keyword({"prefixItems", []}, _, _base, _vocabs, _ctx), do: {:ok, nil}
+
   defp compile_keyword({"prefixItems", schemas}, _, base, vocabs, ctx) do
     case map_compile_list(schemas, base, vocabs, ctx) do
       {:ok, compiled_schemas} ->
-        {:ok, %Rule{
-          name: :prefixItems,
-          params: compiled_schemas,
-          validator: fn data, {path, _evaluated, root} -> Keywords.validate_prefix_items(data, compiled_schemas, path, root) end
-        }}
+        {:ok,
+         %Rule{
+           name: :prefixItems,
+           params: compiled_schemas
+         }}
+
       {:error, error} ->
         {:error, %{error | path: ["prefixItems"] ++ error.path}}
     end
   end
 
   defp compile_keyword({"items", sub_schema}, full_schema, base, vocabs, ctx) do
-    start_index = if is_list(Map.get(full_schema, "prefixItems")), do: length(full_schema["prefixItems"]), else: 0
+    start_index =
+      if is_list(Map.get(full_schema, "prefixItems")),
+        do: length(full_schema["prefixItems"]),
+        else: 0
+
     case compile_schema_node(sub_schema, base, vocabs, ctx) do
       {:ok, compiled_sub} ->
-        {:ok, %Rule{
-          name: :items,
-          params: {start_index, compiled_sub},
-          validator: fn data, {path, _evaluated, root} -> Keywords.validate_items_array(data, compiled_sub, start_index, path, root) end
-        }}
+        {:ok,
+         %Rule{
+           name: :items,
+           params: %{start_index: start_index, schema: compiled_sub}
+         }}
+
       {:error, error} ->
         {:error, %{error | path: ["items"] ++ error.path}}
     end
@@ -719,29 +770,37 @@ defmodule JSONSchex.Compiler do
       {:ok, compiled_sub} ->
         min = Map.get(full_schema, "minContains", 1)
         max = Map.get(full_schema, "maxContains")
-        {:ok, %Rule{
-          name: :contains,
-          params: %{schema: compiled_sub, min: min, max: max},
-          validator: fn data, {path, _evaluated, root} -> Keywords.validate_contains(data, compiled_sub, min, max, path, root) end
-        }}
+
+        {:ok,
+         %Rule{
+           name: :contains,
+           params: %{schema: compiled_sub, min: min, max: max}
+         }}
+
       {:error, error} ->
         {:error, %{error | path: ["contains"] ++ error.path}}
     end
   end
 
   # Logic Applicators
-  defp compile_keyword({"allOf", schemas}, _, base, vocabs, ctx), do: compile_applicator(:allOf, schemas, base, &Keywords.validate_allOf/5, vocabs, ctx)
-  defp compile_keyword({"anyOf", schemas}, _, base, vocabs, ctx), do: compile_applicator(:anyOf, schemas, base, &Keywords.validate_anyOf/5, vocabs, ctx)
-  defp compile_keyword({"oneOf", schemas}, _, base, vocabs, ctx), do: compile_applicator(:oneOf, schemas, base, &Keywords.validate_oneOf/5, vocabs, ctx)
+  defp compile_keyword({"allOf", schemas}, _, base, vocabs, ctx),
+    do: compile_applicator(:allOf, schemas, base, vocabs, ctx)
+
+  defp compile_keyword({"anyOf", schemas}, _, base, vocabs, ctx),
+    do: compile_applicator(:anyOf, schemas, base, vocabs, ctx)
+
+  defp compile_keyword({"oneOf", schemas}, _, base, vocabs, ctx),
+    do: compile_applicator(:oneOf, schemas, base, vocabs, ctx)
 
   defp compile_keyword({"not", schema}, _, base, vocabs, ctx) do
     case compile_schema_node(schema, base, vocabs, ctx) do
       {:ok, compiled_sub} ->
-        {:ok, %Rule{
-          name: :not,
-          params: compiled_sub,
-          validator: fn data, {path, evaluated, root} -> Keywords.validate_not(data, compiled_sub, path, root, evaluated) end
-        }}
+        {:ok,
+         %Rule{
+           name: :not,
+           params: compiled_sub
+         }}
+
       {:error, error} ->
         {:error, %{error | path: ["not"] ++ error.path}}
     end
@@ -754,14 +813,11 @@ defmodule JSONSchex.Compiler do
     with {:ok, compiled_if} <- compile_schema_node(if_schema, base, vocabs, ctx),
          {:ok, compiled_then} <- compile_optional_schema(then_schema, base, vocabs, ctx),
          {:ok, compiled_else} <- compile_optional_schema(else_schema, base, vocabs, ctx) do
-
-      {:ok, %Rule{
-        name: :if,
-        params: %{if: compiled_if, then: compiled_then, else: compiled_else},
-        validator: fn data, {path, evaluated, root} ->
-          Keywords.validate_if(data, compiled_if, compiled_then, compiled_else, path, root, evaluated)
-        end
-      }}
+      {:ok,
+       %Rule{
+         name: :if,
+         params: %{if: compiled_if, then: compiled_then, else: compiled_else}
+       }}
     else
       {:error, %Error{} = error} ->
         {:error, %{error | path: ["if"] ++ error.path}}
@@ -775,13 +831,16 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword(_, _, _base, _vocabs, _ctx), do: {:ok, nil}
 
   defp compile_optional_schema(nil, _base, _vocabs, _ctx), do: {:ok, nil}
-  defp compile_optional_schema(schema, base, vocabs, ctx), do: compile_schema_node(schema, base, vocabs, ctx)
+
+  defp compile_optional_schema(schema, base, vocabs, ctx),
+    do: compile_schema_node(schema, base, vocabs, ctx)
 
   defp map_compile_list(list, base, vocabs, ctx) do
     Enum.reduce_while(list, {:ok, []}, fn sub, {:ok, acc} ->
       case compile_schema_node(sub, base, vocabs, ctx) do
         {:ok, c} ->
           {:cont, {:ok, [c | acc]}}
+
         {:error, _error} = error ->
           {:halt, error}
       end
@@ -789,6 +848,7 @@ defmodule JSONSchex.Compiler do
     |> case do
       {:ok, reversed} ->
         {:ok, Enum.reverse(reversed)}
+
       error ->
         error
     end
@@ -797,6 +857,7 @@ defmodule JSONSchex.Compiler do
   defp compile_dependent_schemas_map(deps, _base, _vocabs, _ctx) when map_size(deps) == 0 do
     {:ok, %{}}
   end
+
   defp compile_dependent_schemas_map(deps, base, vocabs, ctx) do
     Enum.reduce_while(deps, {:ok, %{}}, fn {prop, schema}, {:ok, acc} ->
       case compile_schema_node(schema, base, vocabs, ctx) do
@@ -806,71 +867,62 @@ defmodule JSONSchex.Compiler do
     end)
   end
 
-  defp compile_applicator(name, schemas, base, validate_fn, vocabs, ctx) do
+  defp build_dependencies_params(required_deps, compiled_schemas) do
+    has_required = map_size(required_deps) > 0
+    has_schemas = map_size(compiled_schemas) > 0
+
+    cond do
+      has_required and has_schemas ->
+        %{mode: :both, required: required_deps, schemas: compiled_schemas}
+
+      has_required ->
+        %{mode: :required, required: required_deps}
+
+      has_schemas ->
+        %{mode: :schemas, schemas: compiled_schemas}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp compile_applicator(name, schemas, base, vocabs, ctx) do
     case map_compile_list(schemas, base, vocabs, ctx) do
       {:ok, compiled_schemas} ->
-        {:ok, %Rule{
-          name: name,
-          params: compiled_schemas,
-          validator: fn data, {path, evaluated, root} -> validate_fn.(data, compiled_schemas, path, root, evaluated) end
-        }}
+        {:ok,
+         %Rule{
+           name: name,
+           params: compiled_schemas
+         }}
+
       {:error, error} ->
         {:error, %{error | path: [name | error.path]}}
     end
   end
 
   defp build_unevaluated_props_rule(sub_schema) do
-    is_false_schema? = match?(
-      %JSONSchex.Types.Schema{rules: [%{name: :boolean_schema, params: false}]},
-      sub_schema
-    )
+    is_false_schema? =
+      match?(
+        %JSONSchex.Types.Schema{rules: [%{name: :boolean_schema, params: false}]},
+        sub_schema
+      )
 
     %Rule{
       name: :unevaluatedProperties,
-      params: sub_schema,
-      validator: fn data, {path, evaluated_keys, root} ->
-        case Keywords.validate_unevaluated_props(data, sub_schema, path, evaluated_keys, root) do
-          {:ok, _} = new_evaluated ->
-            new_evaluated
-          :ok ->
-            :ok
-          {:error, errors} when is_false_schema? ->
-            rewritten_errors = Enum.map(errors, fn e ->
-              %{e | rule: :unevaluatedProperties, context: %ErrorContext{contrast: "not_allowed"}}
-            end)
-            {:error, rewritten_errors}
-          error ->
-            error
-        end
-      end
+      params: %{schema: sub_schema, false_schema?: is_false_schema?}
     }
   end
 
   defp build_unevaluated_items_rule(sub_schema) do
-    is_false_schema? = match?(
-      %Schema{rules: [%{name: :boolean_schema, params: false}]},
-      sub_schema
-    )
+    is_false_schema? =
+      match?(
+        %Schema{rules: [%{name: :boolean_schema, params: false}]},
+        sub_schema
+      )
 
     %Rule{
       name: :unevaluatedItems,
-      params: sub_schema,
-      validator: fn data, {path, evaluated_indices, root} ->
-        case Keywords.validate_unevaluated_items(data, sub_schema, path, evaluated_indices, root) do
-          {:ok, _} = new_evaluated ->
-            new_evaluated
-          :ok ->
-            :ok
-
-          {:error, errors} when is_false_schema? ->
-            rewritten = Enum.map(errors, fn e -> %{e | rule: :unevaluatedItems, context: %ErrorContext{contrast: "not_allowed"}} end)
-             {:error, rewritten}
-
-          {:error, errors} -> {:error, errors}
-        end
-      end
+      params: %{schema: sub_schema, false_schema?: is_false_schema?}
     }
   end
-
-
 end

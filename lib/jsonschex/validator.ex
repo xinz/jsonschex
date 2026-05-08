@@ -16,12 +16,10 @@ defmodule JSONSchex.Validator do
       iex> {:ok, schema} = JSONSchex.compile(%{"type" => "object", "properties" => %{"name" => %{"type" => "string"}}})
       iex> JSONSchex.Validator.validate(schema, %{"name" => "Alice"})
       :ok
-
   """
 
-  alias JSONSchex.Types.{Schema, ValidationContext, Error}
-  alias JSONSchex.Validator.Reference
-
+  alias JSONSchex.Types.{Error, Schema, ValidationContext}
+  alias JSONSchex.Validator.Rules
 
   @empty_mapset MapSet.new()
 
@@ -38,7 +36,6 @@ defmodule JSONSchex.Validator do
       iex> {:error, errors} = JSONSchex.Validator.validate(schema, -5)
       iex> Enum.any?(errors, fn e -> e.rule == :minimum end)
       true
-
   """
   @spec validate(Schema.t(), term()) :: :ok | {:error, list(Error.t())}
   def validate(%Schema{source_id: id} = root_schema, data) do
@@ -54,6 +51,7 @@ defmodule JSONSchex.Validator do
     case validate_entry(root_schema, data, [], ctx) do
       {:ok, _annotations} ->
         :ok
+
       {:error, errors} ->
         flat_errors = List.flatten(errors)
 
@@ -61,6 +59,7 @@ defmodule JSONSchex.Validator do
           Enum.map(flat_errors, fn
             {path, rule, context} when is_map(context) ->
               %Error{path: path, rule: rule, context: context, value: data}
+
             %Error{} = e ->
               e
           end)
@@ -70,7 +69,7 @@ defmodule JSONSchex.Validator do
   end
 
   @doc """
-  Recursive validation engine called by compiled rule closures.
+  Recursive validation engine called by the rule dispatcher.
 
   Executes all rules in the schema sequentially, accumulating errors and evaluated keys.
 
@@ -80,7 +79,6 @@ defmodule JSONSchex.Validator do
       iex> ctx = %JSONSchex.Types.ValidationContext{root_schema: schema, scope_stack: [], source_id: nil, raw: nil}
       iex> JSONSchex.Validator.validate_entry(schema, "hello", [], ctx)
       {:ok, MapSet.new()}
-
   """
   @spec validate_entry(Schema.t(), term(), list(), ValidationContext.t(), term()) ::
           {:ok, MapSet.t()} | {:error, list(Error.t()) | String.t()}
@@ -91,7 +89,7 @@ defmodule JSONSchex.Validator do
   end
 
   def validate_entry(%Schema{rules: [rule], source_id: nil}, data, path, context, evaluated) do
-    case rule.validator.(data, {path, evaluated, context}) do
+    case Rules.apply(rule, data, {path, evaluated, context}) do
       :ok ->
         {:ok, evaluated}
 
@@ -106,24 +104,38 @@ defmodule JSONSchex.Validator do
     end
   end
 
-  def validate_entry(%Schema{rules: [rule1, rule2], source_id: nil}, data, path, context, evaluated) do
+  def validate_entry(
+        %Schema{rules: [rule1, rule2], source_id: nil},
+        data,
+        path,
+        context,
+        evaluated
+      ) do
     ctx = {path, evaluated, context}
 
     {eval1, ctx1, err1} =
-      case rule1.validator.(data, ctx) do
-        :ok -> {evaluated, ctx, nil}
+      case Rules.apply(rule1, data, ctx) do
+        :ok ->
+          {evaluated, ctx, nil}
+
         {:ok, new_keys} ->
           new_eval = MapSet.union(evaluated, new_keys)
           {new_eval, {path, new_eval, context}, nil}
+
         {:error, e} ->
           {evaluated, ctx, to_error_entry(e, path, rule1.name, data)}
       end
 
     {eval2, err2} =
-      case rule2.validator.(data, ctx1) do
-        :ok -> {eval1, nil}
-        {:ok, new_keys} -> {MapSet.union(eval1, new_keys), nil}
-        {:error, e} -> {eval1, to_error_entry(e, path, rule2.name, data)}
+      case Rules.apply(rule2, data, ctx1) do
+        :ok ->
+          {eval1, nil}
+
+        {:ok, new_keys} ->
+          {MapSet.union(eval1, new_keys), nil}
+
+        {:error, e} ->
+          {eval1, to_error_entry(e, path, rule2.name, data)}
       end
 
     case {err1, err2} do
@@ -134,12 +146,24 @@ defmodule JSONSchex.Validator do
     end
   end
 
-  def validate_entry(%Schema{rules: rules, source_id: nil}, data, path, context, initial_evaluated) do
+  def validate_entry(
+        %Schema{rules: rules, source_id: nil},
+        data,
+        path,
+        context,
+        initial_evaluated
+      ) do
     ctx = {path, initial_evaluated, context}
     run_rules(rules, data, path, context, initial_evaluated, ctx, [])
   end
 
-  def validate_entry(%Schema{rules: rules} = current_schema, data, path, %ValidationContext{} = root_context, initial_evaluated) do
+  def validate_entry(
+        %Schema{rules: rules} = current_schema,
+        data,
+        path,
+        %ValidationContext{} = root_context,
+        initial_evaluated
+      ) do
     current_context = update_context_if_needed(current_schema, root_context)
 
     initial_ctx = {path, initial_evaluated, current_context}
@@ -147,6 +171,7 @@ defmodule JSONSchex.Validator do
   end
 
   defp to_error_entry(errs, _path, _rule_name, _data) when is_list(errs), do: errs
+
   defp to_error_entry(err_ctx, path, rule_name, data) when is_map(err_ctx),
     do: [%Error{path: path, rule: rule_name, context: err_ctx, value: data}]
 
@@ -159,7 +184,7 @@ defmodule JSONSchex.Validator do
   end
 
   defp run_rules([rule | rest], data, path, context, evaluated, ctx, errors) do
-    case rule.validator.(data, ctx) do
+    case Rules.apply(rule, data, ctx) do
       :ok ->
         run_rules(rest, data, path, context, evaluated, ctx, errors)
 
@@ -190,38 +215,23 @@ defmodule JSONSchex.Validator do
   defp update_context_if_needed(%{source_id: nil}, %ValidationContext{} = root_context) do
     root_context
   end
-  defp update_context_if_needed(%{source_id: id}, %ValidationContext{source_id: id} = root_context) do
+
+  defp update_context_if_needed(
+         %{source_id: id},
+         %ValidationContext{source_id: id} = root_context
+       ) do
     root_context
   end
 
-  defp update_context_if_needed(%{source_id: source_id} = current_schema, %ValidationContext{} = root_context) do
-    %{root_context |
-      source_id: source_id,
-      raw: current_schema.raw,
-      scope_stack: [source_id | root_context.scope_stack]}
+  defp update_context_if_needed(
+         %{source_id: source_id} = current_schema,
+         %ValidationContext{} = root_context
+       ) do
+    %{
+      root_context
+      | source_id: source_id,
+        raw: current_schema.raw,
+        scope_stack: [source_id | root_context.scope_stack]
+    }
   end
-
-  @doc """
-  Resolves `$dynamicRef` via dynamic scope lookup.
-
-  See `JSONSchex.Validator.Reference.validate_dynamic_ref/3`.
-  """
-  def validate_dynamic_ref(data, ref_string, context) do
-    Reference.validate_dynamic_ref(data, ref_string, context)
-  end
-
-  @doc """
-  Resolves a static `$ref` using a pre-resolved URI for fast lookup, falling back
-  to full resolution via `JSONSchex.Validator.Reference.validate_ref/3`.
-  """
-  def validate_ref(data, ref_string, resolved_uri, {path, evaluated, validation_context} = context) do
-    case Map.get(validation_context.root_schema.defs, resolved_uri) do
-      %Schema{} = schema ->
-        validate_entry(schema, data, path, validation_context, evaluated)
-
-      nil ->
-        Reference.validate_ref(data, ref_string, context)
-    end
-  end
-
 end

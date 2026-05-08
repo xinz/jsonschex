@@ -25,6 +25,13 @@ defmodule JSONSchex do
       :format
       iex> JSONSchex.format_error(error)
       ~s(Invalid email format: "not-an-email")
+
+  For compile-time schema embedding, see:
+
+  - `JSONSchex.Schema` for the `compile!/2` macro
+  - `JSONSchex.Sigil` for the `~X` sigil
+
+  `use JSONSchex` imports the `~X` sigil as a convenience.
   """
 
   alias JSONSchex.Compiler
@@ -53,7 +60,6 @@ defmodule JSONSchex do
       iex> {:ok, schema} = JSONSchex.compile(%{"type" => "string", "format" => "email"}, format_assertion: true)
       iex> JSONSchex.validate(schema, "test@example.com")
       :ok
-
   """
   @spec compile(map() | boolean()) :: {:ok, Schema.t()} | {:error, Error.t()}
   defdelegate compile(schema, opts \\ []), to: Compiler
@@ -79,7 +85,6 @@ defmodule JSONSchex do
       []
       iex> JSONSchex.format_error(error)
       "Expected type integer, got string"
-
   """
   @spec validate(Schema.t(), term()) :: :ok | {:error, list(Error.t())}
   defdelegate validate(schema, data), to: Validator
@@ -116,4 +121,14 @@ defmodule JSONSchex do
   @spec format_error(Error.t()) :: String.t()
   defdelegate format_error(error), to: JSONSchex.ErrorFormatter, as: :format
 
+  @doc """
+  Imports the `~X` sigil for compile-time schema literals.
+
+  For the explicit API, use `JSONSchex.Sigil` directly.
+  """
+  defmacro __using__(_opts) do
+    quote do
+      import JSONSchex.Sigil, only: [sigil_X: 2]
+    end
+  end
 end

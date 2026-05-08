@@ -72,4 +72,51 @@ defmodule JSONSchex.Test.ValidationKeywords do
     assert error.rule == :dependentRequired
     assert JSONSchex.format_error(error) =~ "Dependency failure"
   end
+
+  test "legacy dependencies precomputes execution mode and validates both branches" do
+    schema = %{
+      "type" => "object",
+      "dependencies" => %{
+        "a" => ["b"],
+        "kind" => %{
+          "properties" => %{
+            "value" => %{"type" => "integer"}
+          }
+        }
+      }
+    }
+
+    {:ok, compiled} = JSONSchex.compile(schema)
+
+    [dependencies_rule | _] = Enum.filter(compiled.rules, &(&1.name == :dependencies))
+    assert dependencies_rule.params.mode == :both
+
+    assert :ok ==
+             JSONSchex.validate(compiled, %{"a" => 1, "b" => 2, "kind" => true, "value" => 3})
+
+    assert {:error, errors} =
+             JSONSchex.validate(compiled, %{"a" => 1, "kind" => true, "value" => "bad"})
+
+    assert Enum.any?(errors, &(&1.rule == :dependentRequired))
+    assert Enum.any?(errors, &(&1.rule == :type))
+  end
+
+  test "compile skips other no-op keyword rules and keeps dependencies as :ok" do
+    schema = %{
+      "required" => [],
+      "properties" => %{},
+      "patternProperties" => %{},
+      "dependentRequired" => %{},
+      "dependentSchemas" => %{},
+      "prefixItems" => [],
+      "dependencies" => %{}
+    }
+
+    {:ok, compiled} = JSONSchex.compile(schema)
+
+    assert Enum.map(compiled.rules, & &1.name) == [:dependencies]
+    assert [%{name: :dependencies, params: :ok}] = compiled.rules
+    assert :ok == JSONSchex.validate(compiled, %{"anything" => true})
+    assert :ok == JSONSchex.validate(compiled, [1, 2, 3])
+  end
 end

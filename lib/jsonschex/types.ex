@@ -9,16 +9,24 @@ defmodule JSONSchex.Types do
     definition registry for reference resolution.
     """
     @type t :: %__MODULE__{
-      rules: list(JSONSchex.Types.Rule.t()),
-      defs: map() | nil,
-      # Used for error reporting context
-      source_id: String.t() | nil,
-      raw: map() | nil,
-      external_loader: (String.t() -> {:ok, map()} | {:error, term()}) | nil,
-      format_assertion: boolean(),
-      content_assertion: boolean()
-    }
-    defstruct [:rules, :defs, :source_id, :raw, :external_loader, format_assertion: false, content_assertion: false]
+            rules: list(JSONSchex.Types.Rule.t()),
+            defs: map() | nil,
+            # Used for error reporting context
+            source_id: String.t() | nil,
+            raw: map() | nil,
+            external_loader: (String.t() -> {:ok, map()} | {:error, term()}) | nil,
+            format_assertion: boolean(),
+            content_assertion: boolean()
+          }
+    defstruct [
+      :rules,
+      :defs,
+      :source_id,
+      :raw,
+      :external_loader,
+      format_assertion: false,
+      content_assertion: false
+    ]
   end
 
   defmodule ValidationContext do
@@ -30,11 +38,11 @@ defmodule JSONSchex.Types do
     validation descends through `$id` boundaries.
     """
     @type t :: %__MODULE__{
-      root_schema: JSONSchex.Types.Schema.t(),
-      scope_stack: list(String.t()),
-      source_id: String.t() | nil,
-      raw: map() | nil
-    }
+            root_schema: JSONSchex.Types.Schema.t(),
+            scope_stack: list(String.t()),
+            source_id: String.t() | nil,
+            raw: map() | nil
+          }
     defstruct [
       :root_schema,
       :source_id,
@@ -47,15 +55,14 @@ defmodule JSONSchex.Types do
     @moduledoc """
     A single compiled validation step.
 
-    The `validator` function accepts `(data, {path, evaluated, context})` and returns
-    `:ok`, `{:ok, evaluated_keys}`, or `{:error, errors}`.
+    `name` identifies the runtime rule implementation and `params` carries the
+    serializable arguments consumed by `JSONSchex.Validator.Rules.apply/3`.
     """
     @type t :: %__MODULE__{
-      name: atom(),
-      params: term(),
-      validator: (term(), term() -> {:ok, MapSet.t()} | {:error, list()})
-    }
-    defstruct [:name, :params, :validator]
+            name: atom(),
+            params: term()
+          }
+    defstruct [:name, :params]
   end
 
   defmodule Error do
@@ -65,11 +72,11 @@ defmodule JSONSchex.Types do
     Use `JSONSchex.format_error/1` to produce a human-readable string.
     """
     @type t :: %__MODULE__{
-      path: list(),
-      rule: atom(),
-      context: JSONSchex.Types.ErrorContext.t() | nil,
-      value: term() | nil
-    }
+            path: list(),
+            rule: atom(),
+            context: JSONSchex.Types.ErrorContext.t() | nil,
+            value: term() | nil
+          }
     defstruct [:path, :rule, :context, :value]
 
     defimpl String.Chars do
@@ -77,7 +84,6 @@ defmodule JSONSchex.Types do
         JSONSchex.ErrorFormatter.format(t)
       end
     end
-
   end
 
   defmodule ErrorContext do
@@ -104,10 +110,10 @@ defmodule JSONSchex.Types do
     human-readable message rather than inspecting these fields directly.
     """
     @type t :: %__MODULE__{
-      contrast: term() | nil,
-      input: term() | nil,
-      error_detail: term() | nil
-    }
+            contrast: term() | nil,
+            input: term() | nil,
+            error_detail: term() | nil
+          }
     defstruct [:contrast, :input, :error_detail]
   end
 

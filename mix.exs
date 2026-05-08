@@ -46,26 +46,29 @@ defmodule JSONSchex.MixProject do
       ],
       groups_for_modules: [
         "Public API": [
-          JSONSchex
+          JSONSchex,
+          JSONSchex.Schema,
+          JSONSchex.Sigil
         ],
-        "Types": [
+        Types: [
           JSONSchex.Types,
           JSONSchex.Types.Schema,
           JSONSchex.Types.Rule,
           JSONSchex.Types.Error
         ],
-        "Compiler": [
+        Compiler: [
           JSONSchex.Compiler,
           JSONSchex.Compiler.ECMARegex,
           JSONSchex.Compiler.Predicates,
           JSONSchex.Compiler.Predicates.MultipleOf
         ],
-        "Validator": [
+        Validator: [
           JSONSchex.Validator,
+          JSONSchex.Validator.Rules,
           JSONSchex.Validator.Keywords,
           JSONSchex.Validator.Reference
         ],
-        "Formats": [
+        Formats: [
           JSONSchex.Formats,
           JSONSchex.Formats.DateTime,
           JSONSchex.Formats.Email,
@@ -74,7 +77,7 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Formats.Regex,
           JSONSchex.Formats.URITemplate
         ],
-        "Internal": [
+        Internal: [
           JSONSchex.Vocabulary,
           JSONSchex.ScopeScanner,
           JSONSchex.URIUtil

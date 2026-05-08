@@ -33,6 +33,48 @@ end
 {:error, errors} = JSONSchex.validate(compiled, [1, "bad"])
 ```
 
+## Compile-time schemas
+
+If your schema is a static literal known during compilation, you can embed the
+compiled schema directly in your module with `JSONSchex.Schema.compile!/2`:
+
+```elixir
+defmodule MyApp.UserSchema do
+  require JSONSchex.Schema
+
+  @schema JSONSchex.Schema.compile!(%{
+    "type" => "string",
+    "format" => "email"
+  }, format_assertion: true)
+
+  def schema, do: @schema
+end
+
+:ok = JSONSchex.validate(MyApp.UserSchema.schema(), "user@example.com")
+```
+
+You can also use the `~X` sigil from `JSONSchex.Sigil` for Elixir schema literals:
+
+```elixir
+defmodule MyApp.NumberSchema do
+  import JSONSchex.Sigil, only: [sigil_X: 2]
+
+  @schema ~X|%{"type" => "integer", "minimum" => 10}|
+
+  def schema, do: @schema
+end
+```
+
+`~X` parses Elixir, not JSON, and supports these modifiers:
+
+- `f` — `format_assertion: true`
+- `c` — `content_assertion: true`
+
+For compile-time embeddable options such as `:external_loader`, prefer remote
+captures like `&MyLoader.fetch/1` over anonymous functions.
+
+`~X` is preferred over `~J` to avoid the common sigil-name conflict with Jason.
+
 ## How it works
 
 JSONSchex follows a **two-phase approach** for optimal performance:
