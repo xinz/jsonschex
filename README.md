@@ -2,7 +2,7 @@
 
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
 
-JSONSchex is an implementation of the [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) and latest specification for Elixir, with a design that focuses on practical performance.
+JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) for Elixir, with a design that focuses on practical performance.
 
 ## Features
 
@@ -53,7 +53,7 @@ end
 :ok = JSONSchex.validate(MyApp.UserSchema.schema(), "user@example.com")
 ```
 
-You can also use the `~X` sigil from `JSONSchex.Sigil` for Elixir schema literals:
+You can also use the `~X` sigil from `JSONSchex.Sigil` for Elixir map literals representing JSON Schemas:
 
 ```elixir
 defmodule MyApp.NumberSchema do
@@ -65,7 +65,7 @@ defmodule MyApp.NumberSchema do
 end
 ```
 
-`~X` parses Elixir, not JSON, and supports these modifiers:
+`~X` parses Elixir code, not JSON. It currently supports these modifiers:
 
 - `f` — `format_assertion: true`
 - `c` — `content_assertion: true`
@@ -81,7 +81,7 @@ JSONSchex follows a **two-phase approach** for optimal performance:
 
 1. **Compile** — Parse and optimize a JSON Schema into an executable `Schema` struct. During compilation:
    - All `$id`, `$anchor`, and discovered local fragment references are scanned and registered
-   - Keywords are converted into executable validation functions
+   - Keywords are compiled into serializable rule descriptors consumed by the validator
    - Remote `$ref` schemas can be loaded via an external loader
    - The built-in Draft 2020-12 dialect is recognized without requiring a remote meta-schema load
    - Vocabularies are resolved based on `$schema` and `$vocabulary` declarations
@@ -105,7 +105,7 @@ Each error contains:
 - `path` — List of path segments indicating where the error occurred (e.g., `["users", 0, "email"]`)
 - `rule` — Atom identifying the failed validation rule (e.g., `:type`, `:minimum`)
 - `context` — Map containing details about the failure (e.g., `%JSONSchex.Types.ErrorContext{contrast: "integer", input: "string"}`)
-- `value` - The input value that caused the error
+- `value` — The input value that caused the error
 
 **Example:**
 
@@ -168,7 +168,7 @@ Enum.map(errors, &JSONSchex.format_error/1)
 
 JSONSchex has these optional dependencies that enable additional functionality:
 
-- **`jason` (~> 1.0)**: Required for JSON decoding if using a version of Elixir is earlier than 1.18.
+- **`jason` (~> 1.4)**: Required for JSON decoding only when using Elixir earlier than 1.18.
 
 - **`decimal` (~> 2.0)**: Required for arbitrary precision decimal validation in the `multipleOf` keyword. Without this dependency, `multipleOf` validation may have precision issues with very large or very small decimal numbers.
 
@@ -179,7 +179,7 @@ To include these dependencies, add them to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.4"},
+    {:jsonschex, "~> 0.5"},
     {:jason, "~> 1.4"},
     {:decimal, "~> 2.0"},
     {:idna, "~> 6.0 or ~> 7.1"}
@@ -227,7 +227,7 @@ mix test
 
 ## Test suite summary
 
-JSONSchex runs the JSON Schema Test Suite for Draft 2020-12, all tests passing.
+JSONSchex runs the JSON Schema Test Suite for Draft 2020-12 with all tests passing.
 
 - Default suite path:
   - `test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12`
@@ -236,7 +236,6 @@ JSONSchex runs the JSON Schema Test Suite for Draft 2020-12, all tests passing.
 
 Debug test files can selectively run single suite files for focused investigation.
 
-
 ## Benchmark
 
-More about the benchmark can be found at [bench](https://github.com/xinz/jsonschex/tree/main/bench).
+More benchmark details can be found in the [`bench/`](https://github.com/xinz/jsonschex/tree/main/bench) directory.
