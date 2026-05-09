@@ -2,7 +2,7 @@
 
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
 
-JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) for Elixir, with a design that focuses on practical performance.
+JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) for Elixir, with a design that focuses on practical performance and future support for later specification updates.
 
 ## Features
 
@@ -15,7 +15,7 @@ JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schem
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.5"}
+    {:jsonschex, "~> 0.6"}
   ]
 end
 ```
@@ -35,8 +35,15 @@ end
 
 ## Compile-time schemas
 
-If your schema is a static literal known during compilation, you can embed the
-compiled schema directly in your module with `JSONSchex.Schema.compile!/2`:
+If your schema is a static literal known during compilation, JSONSchex supports
+both an explicit macro API and a compact sigil form.
+
+- Prefer `JSONSchex.Schema.compile!/2` when you want the most explicit API.
+- Prefer `~X` when you want a compact module-attribute literal.
+
+### Using `JSONSchex.Schema.compile!/2`
+
+You can embed the compiled schema directly in your module with `JSONSchex.Schema.compile!/2`:
 
 ```elixir
 defmodule MyApp.UserSchema do
@@ -52,6 +59,8 @@ end
 
 :ok = JSONSchex.validate(MyApp.UserSchema.schema(), "user@example.com")
 ```
+
+### Using the `~X` sigil
 
 You can also use the `~X` sigil from `JSONSchex.Sigil` for Elixir map literals representing JSON Schemas:
 
@@ -77,7 +86,7 @@ defmodule MyApp.NumberSchema do
 end
 ```
 
-The syntax `use JSONSchex` imports `~X` sigil, and `~X` parses Elixir code, not JSON format. It currently supports these modifiers:
+`use JSONSchex` imports the `~X` sigil for you. `~X` parses Elixir code, not JSON. It currently supports these modifiers:
 
 - `f` — `format_assertion: true`
 - `c` — `content_assertion: true`
@@ -191,7 +200,6 @@ To include these dependencies, add them to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.5"},
     {:jason, "~> 1.4"},
     {:decimal, "~> 2.0"},
     {:idna, "~> 6.0 or ~> 7.1"}

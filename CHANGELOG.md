@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.0 (2026-05-09)
+
+### Bug Fixes and Improvements
+
+  * Add first-class support for compiling static JSON Schema literals during module compilation via `JSONSchex.Schema.compile!/2` and the `~X` sigil in `JSONSchex.Sigil`
+  * Refactor validation and compiled rule execution to support static compile-time embedding by making rules data-driven and dispatching them through `JSONSchex.Validator.Rules`
+  * Precompute legacy `dependencies` execution modes during compilation and simplify runtime rule matching
+  * Prune several compile-time no-op keyword rules such as empty `required`, `properties`, `patternProperties`, `dependentRequired`, `dependentSchemas`, and `prefixItems`
+  * Relax decimal dependency requirement
+
 ## v0.5.0 (2026-04-23)
 
 ### Bug Fixes and Improvements
