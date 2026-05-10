@@ -1,6 +1,7 @@
 # JSONSchex
 
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
+[![Draft 2020-12](https://img.shields.io/endpoint?url=https%3A%2F%2Fbowtie.report%2Fbadges%2Felixir-jsonschex%2Fcompliance%2Fdraft2020-12.json)](https://bowtie.report/#/implementations/elixir-jsonschex)
 
 JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) for Elixir, with a design that focuses on practical performance and future support for later specification updates.
 
