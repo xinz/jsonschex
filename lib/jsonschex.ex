@@ -26,6 +26,11 @@ defmodule JSONSchex do
       iex> JSONSchex.format_error(error)
       ~s(Invalid email format: "not-an-email")
 
+  For structural `$ref` discovery and traversal before compilation, see:
+
+  - `JSONSchex.Ref`
+  - the [Structural `$ref` guide](guide/ref.md)
+
   For compile-time schema embedding, see:
 
   - `JSONSchex.Schema` for the `compile!/2` macro
@@ -48,7 +53,8 @@ defmodule JSONSchex do
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
 
-  See the [Loader guide](guide/loader.md) and
+  See the [Loader guide](guide/loader.md),
+  [Structural `$ref` guide](guide/ref.md), and
   [Content and Format guide](guide/content_and_format.md) for details.
 
   ## Examples

@@ -55,6 +55,7 @@ defmodule JSONSchex.ScopeScanner do
         case Map.get(schema, key) do
           "#" <> _ = value ->
             MapSet.put(acc, value)
+
           _ ->
             acc
         end
@@ -71,21 +72,37 @@ defmodule JSONSchex.ScopeScanner do
     case Map.get(schema, keyword) do
       anchor when is_binary(anchor) ->
         Map.put(acc, base_uri <> "#" <> anchor, schema)
+
       _ ->
         acc
     end
-
   end
 
-  defp recurse_keyword(key, map, base, acc) when key in ["properties", "$defs", "definitions", "patternProperties", "dependentSchemas"] and is_map(map) do
+  defp recurse_keyword(key, map, base, acc)
+       when key in ["properties", "$defs", "definitions", "patternProperties", "dependentSchemas"] and
+              is_map(map) do
     Enum.reduce(map, acc, fn {_k, sub}, inner_acc -> do_scan(sub, base, inner_acc) end)
   end
 
-  defp recurse_keyword(key, list, base, acc) when key in ["allOf", "anyOf", "oneOf", "prefixItems"] and is_list(list) do
+  defp recurse_keyword(key, list, base, acc)
+       when key in ["allOf", "anyOf", "oneOf", "prefixItems"] and is_list(list) do
     Enum.reduce(list, acc, fn sub, inner_acc -> do_scan(sub, base, inner_acc) end)
   end
 
-  defp recurse_keyword(key, sub, base, acc) when key in ["items", "additionalProperties", "if", "then", "else", "not", "contains", "propertyNames", "unevaluatedItems", "unevaluatedProperties"] and is_map(sub) do
+  defp recurse_keyword(key, sub, base, acc)
+       when key in [
+              "items",
+              "additionalProperties",
+              "if",
+              "then",
+              "else",
+              "not",
+              "contains",
+              "propertyNames",
+              "unevaluatedItems",
+              "unevaluatedProperties",
+              "contentSchema"
+            ] and is_map(sub) do
     do_scan(sub, base, acc)
   end
 

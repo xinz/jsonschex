@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes and Improvements
+
+  * Add a new public structural `$ref` API in `JSONSchex.Ref` for discovery (`scan/2`), single-step resolution (`resolve/3`), and transitive traversal with cycle reporting (`walk/2`)
+  * Improve internal scope scanning so `contentSchema` is traversed for nested `$id`, anchor, and local `$ref` discovery
+
 ## v0.6.0 (2026-05-09)
 
 ### Bug Fixes and Improvements

@@ -30,6 +30,7 @@ defmodule JSONSchex.MixProject do
         "README.md",
         "CHANGELOG.md",
         "guide/loader.md",
+        "guide/ref.md",
         "guide/dialect_and_vocabulary.md",
         "guide/feature_matrix.md",
         "guide/content_and_format.md",
@@ -38,6 +39,7 @@ defmodule JSONSchex.MixProject do
       groups_for_extras: [
         Guides: [
           "guide/loader.md",
+          "guide/ref.md",
           "guide/dialect_and_vocabulary.md",
           "guide/feature_matrix.md",
           "guide/content_and_format.md",
@@ -47,6 +49,7 @@ defmodule JSONSchex.MixProject do
       groups_for_modules: [
         "Public API": [
           JSONSchex,
+          JSONSchex.Ref,
           JSONSchex.Schema,
           JSONSchex.Sigil
         ],
@@ -84,6 +87,7 @@ defmodule JSONSchex.MixProject do
         ]
       ],
       nest_modules_by_prefix: [
+        JSONSchex.Ref,
         JSONSchex.Types,
         JSONSchex.Compiler,
         JSONSchex.Validator,

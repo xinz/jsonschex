@@ -2,6 +2,8 @@
 
 This guide explains how JSONSchex resolves remote references and how to supply an external loader when compiling schemas.
 
+If you need low-level structural `$ref` discovery and traversal before compilation, see the [Structural `$ref` guide](ref.md) and `JSONSchex.Ref`. That API uses a related but distinct loader contract.
+
 ## Overview
 
 JSONSchex supports:

@@ -97,7 +97,13 @@ defmodule JSONSchex.Compiler do
         end)
 
       resolved_runtime_defs =
-        resolve_refs(raw_schema, MapSet.to_list(explicit_refs), root_vocabs, ctx)
+        resolve_refs(
+          raw_schema,
+          MapSet.to_list(explicit_refs),
+          root_compiled.source_id,
+          root_vocabs,
+          ctx
+        )
 
       case merge_defs(full_defs, resolved_runtime_defs) do
         {:error, _} = error ->
@@ -154,7 +160,9 @@ defmodule JSONSchex.Compiler do
     {:ok, current_vocabs}
   end
 
-  defp resolve_refs(raw_schema, refs, vocabs, ctx) do
+  defp resolve_refs(raw_schema, refs, _base_uri, vocabs, ctx) do
+    refs = Enum.filter(refs, &local_pointer_ref?/1)
+
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
       case result do
         {:ok, fragment} ->
@@ -171,6 +179,9 @@ defmodule JSONSchex.Compiler do
       end
     end)
   end
+
+  defp local_pointer_ref?("#/" <> _), do: true
+  defp local_pointer_ref?(_), do: false
 
   defp compile_schema_node(true, _id, _vocabs, ctx) do
     {:ok,
