@@ -100,7 +100,6 @@ defmodule JSONSchex.Compiler do
         resolve_refs(
           raw_schema,
           MapSet.to_list(explicit_refs),
-          root_compiled.source_id,
           root_vocabs,
           ctx
         )
@@ -160,7 +159,7 @@ defmodule JSONSchex.Compiler do
     {:ok, current_vocabs}
   end
 
-  defp resolve_refs(raw_schema, refs, _base_uri, vocabs, ctx) do
+  defp resolve_refs(raw_schema, refs, vocabs, ctx) do
     refs = Enum.filter(refs, &local_pointer_ref?/1)
 
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
