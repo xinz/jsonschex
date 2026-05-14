@@ -28,10 +28,17 @@ defmodule JSONSchex.Ref do
 
   ## Options
 
-  - `:source` — source identifier for the root document
-  - `:base_uri` — explicit starting base URI override
+  - `:source` — source identifier for the root document. This is primarily
+    provenance metadata for returned `%Location{}`, `%Resolution{}`, `%Error{}`,
+    and `%Cycle{}` values.
+  - `:base_uri` — explicit starting base URI override used for reference
+    resolution.
   - `:loader` — `(document_uri -> {:ok, document} | {:ok, %{document: document, source: source}} | {:error, term()})`
   - `:external_loader` — accepted as an alias for `:loader`
+
+  If `:base_uri` is omitted and `:source` is a binary, `:source` is also used
+  as the initial base URI. This is convenient when the source path or URI is
+  both the document identifier and the desired reference base.
 
   When resolving a bare reference string, resolution starts from the root
   document context. To preserve nested `$id` scope, prefer passing a scanned

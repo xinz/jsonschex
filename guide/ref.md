@@ -12,6 +12,21 @@ Unlike `JSONSchex.compile/2`, this API is intentionally **policy-free**. It does
 
 Use this API when you need to inspect or normalize documents **before** compilation, or when your application owns its own reference expansion policy.
 
+## `:source` vs `:base_uri`
+
+These two options are related, but they are not the same:
+
+- `:base_uri` controls how relative references resolve
+- `:source` identifies where the current document came from
+
+In practice, `:source` is primarily provenance metadata that is copied into returned locations, resolutions, errors, and walk events. However, when `:base_uri` is omitted and `:source` is a binary, `JSONSchex.Ref` also uses `:source` as the initial base URI.
+
+That means:
+
+- if you only care about resolution semantics, passing `:base_uri` is enough
+- if you also want meaningful source metadata, pass `:source`
+- if your source path or URI should also act as the reference base, you can pass only `:source`
+
 ## Overview
 
 `JSONSchex.Ref` exposes three main entry points:
@@ -28,7 +43,7 @@ Each location includes:
 
 - `:raw_ref` — original `$ref` string
 - `:path` — path to the `$ref` key within the scanned document
-- `:source` — caller-supplied source identifier
+- `:source` — caller-supplied source identifier used for provenance
 - `:base_uri` — effective base URI at that location, honoring nested `$id`
 - `:absolute_uri` — resolved target URI when it can be derived
 - `:fragment` — target fragment without the leading `#`
@@ -74,6 +89,8 @@ You can pass either:
 - a `%JSONSchex.Ref.Location{}` returned by `scan/2`
 
 Passing a `Location` is usually the better choice because it preserves nested `$id` scoping.
+
+If you omit `:base_uri`, a binary `:source` also becomes the initial base URI for the root document.
 
 ### Loader contract
 

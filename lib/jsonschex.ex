@@ -29,7 +29,7 @@ defmodule JSONSchex do
   For structural `$ref` discovery and traversal before compilation, see:
 
   - `JSONSchex.Ref`
-  - the [Structural `$ref` guide](guide/ref.md)
+  - the [Structural `$ref` guide](guide/ref.md), including the distinction between `:source` provenance and `:base_uri` resolution
 
   For compile-time schema embedding, see:
 
