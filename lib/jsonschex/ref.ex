@@ -25,6 +25,10 @@ defmodule JSONSchex.Ref do
   - `resolve/3` resolves one location or raw ref string into a `%Resolution{}`
   - `walk/2` performs a depth-first transitive traversal and returns ordered
     `%Resolution{}`, `%Error{}`, and `%Cycle{}` events
+  - `transform/3` applies a callback-driven, policy-free structural rewrite over
+    discovered `$ref` locations
+  - `render_ref/3` renders a stable `$ref` string for a resolved target
+  - `index_walk_events/1` turns ordered walk events into a location-keyed index
 
   ## Options
 
@@ -34,7 +38,6 @@ defmodule JSONSchex.Ref do
   - `:base_uri` — explicit starting base URI override used for reference
     resolution.
   - `:loader` — `(document_uri -> {:ok, document} | {:ok, %{document: document, source: source}} | {:error, term()})`
-  - `:external_loader` — accepted as an alias for `:loader`
 
   If `:base_uri` is omitted and `:source` is a binary, `:source` is also used
   as the initial base URI. This is convenient when the source path or URI is
@@ -94,8 +97,7 @@ defmodule JSONSchex.Ref do
       :path,
       :source,
       :base_uri,
-      :absolute_uri,
-      :fragment
+      :absolute_uri
     ]
 
     @type t :: %__MODULE__{
@@ -103,9 +105,19 @@ defmodule JSONSchex.Ref do
             path: JSONSchex.Ref.path(),
             source: JSONSchex.Ref.source() | nil,
             base_uri: String.t() | nil,
-            absolute_uri: String.t() | nil,
-            fragment: String.t() | nil
+            absolute_uri: String.t() | nil
           }
+
+    @doc """
+    Returns the path to the node containing the `$ref`, excluding the `$ref` key itself.
+    """
+    @spec node_path(t()) :: JSONSchex.Ref.path()
+    def node_path(%__MODULE__{path: path}) when is_list(path) do
+      case Enum.reverse(path) do
+        ["$ref" | rest] -> Enum.reverse(rest)
+        _ -> path
+      end
+    end
   end
 
   defmodule Resolution do
@@ -120,7 +132,6 @@ defmodule JSONSchex.Ref do
     @enforce_keys [:location, :target_source, :target_document, :target_value]
     defstruct [
       :location,
-      :target_uri,
       :target_source,
       :target_document,
       :target_value,
@@ -129,7 +140,6 @@ defmodule JSONSchex.Ref do
 
     @type t :: %__MODULE__{
             location: JSONSchex.Ref.Location.t(),
-            target_uri: String.t() | nil,
             target_source: JSONSchex.Ref.source() | nil,
             target_document: JSONSchex.Ref.document(),
             target_value: term(),
@@ -146,7 +156,6 @@ defmodule JSONSchex.Ref do
     defstruct [
       :kind,
       :location,
-      :target_uri,
       :details
     ]
 
@@ -155,7 +164,6 @@ defmodule JSONSchex.Ref do
     @type t :: %__MODULE__{
             kind: kind(),
             location: JSONSchex.Ref.Location.t() | nil,
-            target_uri: String.t() | nil,
             details: term()
           }
   end
@@ -165,22 +173,358 @@ defmodule JSONSchex.Ref do
     A cycle detected while transitively walking `$ref` targets.
     """
 
-    @enforce_keys [:location, :target_uri, :trail]
+    @enforce_keys [:location, :trail]
     defstruct [
       :location,
-      :target_uri,
       :trail
     ]
 
     @type t :: %__MODULE__{
             location: JSONSchex.Ref.Location.t(),
-            target_uri: String.t(),
             trail: [String.t()]
           }
   end
 
   @typedoc "Ordered event emitted by `walk/2`."
   @type walk_event :: Resolution.t() | Error.t() | Cycle.t()
+
+  @typedoc "Stable key for indexing locations and walk events."
+  @type location_key :: {source(), String.t() | nil, path(), String.t() | nil}
+
+  @typedoc "Indexed view of walk events keyed by location."
+  @type walk_index :: %{
+          resolutions: %{optional(location_key()) => Resolution.t()},
+          errors: %{optional(location_key()) => Error.t()},
+          cycles: %{optional(location_key()) => Cycle.t()}
+        }
+
+  @typedoc "Outcome passed to `transform/3` callbacks for a discovered location."
+  @type transform_outcome ::
+          {:ok, Resolution.t()} | {:cycle, Resolution.t(), Cycle.t()} | {:error, Error.t()}
+
+  @typedoc "Return value expected from a `transform/3` callback."
+  @type transform_callback_result :: {:replace, term()} | :keep | {:error, term()}
+
+  @typedoc "Callback used by `transform/3`."
+  @type transform_callback :: (Location.t(), transform_outcome() -> transform_callback_result())
+
+  @typedoc "Rendering mode used by `render_ref/3`."
+  @type render_mode :: :original | :absolute | :prefer_local
+
+  @doc """
+  Returns `true` if the given ref is a same-document local ref.
+
+  ## Examples
+
+      iex> JSONSchex.Ref.local_ref?("#/$defs/name")
+      true
+
+      iex> JSONSchex.Ref.local_ref?("schemas/common.json#/$defs/name")
+      false
+  """
+  @spec local_ref?(String.t()) :: boolean()
+  def local_ref?("#" <> _), do: true
+  def local_ref?(_), do: false
+
+  @doc """
+  Returns `true` if the given ref is external to the current document.
+
+  ## Examples
+
+      iex> JSONSchex.Ref.external_ref?("#/$defs/name")
+      false
+
+      iex> JSONSchex.Ref.external_ref?("schemas/common.json#/$defs/name")
+      true
+  """
+  @spec external_ref?(String.t()) :: boolean()
+  def external_ref?(ref) when is_binary(ref), do: not local_ref?(ref)
+  def external_ref?(_), do: false
+
+  @doc """
+  Returns a stable key for indexing a `%Location{}`.
+  """
+  @spec location_key(Location.t()) :: location_key()
+  def location_key(%Location{} = location) do
+    {location.source, location.base_uri, location.path, location.absolute_uri}
+  end
+
+  @doc """
+  Indexes walk events by `location_key/1`.
+
+  The returned map separates successful resolutions, errors, and cycles.
+
+  ## Examples
+
+      iex> location = %JSONSchex.Ref.Location{
+      ...>   raw_ref: "#/$defs/name",
+      ...>   path: ["schema", "$ref"],
+      ...>   source: "https://example.com/root.json",
+      ...>   base_uri: "https://example.com/root.json",
+      ...>   absolute_uri: "https://example.com/root.json#/$defs/name"
+      ...> }
+      iex> resolution = %JSONSchex.Ref.Resolution{
+      ...>   location: location,
+      ...>   target_source: "https://example.com/root.json",
+      ...>   target_document: %{},
+      ...>   target_value: %{},
+      ...>   target_pointer: "#/$defs/name"
+      ...> }
+      iex> index = JSONSchex.Ref.index_walk_events([resolution])
+      iex> Map.has_key?(index.resolutions, JSONSchex.Ref.location_key(location))
+      true
+  """
+  @spec index_walk_events([walk_event()]) :: walk_index()
+  def index_walk_events(events) when is_list(events) do
+    Enum.reduce(events, %{resolutions: %{}, errors: %{}, cycles: %{}}, fn event, acc ->
+      case event do
+        %Resolution{location: location} = resolution ->
+          put_in(acc, [:resolutions, location_key(location)], resolution)
+
+        %Error{location: location} = error when is_struct(location, Location) ->
+          put_in(acc, [:errors, location_key(location)], error)
+
+        %Cycle{location: location} = cycle ->
+          put_in(acc, [:cycles, location_key(location)], cycle)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  @doc """
+  Returns the resource URI represented by the given ref struct.
+
+  For `%Location{}`, this is the current resource being scanned.
+  For `%Resolution{}`, `%Error{}`, and `%Cycle{}`, this is the target resource.
+  """
+  @spec resource_uri(Location.t() | Resolution.t() | Error.t() | Cycle.t()) :: String.t() | nil
+  def resource_uri(%Location{base_uri: base_uri}) when is_binary(base_uri),
+    do: URIUtil.base(base_uri)
+
+  def resource_uri(%Location{absolute_uri: absolute_uri}) when is_binary(absolute_uri),
+    do: URIUtil.base(absolute_uri)
+
+  def resource_uri(%Location{}), do: nil
+
+  def resource_uri(%Resolution{location: location, target_source: target_source}) do
+    cond do
+      match?(%Location{absolute_uri: absolute_uri} when is_binary(absolute_uri), location) ->
+        URIUtil.base(location.absolute_uri)
+
+      is_binary(target_source) ->
+        URIUtil.base(target_source)
+
+      true ->
+        nil
+    end
+  end
+
+  def resource_uri(%Error{location: location}) do
+    cond do
+      match?(%Location{absolute_uri: absolute_uri} when is_binary(absolute_uri), location) ->
+        URIUtil.base(location.absolute_uri)
+
+      match?(%Location{}, location) ->
+        resource_uri(location)
+
+      true ->
+        nil
+    end
+  end
+
+  def resource_uri(%Cycle{location: location, trail: trail}) do
+    cond do
+      is_list(trail) and trail != [] and is_binary(hd(trail)) -> URIUtil.base(hd(trail))
+      match?(%Location{}, location) -> resource_uri(location)
+      true -> nil
+    end
+  end
+
+  @doc """
+  Renders a `$ref` string for the given resolved target.
+
+  Supported modes are:
+
+  - `:original` — keep the original raw `$ref` from the source location
+  - `:absolute` — render the target as an absolute resource URI plus fragment
+  - `:prefer_local` — render a local fragment for same-resource targets, otherwise
+    a relative ref when it can be computed safely, falling back to absolute
+
+  The default mode is `:prefer_local`.
+
+  ## Examples
+
+      iex> location = %JSONSchex.Ref.Location{
+      ...>   raw_ref: "#/$defs/name",
+      ...>   path: ["schema", "$ref"],
+      ...>   source: "https://example.com/root.json",
+      ...>   base_uri: "https://example.com/root.json",
+      ...>   absolute_uri: "https://example.com/root.json#/$defs/name"
+      ...> }
+      iex> resolution = %JSONSchex.Ref.Resolution{
+      ...>   location: location,
+      ...>   target_source: "https://example.com/root.json",
+      ...>   target_document: %{"$defs" => %{"name" => %{"type" => "string"}}},
+      ...>   target_value: %{"type" => "string"},
+      ...>   target_pointer: "#/$defs/name"
+      ...> }
+      iex> JSONSchex.Ref.render_ref(location, resolution)
+      "#/$defs/name"
+      iex> JSONSchex.Ref.render_ref(location, resolution, mode: :absolute)
+      "https://example.com/root.json#/$defs/name"
+  """
+  @spec render_ref(Location.t(), Resolution.t(), keyword()) :: String.t() | nil
+  def render_ref(%Location{} = location, %Resolution{} = resolution, opts \\ []) do
+    case Keyword.get(opts, :mode, :prefer_local) do
+      :original ->
+        render_original_ref(location, resolution)
+
+      :absolute ->
+        render_absolute_ref(resolution)
+
+      :prefer_local ->
+        render_prefer_local_ref(location, resolution)
+    end
+  end
+
+  defp render_original_ref(%Location{raw_ref: raw_ref}, _resolution) when is_binary(raw_ref),
+    do: raw_ref
+
+  defp render_original_ref(_location, %Resolution{} = resolution),
+    do: render_prefer_local_ref(nil, resolution)
+
+  defp render_absolute_ref(%Resolution{location: %Location{absolute_uri: absolute_uri}})
+       when is_binary(absolute_uri),
+       do: absolute_uri
+
+  defp render_absolute_ref(%Resolution{} = resolution) do
+    target_resource = resource_uri(resolution)
+    fragment = preferred_fragment(resolution)
+
+    cond do
+      is_binary(target_resource) and is_binary(fragment) ->
+        target_resource <> "#" <> fragment
+
+      is_binary(target_resource) and is_binary(resolution.target_pointer) ->
+        target_resource <> resolution.target_pointer
+
+      is_binary(target_resource) ->
+        target_resource
+
+      true ->
+        nil
+    end
+  end
+
+  defp render_prefer_local_ref(%Location{} = location, %Resolution{} = resolution) do
+    source_resource = resource_uri(location)
+    target_resource = resource_uri(resolution)
+
+    cond do
+      is_binary(source_resource) and is_binary(target_resource) and
+          source_resource == target_resource ->
+        render_same_resource_ref(source_resource, resolution)
+
+      is_binary(source_resource) and is_binary(target_resource) ->
+        render_relative_resource_ref(source_resource, target_resource, resolution) ||
+          render_absolute_ref(resolution)
+
+      true ->
+        render_absolute_ref(resolution)
+    end
+  end
+
+  defp render_prefer_local_ref(_location, %Resolution{} = resolution),
+    do: render_absolute_ref(resolution)
+
+  defp render_same_resource_ref(source_resource, %Resolution{} = resolution) do
+    fragment = preferred_fragment(resolution)
+
+    cond do
+      is_binary(fragment) ->
+        "#" <> fragment
+
+      is_binary(resolution.target_pointer) ->
+        resolution.target_pointer
+
+      same_resource_root?(source_resource, resolution) ->
+        "#"
+
+      true ->
+        nil
+    end
+  end
+
+  defp render_relative_resource_ref(source_resource, target_resource, %Resolution{} = resolution) do
+    with relative_resource when is_binary(relative_resource) <-
+           relativize_resource_uri(source_resource, target_resource) do
+      case preferred_fragment(resolution) do
+        fragment when is_binary(fragment) ->
+          relative_resource <> "#" <> fragment
+
+        _ when is_binary(resolution.target_pointer) ->
+          relative_resource <> resolution.target_pointer
+
+        _ ->
+          relative_resource
+      end
+    else
+      _ -> nil
+    end
+  end
+
+  defp preferred_fragment(%Resolution{location: %Location{absolute_uri: absolute_uri}})
+       when is_binary(absolute_uri) do
+    URIUtil.fragment(absolute_uri)
+  end
+
+  defp preferred_fragment(%Resolution{target_pointer: "#" <> fragment}) when is_binary(fragment),
+    do: fragment
+
+  defp preferred_fragment(_), do: nil
+
+  defp same_resource_root?(source_resource, %Resolution{} = resolution) do
+    absolute_uri =
+      case resolution.location do
+        %Location{absolute_uri: absolute_uri} when is_binary(absolute_uri) -> absolute_uri
+        _ -> nil
+      end
+
+    resource_uri(resolution) == source_resource and
+      ((is_binary(absolute_uri) and is_nil(URIUtil.fragment(absolute_uri))) or
+         (is_nil(absolute_uri) and is_nil(resolution.target_pointer) and
+            resolution.target_value === resolution.target_document))
+  end
+
+  defp relativize_resource_uri(source_resource, target_resource) do
+    source = URI.parse(source_resource)
+    target = URI.parse(target_resource)
+
+    cond do
+      path_like_resource?(source_resource) and path_like_resource?(target_resource) ->
+        Path.relative_to(target_resource, path_dirname(source_resource))
+
+      same_hierarchical_uri_origin?(source, target) and is_binary(source.path) and
+          is_binary(target.path) ->
+        Path.relative_to(target.path, path_dirname(source.path))
+
+      true ->
+        nil
+    end
+  end
+
+  defp path_like_resource?(resource) when is_binary(resource) do
+    match?(%URI{scheme: nil}, URI.parse(resource))
+  end
+
+  defp path_like_resource?(_), do: false
+
+  defp same_hierarchical_uri_origin?(source, target) do
+    source.scheme == target.scheme and source.host == target.host and source.port == target.port and
+      source.scheme not in [nil, "urn"] and is_binary(source.path) and is_binary(target.path)
+  end
 
   @doc """
   Recursively scans a document for `$ref` locations.
@@ -223,9 +567,9 @@ defmodule JSONSchex.Ref do
   Passing a scanned `%Location{}` preserves nested `$id` scope. Passing a raw
   reference string resolves from the root document context derived from `opts`.
 
-  External documents are loaded through `:loader` or `:external_loader`. The
-  loader receives the resolved document URI without the fragment and may return
-  either a document directly or `%{document: document, source: source}`.
+  External documents are loaded through `:loader`. The loader receives the
+  resolved document URI without the fragment and may return either a document
+  directly or `%{document: document, source: source}`.
 
   ## Example
 
@@ -318,6 +662,60 @@ defmodule JSONSchex.Ref do
     {:ok, Enum.reverse(state.events)}
   end
 
+  @doc """
+  Structurally transforms a document by applying a callback to each discovered `$ref` location.
+
+  The callback receives the location and one of:
+
+  - `{:ok, resolution}` for a successfully transformed target
+  - `{:cycle, resolution, cycle}` when a target would recurse into an active trail
+  - `{:error, error}` when a location could not be resolved
+
+  Returning `{:replace, term}` replaces the node containing the `$ref`. Returning
+  `:keep` leaves the current node in place. Returning `{:error, term}` aborts the
+  transform.
+
+  Nested refs inside successfully resolved targets are transformed before the
+  callback runs for their successful parent location, making this API suitable
+  for post-order expansion policies. When that happens, the nested
+  `%Location{}` path is reported in the resolved target's own document context,
+  not as a path prefixed by the original referring location.
+
+  This function uses the same root-context options as `walk/2` and `resolve/3`.
+
+  ## Options
+
+  - `:source` — source identifier for the root document. This is primarily
+    provenance metadata for returned `%Location{}`, `%Resolution{}`,
+    `%Error{}`, and `%Cycle{}` values seen by the callback. If `:base_uri` is
+    omitted and `:source` is a binary, `:source` is also used as the initial
+    base URI.
+  - `:base_uri` — explicit starting base URI override used for reference
+    resolution.
+  - `:loader` — `(document_uri -> {:ok, document} | {:ok, %{document: document, source: source}} | {:error, term()})`
+  """
+  @spec transform(document(), transform_callback(), keyword()) :: {:ok, term()} | {:error, term()}
+  def transform(document, fun, opts \\ [])
+      when (is_map(document) or is_list(document) or is_boolean(document)) and is_function(fun, 2) do
+    source = Keyword.get(opts, :source)
+    base_uri = initial_base_uri(opts, source)
+    loader = loader_from_opts(opts)
+
+    state = %{
+      active: MapSet.new(),
+      cache: %{},
+      transformed_targets: %{}
+    }
+
+    case transform_node(document, [], document, source, base_uri, loader, fun, state, [], []) do
+      {:ok, transformed_document, _state} ->
+        {:ok, transformed_document}
+
+      {:error, reason, _state} ->
+        {:error, reason}
+    end
+  end
+
   defp resolve_location(document, %Location{} = location, opts, cache) do
     source = location.source || Keyword.get(opts, :source)
     root_base_uri = initial_base_uri(opts, source)
@@ -332,6 +730,259 @@ defmodule JSONSchex.Ref do
 
       {:error, %Error{} = error, updated_cache} ->
         {{:error, error}, updated_cache}
+    end
+  end
+
+  defp transform_node(
+         value,
+         _path,
+         _resolve_document,
+         _source,
+         _base_uri,
+         _loader,
+         _fun,
+         state,
+         _trail,
+         _path_prefix
+       )
+       when is_boolean(value) or is_binary(value) or is_number(value) or is_nil(value) do
+    {:ok, value, state}
+  end
+
+  defp transform_node(
+         list,
+         path,
+         resolve_document,
+         source,
+         base_uri,
+         loader,
+         fun,
+         state,
+         trail,
+         path_prefix
+       )
+       when is_list(list) do
+    Enum.reduce_while(Enum.with_index(list), {:ok, [], state}, fn {item, index},
+                                                                  {:ok, acc, acc_state} ->
+      case transform_node(
+             item,
+             path ++ [index],
+             resolve_document,
+             source,
+             base_uri,
+             loader,
+             fun,
+             acc_state,
+             trail,
+             path_prefix
+           ) do
+        {:ok, transformed_item, next_state} ->
+          {:cont, {:ok, [transformed_item | acc], next_state}}
+
+        {:error, reason, next_state} ->
+          {:halt, {:error, reason, next_state}}
+      end
+    end)
+    |> case do
+      {:ok, acc, next_state} -> {:ok, Enum.reverse(acc), next_state}
+      {:error, reason, next_state} -> {:error, reason, next_state}
+    end
+  end
+
+  defp transform_node(
+         map,
+         path,
+         resolve_document,
+         source,
+         base_uri,
+         loader,
+         fun,
+         state,
+         trail,
+         path_prefix
+       )
+       when is_map(map) do
+    effective_base_uri = effective_base_uri(base_uri, map)
+
+    case transform_map_entries(
+           map,
+           path,
+           resolve_document,
+           source,
+           effective_base_uri,
+           loader,
+           fun,
+           state,
+           trail,
+           path_prefix
+         ) do
+      {:ok, transformed_map, next_state} ->
+        maybe_transform_current_location(
+          transformed_map,
+          path,
+          resolve_document,
+          source,
+          effective_base_uri,
+          loader,
+          fun,
+          next_state,
+          trail,
+          path_prefix
+        )
+
+      {:error, reason, next_state} ->
+        {:error, reason, next_state}
+    end
+  end
+
+  defp transform_map_entries(
+         map,
+         path,
+         resolve_document,
+         source,
+         base_uri,
+         loader,
+         fun,
+         state,
+         trail,
+         path_prefix
+       ) do
+    map
+    |> Enum.sort_by(&sort_entry/1)
+    |> Enum.reduce_while({:ok, %{}, state}, fn {key, value}, {:ok, acc, acc_state} ->
+      case transform_node(
+             value,
+             path ++ [key],
+             resolve_document,
+             source,
+             base_uri,
+             loader,
+             fun,
+             acc_state,
+             trail,
+             path_prefix
+           ) do
+        {:ok, transformed_value, next_state} ->
+          {:cont, {:ok, Map.put(acc, key, transformed_value), next_state}}
+
+        {:error, reason, next_state} ->
+          {:halt, {:error, reason, next_state}}
+      end
+    end)
+  end
+
+  defp maybe_transform_current_location(
+         map,
+         path,
+         resolve_document,
+         source,
+         base_uri,
+         loader,
+         fun,
+         state,
+         trail,
+         path_prefix
+       ) do
+    case Map.get(map, "$ref") do
+      ref when is_binary(ref) ->
+        location =
+          normalize_location(
+            %Location{raw_ref: ref, path: path ++ ["$ref"], source: source, base_uri: base_uri},
+            source,
+            base_uri
+          )
+          |> prefix_location_path(path_prefix)
+
+        opts = [source: source, base_uri: base_uri, loader: loader]
+        {result, cache} = resolve_location(resolve_document, location, opts, state.cache)
+        state = %{state | cache: cache}
+
+        case result do
+          {:error, %Error{} = error} ->
+            apply_transform_callback(fun, location, {:error, error}, map, state)
+
+          {:ok, %Resolution{} = resolution} ->
+            case transform_resolution(resolution, loader, fun, state, trail) do
+              {:ok, outcome, next_state} ->
+                apply_transform_callback(fun, location, outcome, map, next_state)
+
+              {:error, reason, next_state} ->
+                {:error, reason, next_state}
+            end
+        end
+
+      _ ->
+        {:ok, map, state}
+    end
+  end
+
+  defp transform_resolution(%Resolution{} = resolution, loader, fun, state, trail) do
+    target_uri = resolution_uri(resolution)
+
+    cond do
+      not walkable_document?(resolution.target_value) ->
+        {:ok, {:ok, resolution}, state}
+
+      not is_binary(target_uri) ->
+        {:ok, {:ok, resolution}, state}
+
+      MapSet.member?(state.active, target_uri) ->
+        cycle = %Cycle{
+          location: resolution.location,
+          trail: Enum.reverse([target_uri | trail])
+        }
+
+        {:ok, {:cycle, resolution, cycle}, state}
+
+      same_source_resource_root?(resolution) ->
+        {:ok, {:ok, resolution}, state}
+
+      match?({:ok, _}, Map.fetch(state.transformed_targets, target_uri)) ->
+        transformed_target = Map.fetch!(state.transformed_targets, target_uri)
+        {:ok, {:ok, %{resolution | target_value: transformed_target}}, state}
+
+      true ->
+        next_state = %{state | active: MapSet.put(state.active, target_uri)}
+
+        case transform_node(
+               resolution.target_value,
+               [],
+               resolution.target_document,
+               resolution.target_source,
+               next_base_uri(resolution),
+               loader,
+               fun,
+               next_state,
+               [target_uri | trail],
+               path_prefix_from_resolution(resolution)
+             ) do
+          {:ok, transformed_target, next_state} ->
+            next_state = %{
+              next_state
+              | active: MapSet.delete(next_state.active, target_uri),
+                transformed_targets:
+                  Map.put(next_state.transformed_targets, target_uri, transformed_target)
+            }
+
+            {:ok, {:ok, %{resolution | target_value: transformed_target}}, next_state}
+
+          {:error, reason, next_state} ->
+            next_state = %{next_state | active: MapSet.delete(next_state.active, target_uri)}
+            {:error, reason, next_state}
+        end
+    end
+  end
+
+  defp apply_transform_callback(fun, location, outcome, current_node, state) do
+    case fun.(location, outcome) do
+      {:replace, replacement} ->
+        {:ok, replacement, state}
+
+      :keep ->
+        {:ok, current_node, state}
+
+      {:error, reason} ->
+        {:error, reason, state}
     end
   end
 
@@ -367,7 +1018,7 @@ defmodule JSONSchex.Ref do
   end
 
   defp maybe_walk_resolution(state, %Resolution{} = resolution, loader, trail) do
-    target_uri = resolution.target_uri
+    target_uri = resolution_uri(resolution)
 
     cond do
       not walkable_document?(resolution.target_value) ->
@@ -379,7 +1030,6 @@ defmodule JSONSchex.Ref do
       MapSet.member?(state.active, target_uri) ->
         push_event(state, %Cycle{
           location: resolution.location,
-          target_uri: target_uri,
           trail: Enum.reverse([target_uri | trail])
         })
 
@@ -430,12 +1080,8 @@ defmodule JSONSchex.Ref do
     %{state | seen_locations: MapSet.put(state.seen_locations, location_key(location))}
   end
 
-  defp location_key(%Location{} = location) do
-    {location.source, location.base_uri, location.path, location.absolute_uri}
-  end
-
   defp path_prefix_from_resolution(%Resolution{target_pointer: target_pointer}) do
-    pointer_to_path(target_pointer)
+    decode_target_pointer_path!(target_pointer)
   end
 
   defp same_source_resource_root?(%Resolution{} = resolution) do
@@ -443,10 +1089,12 @@ defmodule JSONSchex.Ref do
       resolution.target_source == resolution.location.source
   end
 
-  defp next_base_uri(%Resolution{target_uri: target_uri, target_source: target_source}) do
+  defp next_base_uri(%Resolution{target_source: target_source} = resolution) do
+    target_uri = resolution_uri(resolution)
+
     cond do
       is_binary(target_uri) ->
-        base_of(target_uri)
+        URIUtil.base(target_uri)
 
       is_binary(target_source) ->
         target_source
@@ -464,13 +1112,18 @@ defmodule JSONSchex.Ref do
   defp build_resolution(location, target) do
     %Resolution{
       location: location,
-      target_uri: location.absolute_uri,
       target_source: target.source,
       target_document: target.document,
       target_value: target.value,
       target_pointer: target.pointer
     }
   end
+
+  defp resolution_uri(%Resolution{location: %Location{absolute_uri: absolute_uri}})
+       when is_binary(absolute_uri),
+       do: absolute_uri
+
+  defp resolution_uri(_), do: nil
 
   defp normalize_location(%Location{} = location, source, root_base_uri) do
     base_uri = location.base_uri || root_base_uri
@@ -480,8 +1133,7 @@ defmodule JSONSchex.Ref do
       location
       | source: location.source || source,
         base_uri: base_uri,
-        absolute_uri: absolute_uri,
-        fragment: location.fragment || fragment_of(absolute_uri || location.raw_ref)
+        absolute_uri: absolute_uri
     }
   end
 
@@ -511,8 +1163,7 @@ defmodule JSONSchex.Ref do
               path: path ++ ["$ref"],
               source: source,
               base_uri: effective_base_uri,
-              absolute_uri: absolute_uri,
-              fragment: fragment_of(absolute_uri || ref)
+              absolute_uri: absolute_uri
             }
             | acc
           ]
@@ -668,7 +1319,6 @@ defmodule JSONSchex.Ref do
      %Error{
        kind: :missing_target,
        location: location,
-       target_uri: location.absolute_uri,
        details: :unknown_local_resource
      }, cache}
   end
@@ -686,7 +1336,6 @@ defmodule JSONSchex.Ref do
          %Error{
            kind: :missing_target,
            location: location,
-           target_uri: location.absolute_uri,
            details: :missing_external_resource
          }, cache}
 
@@ -723,14 +1372,13 @@ defmodule JSONSchex.Ref do
          %Error{
            kind: :missing_target,
            location: location,
-           target_uri: location.absolute_uri,
            details: reason
          }}
     end
   end
 
   defp resolve_within_index(index, _resource, fragment, location) do
-    anchor_uri = with_optional_fragment(base_of(location.absolute_uri), fragment)
+    anchor_uri = with_optional_fragment(URIUtil.base(location.absolute_uri), fragment)
 
     case Map.get(index.anchors, anchor_uri) do
       nil ->
@@ -738,15 +1386,19 @@ defmodule JSONSchex.Ref do
          %Error{
            kind: :missing_target,
            location: location,
-           target_uri: location.absolute_uri,
            details: fragment
          }}
 
       anchor ->
+        pointer =
+          anchor.path
+          |> ExJSONPointer.encode_path(format: "uri_fragment")
+          |> normalize_root_target_pointer()
+
         {:ok,
          %{
            document: anchor.document,
-           pointer: path_to_pointer(anchor.path),
+           pointer: pointer,
            source: anchor.source,
            value: anchor.value
          }}
@@ -775,7 +1427,6 @@ defmodule JSONSchex.Ref do
      %Error{
        kind: :missing_document,
        location: location,
-       target_uri: location.absolute_uri,
        details: :loader_not_configured
      }, cache}
   end
@@ -796,7 +1447,6 @@ defmodule JSONSchex.Ref do
          %Error{
            kind: :missing_document,
            location: location,
-           target_uri: location.absolute_uri,
            details: reason
          }, cache}
 
@@ -805,7 +1455,6 @@ defmodule JSONSchex.Ref do
          %Error{
            kind: :invalid_loader_response,
            location: location,
-           target_uri: location.absolute_uri,
            details: other
          }, cache}
     end
@@ -827,7 +1476,7 @@ defmodule JSONSchex.Ref do
   end
 
   defp loader_from_opts(opts) do
-    Keyword.get(opts, :loader) || Keyword.get(opts, :external_loader)
+    Keyword.get(opts, :loader)
   end
 
   defp effective_base_uri(base_uri, map) do
@@ -843,13 +1492,13 @@ defmodule JSONSchex.Ref do
   defp resolve_reference(base, uri) when is_binary(base) and is_binary(uri) do
     cond do
       uri == "" ->
-        base_of(base)
+        URIUtil.base(base)
 
       absolute_uri?(uri) ->
         uri
 
       String.starts_with?(uri, "#") ->
-        base = base_of(base)
+        base = URIUtil.base(base)
         with_optional_fragment(base, String.trim_leading(uri, "#"))
 
       absolute_uri?(base) ->
@@ -866,14 +1515,14 @@ defmodule JSONSchex.Ref do
     resolved_path =
       cond do
         ref_path == "" ->
-          base_of(base)
+          URIUtil.base(base)
 
         String.starts_with?(ref_path, "/") ->
           ref_path
 
         true ->
           base
-          |> base_of()
+          |> URIUtil.base()
           |> path_dirname()
           |> join_and_normalize(ref_path)
       end
@@ -887,48 +1536,21 @@ defmodule JSONSchex.Ref do
 
   defp absolute_uri?(_), do: false
 
-  defp base_of(value) when is_binary(value) do
-    value
-    |> URIUtil.split_fragment()
-    |> elem(0)
+  defp decode_target_pointer_path!(nil), do: []
+
+  defp decode_target_pointer_path!(target_pointer) when is_binary(target_pointer) do
+    case ExJSONPointer.decode_path(target_pointer) do
+      {:ok, path} ->
+        path
+
+      {:error, reason} ->
+        raise RuntimeError,
+              "invalid internal target_pointer #{inspect(target_pointer)}: #{inspect(reason)}"
+    end
   end
 
-  defp base_of(_), do: ""
-
-  defp fragment_of(value) when is_binary(value), do: URIUtil.fragment(value)
-  defp fragment_of(_), do: nil
-
-  defp path_to_pointer([]), do: nil
-
-  defp path_to_pointer(path) when is_list(path) do
-    encoded = Enum.map(path, &encode_pointer_segment/1)
-    "#/" <> Enum.join(encoded, "/")
-  end
-
-  defp pointer_to_path(nil), do: []
-  defp pointer_to_path("#"), do: []
-
-  defp pointer_to_path("#/" <> rest) do
-    rest
-    |> String.split("/", trim: true)
-    |> Enum.map(&decode_pointer_segment/1)
-  end
-
-  defp pointer_to_path(_), do: []
-
-  defp encode_pointer_segment(segment) when is_integer(segment), do: Integer.to_string(segment)
-
-  defp encode_pointer_segment(segment) when is_binary(segment) do
-    segment
-    |> String.replace("~", "~0")
-    |> String.replace("/", "~1")
-  end
-
-  defp decode_pointer_segment(segment) when is_binary(segment) do
-    segment
-    |> String.replace("~1", "/")
-    |> String.replace("~0", "~")
-  end
+  defp normalize_root_target_pointer("#"), do: nil
+  defp normalize_root_target_pointer(pointer), do: pointer
 
   defp split_target(value) when is_binary(value) do
     {base, fragment} = URIUtil.split_fragment(value)

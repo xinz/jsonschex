@@ -84,4 +84,4 @@ This guide summarizes JSONSchex support for Draft 2020-12 keywords and vocabular
 ## Notes
 
 - When assertion options are not enabled, the corresponding keywords are accepted but do not enforce validation.
-- For remote meta-schema resolution, provide an `external_loader` to `JSONSchex.compile/2`.
+- For remote meta-schema resolution, provide an `loader` to `JSONSchex.compile/2`.

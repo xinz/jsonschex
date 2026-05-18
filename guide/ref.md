@@ -34,6 +34,9 @@ That means:
 - `scan/2` — discover structural `$ref` locations
 - `resolve/3` — resolve one location or raw ref string
 - `walk/2` — traverse reachable `$ref` targets transitively
+- `transform/3` — apply a callback-driven structural rewrite over discovered `$ref` locations
+- `render_ref/3` — render a stable `$ref` string for a resolved target
+- `index_walk_events/1` — convert ordered walk events into a location-keyed index
 
 ## `scan/2`
 
@@ -46,7 +49,8 @@ Each location includes:
 - `:source` — caller-supplied source identifier used for provenance
 - `:base_uri` — effective base URI at that location, honoring nested `$id`
 - `:absolute_uri` — resolved target URI when it can be derived
-- `:fragment` — target fragment without the leading `#`
+
+When you need the fragment portion, derive it from `location.absolute_uri` (or `location.raw_ref`) via `JSONSchex.URIUtil.fragment/1`.
 
 Example:
 
@@ -94,7 +98,7 @@ If you omit `:base_uri`, a binary `:source` also becomes the initial base URI fo
 
 ### Loader contract
 
-External documents are loaded through `:loader` or `:external_loader`.
+External documents are loaded through `:loader`.
 
 The loader receives a **document URI without the fragment** and may return either:
 
@@ -135,7 +139,7 @@ end
     loader: loader
   )
 
-resolution.target_uri
+resolution.location.absolute_uri
 #=> "specs/schemas/common.json#/$defs/id"
 
 resolution.target_pointer
@@ -199,6 +203,197 @@ Enum.map(events, & &1.__struct__)
 #=> [JSONSchex.Ref.Resolution, JSONSchex.Ref.Resolution, JSONSchex.Ref.Cycle, ...]
 ```
 
+## `transform/3`
+
+`transform/3` builds on the same traversal engine as `walk/2`, but lets you decide what to do with each discovered location.
+
+It accepts the same root-context options as `resolve/3` and `walk/2`:
+
+- `:source`
+- `:base_uri`
+- `:loader`
+
+The callback receives:
+
+- the `%JSONSchex.Ref.Location{}` being processed
+- one of:
+  - `{:ok, resolution}`
+  - `{:cycle, resolution, cycle}`
+  - `{:error, error}`
+
+It returns one of:
+
+- `{:replace, term}` — replace the node containing the `$ref`
+- `:keep` — keep the current node unchanged
+- `{:error, term}` — abort the transform
+
+Nested targets are transformed before the callback runs for a successful parent location, which makes `transform/3` useful for post-order expansion.
+
+When a callback is triggered for a nested ref discovered inside a resolved target, the returned `%JSONSchex.Ref.Location{}` path is expressed in that resolved target's own document context. In other words, it is not prefixed by the original referring location's path.
+
+### Expanding non-cyclic refs
+
+A simple downstream expansion policy can replace every successful ref with its resolved target value:
+
+```elixir
+policy = fn _location, outcome ->
+  case outcome do
+    {:ok, resolution} -> {:replace, resolution.target_value}
+    {:cycle, _resolution, _cycle} -> :keep
+    {:error, error} -> {:error, error}
+  end
+end
+
+{:ok, expanded} =
+  JSONSchex.Ref.transform(document, policy,
+    source: "specs/root.json",
+    loader: loader
+  )
+```
+
+### Preserving recursive back-edges
+
+For recursive schemas, a downstream policy can preserve a cycle edge while still expanding non-cyclic refs:
+
+```elixir
+policy = fn location, outcome ->
+  case outcome do
+    {:ok, resolution} ->
+      {:replace, resolution.target_value}
+
+    {:cycle, resolution, _cycle} ->
+      {:replace, %{"$ref" => JSONSchex.Ref.render_ref(location, resolution)}}
+
+    {:error, error} ->
+      {:error, error}
+  end
+end
+```
+
+That keeps `jsonschex` structural and low-level, while letting downstream code decide its own rewrite policy.
+
+## `render_ref/3`
+
+`render_ref/3` renders a stable `$ref` string for a resolved target.
+
+Supported modes are:
+
+- `:original` — reuse the original raw `$ref` spelling from the source location
+- `:absolute` — render an absolute target URI
+- `:prefer_local` — default; render a local fragment for same-resource targets, otherwise prefer a relative resource ref and fall back to absolute rendering
+
+Examples:
+
+- same-resource pointer target → `#/$defs/name`
+- same-resource anchor target → `#name`
+- same-resource root target → `#`
+- cross-resource target → `schemas/common.json#/$defs/name` or an absolute URI
+
+This is especially useful when `transform/3` decides to preserve a cycle edge instead of expanding it.
+
+## `index_walk_events/1`
+
+`index_walk_events/1` turns the ordered output of `walk/2` into a map keyed by `location_key/1`.
+
+This is useful when downstream code wants fast lookup by location rather than replaying the ordered event stream.
+
+```elixir
+{:ok, events} = JSONSchex.Ref.walk(document, source: "specs/root.json", loader: loader)
+index = JSONSchex.Ref.index_walk_events(events)
+
+location = hd(JSONSchex.Ref.scan(document, source: "specs/root.json"))
+key = JSONSchex.Ref.location_key(location)
+
+resolution = index.resolutions[key]
+```
+
+## Local files, nested `$id`, and loader consistency
+
+A common downstream workflow is using local file refs together with nested `$id` boundaries.
+
+Example:
+
+```elixir
+root = %{
+  "$id" => "specs/root.json",
+  "components" => %{
+    "user" => %{
+      "$id" => "schemas/user.json",
+      "schema" => %{"$ref" => "./common.json#/$defs/id"}
+    }
+  }
+}
+
+loader = fn
+  "specs/schemas/common.json" ->
+    {:ok,
+     %{
+       "$defs" => %{
+         "id" => %{"type" => "integer"}
+       }
+     }}
+
+  _ ->
+    {:error, :enoent}
+end
+
+[location] = JSONSchex.Ref.scan(root, source: "specs/root.json")
+{:ok, resolution} = JSONSchex.Ref.resolve(root, location, source: "specs/root.json", loader: loader)
+```
+
+In that example:
+
+- `scan/2` records the nested resource base as `specs/schemas/user.json`
+- the relative ref `./common.json#/$defs/id` resolves to `specs/schemas/common.json#/$defs/id`
+- the loader receives the **document URI without the fragment**: `specs/schemas/common.json`
+
+Runtime validation uses the same document-loading contract for unresolved external refs, so preserved local-file `$ref` values can participate in validation through `loader` as well.
+
+### Recursive local-file traversal with `walk/2`
+
+The same loader contract works for recursive local-file schemas too:
+
+```elixir
+root = %{
+  "$id" => "specs/root.json",
+  "start" => %{"$ref" => "schemas/node.json#/$defs/node"}
+}
+
+loader = fn
+  "specs/schemas/node.json" ->
+    {:ok,
+     %{
+       "$defs" => %{
+         "node" => %{
+           "type" => "object",
+           "properties" => %{
+             "next" => %{"$ref" => "#/$defs/node"}
+           }
+         }
+       }
+     }}
+
+  _ ->
+    {:error, :enoent}
+end
+
+{:ok, events} =
+  JSONSchex.Ref.walk(root,
+    source: "specs/root.json",
+    loader: loader
+  )
+
+Enum.map(events, & &1.__struct__)
+#=> [JSONSchex.Ref.Resolution, JSONSchex.Ref.Resolution, JSONSchex.Ref.Cycle]
+```
+
+In that example:
+
+- the root ref resolves through the loader to `specs/schemas/node.json#/$defs/node`
+- the nested `#/$defs/node` ref is resolved inside the loaded document
+- `walk/2` emits a `%JSONSchex.Ref.Cycle{}` instead of recursing forever
+- the external document is still loaded only once for the whole traversal
+
 ## Structured errors
 
 `resolve/3` and `walk/2` use `%JSONSchex.Ref.Error{}` for resolution failures.
@@ -210,7 +405,7 @@ Current error kinds are:
 - `:missing_target`
 - `:invalid_loader_response`
 
-These errors preserve the originating location and target URI when available, making them useful for downstream diagnostics.
+These errors preserve the originating location, which includes the resolved target URI when it can be derived via `location.absolute_uri`, making them useful for downstream diagnostics.
 
 ## Choosing between APIs
 

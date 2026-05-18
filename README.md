@@ -92,7 +92,7 @@ end
 - `f` — `format_assertion: true`
 - `c` — `content_assertion: true`
 
-For compile-time embeddable options such as `:external_loader`, prefer remote
+For compile-time embeddable options such as `:loader`, prefer remote
 captures like `&MyLoader.fetch/1` over anonymous functions.
 
 `~X` is preferred over `~J` to avoid the common sigil-name conflict with Jason.
@@ -181,7 +181,7 @@ Enum.map(errors, &JSONSchex.format_error/1)
 
 `JSONSchex.compile/2` accepts an optional keyword list with the following options:
 
-- `:external_loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
+- `:loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
 - `:base_uri` — Starting base URI for resolving relative references (see [Loader guide](guide/loader.md))
 - `:format_assertion` — Enable strict `format` validation (default: `false`; the built-in Draft 2020-12 dialect keeps `format` annotation-only unless explicitly enabled, see [Content and format guide](guide/content_and_format.md))
 - `:content_assertion` — Enable strict content vocabulary validation (default: `false`, see [Content and format guide](guide/content_and_format.md))

@@ -14,7 +14,7 @@ defmodule JSONSchex.Types do
             # Used for error reporting context
             source_id: String.t() | nil,
             raw: map() | nil,
-            external_loader: (String.t() -> {:ok, map()} | {:error, term()}) | nil,
+            loader: (String.t() -> {:ok, map()} | {:error, term()}) | nil,
             format_assertion: boolean(),
             content_assertion: boolean()
           }
@@ -23,7 +23,7 @@ defmodule JSONSchex.Types do
       :defs,
       :source_id,
       :raw,
-      :external_loader,
+      :loader,
       format_assertion: false,
       content_assertion: false
     ]

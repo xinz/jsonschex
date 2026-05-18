@@ -1,7 +1,7 @@
 defmodule JSONSchex.Validator.Reference do
   @moduledoc """
-  Resolves `$ref` and `$dynamicRef` during validation, including remote schema
-  loading and JIT compilation of JSON Pointer references.
+  Resolves `$ref` and `$dynamicRef` during validation, including external
+  document loading and JIT compilation of JSON Pointer references.
   """
 
   alias JSONSchex.Validator
@@ -62,9 +62,13 @@ defmodule JSONSchex.Validator.Reference do
   @doc """
   Resolves and validates a static `$ref`.
 
-  Looks up the target schema in the compiled `defs` registry. If not found locally
-  and the reference points to a remote URI, attempts to load it using the `external_loader`.
-  Supports JSON Pointer references, anchor references, and absolute/relative URIs.
+  Looks up the target schema in the compiled `defs` registry. If not found
+  locally and the reference is external, attempts to load it using the
+  `loader`.
+
+  The loader receives the resolved document URI without the fragment. Supports
+  JSON Pointer references, anchor references, and absolute/relative URIs,
+  including path-like local file refs.
   """
   def validate_ref(data, ref_string, {path, evaluated, validation_context}) do
     effective_context = effective_context_for_ref(validation_context, ref_string)
@@ -96,7 +100,12 @@ defmodule JSONSchex.Validator.Reference do
     uri_to_load = resolve_relative_uri(validation_context.source_id, ref_string)
 
     with nil <- check_registry_for_base(uri_to_load, validation_context.root_schema.defs),
-         :ok <- check_load_remote(validation_context.root_schema.external_loader, uri_to_load),
+         :ok <-
+           check_load_remote(
+             validation_context.root_schema.loader,
+             ref_string,
+             uri_to_load
+           ),
          result <- load_remote_schema(data, uri_to_load, path, validation_context, evaluated) do
       result
     else
@@ -173,11 +182,12 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
-  defp check_load_remote(external_loader, uri_to_load) when is_function(external_loader) do
-    if URIUtil.remote_ref?(uri_to_load), do: :ok, else: :halt
+  defp check_load_remote(loader, ref_string, _uri_to_load)
+       when is_function(loader) do
+    if Ref.external_ref?(ref_string), do: :ok, else: :halt
   end
 
-  defp check_load_remote(_, _), do: :halt
+  defp check_load_remote(_, _, _), do: :halt
 
   defp built_in_defs_for_ref(_, nil), do: nil
 
@@ -217,6 +227,9 @@ defmodule JSONSchex.Validator.Reference do
       String.starts_with?(ref_string, base_uri <> "#") ->
         ref_string
 
+      Ref.local_ref?(ref_string) ->
+        URIUtil.with_fragment(base_uri, URIUtil.fragment(ref_string))
+
       true ->
         case URI.parse(base_uri) do
           %{scheme: "urn"} ->
@@ -226,8 +239,33 @@ defmodule JSONSchex.Validator.Reference do
             URIUtil.resolve(base_uri, ref_string)
 
           _ ->
-            ref_string
+            resolve_path_like_uri(base_uri, ref_string)
         end
+    end
+  end
+
+  defp resolve_path_like_uri(base_uri, ref_string) do
+    {ref_path, fragment} = URIUtil.split_fragment(ref_string)
+
+    resolved_path =
+      cond do
+        ref_path == "" ->
+          URIUtil.base(base_uri)
+
+        String.starts_with?(ref_path, "/") ->
+          ref_path
+
+        true ->
+          base_uri
+          |> URIUtil.base()
+          |> path_dirname()
+          |> join_and_normalize(ref_path)
+      end
+
+    if fragment in [nil, ""] do
+      resolved_path
+    else
+      resolved_path <> "#" <> fragment
     end
   end
 
@@ -289,12 +327,12 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp load_external_schema(uri, base, validation_context) do
-    case validation_context.root_schema.external_loader do
+    case validation_context.root_schema.loader do
       loader when is_function(loader) ->
-        case loader.(uri) do
+        case loader.(base) do
           {:ok, remote_raw_map} ->
             opts = [
-              external_loader: validation_context.root_schema.external_loader,
+              loader: validation_context.root_schema.loader,
               base_uri: base,
               format_assertion: validation_context.root_schema.format_assertion,
               content_assertion: validation_context.root_schema.content_assertion
@@ -317,6 +355,29 @@ defmodule JSONSchex.Validator.Reference do
 
       _ ->
         :halt
+    end
+  end
+
+  defp path_dirname(path) do
+    case Path.dirname(path) do
+      "." -> ""
+      value -> value
+    end
+  end
+
+  defp join_and_normalize("", path) do
+    path
+    |> Path.expand("/")
+    |> String.trim_leading("/")
+  end
+
+  defp join_and_normalize(base, path) do
+    if String.starts_with?(base, "/") do
+      Path.expand(path, base)
+    else
+      base
+      |> then(&Path.expand(path, "/" <> &1))
+      |> String.trim_leading("/")
     end
   end
 
@@ -364,7 +425,7 @@ defmodule JSONSchex.Validator.Reference do
     case resolve_jit_fragment(raw_root, pointer, validation_context) do
       {:ok, found_fragment} ->
         opts = [
-          external_loader: validation_context.root_schema.external_loader,
+          loader: validation_context.root_schema.loader,
           format_assertion: validation_context.root_schema.format_assertion,
           content_assertion: validation_context.root_schema.content_assertion
         ]

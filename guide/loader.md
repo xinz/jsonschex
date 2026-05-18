@@ -12,11 +12,11 @@ JSONSchex supports:
 - `$schema` resolution when a meta-schema needs to be fetched
 - `$id`-based base URI scoping for nested schemas
 
-Remote fetching is **opt-in** via the `external_loader` option passed to `JSONSchex.compile/2`.
+Remote fetching is **opt-in** via the `loader` option passed to `JSONSchex.compile/2`.
 
 ## Loader contract
 
-Your loader is a function that receives a URI string and returns one of:
+Your loader is a function that receives a resolved **document URI without the fragment** and returns one of:
 
 - `{:ok, map}` — a decoded JSON Schema map
 - `{:error, term}` — any error reason you want to propagate
@@ -42,7 +42,7 @@ loader = fn uri ->
 end
 
 {:ok, compiled} =
-  JSONSchex.compile(schema, external_loader: loader, base_uri: "https://example.com/root.json")
+  JSONSchex.compile(schema, loader: loader, base_uri: "https://example.com/root.json")
 ```
 
 ### HTTP-based loader example
@@ -96,7 +96,7 @@ schema = %{
   "$ref" => "https://json-schema.org/draft/2020-12/schema"
 }
 
-{:ok, compiled} = JSONSchex.compile(schema, external_loader: &MyApp.SchemaLoader.loader/1)
+{:ok, compiled} = JSONSchex.compile(schema, loader: &MyApp.SchemaLoader.loader/1)
 ```
 
 **Important considerations for HTTP loaders:**
@@ -111,7 +111,7 @@ schema = %{
 
 The loader is invoked when:
 
-1. A `$ref` points to a **remote URI** that is not already in the registry.
+1. A `$ref` points to an unresolved **external** resource that is not already in the registry. This includes `http(s)` refs as well as other non-local refs such as path-like file refs.
 2. A `$schema` URI must be loaded to resolve dialect and `$vocabulary` (if a loader is provided).
 
 If no loader is supplied, JSONSchex skips remote fetches and proceeds with defaults where possible.
@@ -122,8 +122,8 @@ At a high level:
 
 1. Resolve the `$ref` against the current base URI.
 2. Check the local registry for a match.
-3. If the ref is remote and not in the registry, call the loader.
-4. Compile the remote schema and merge its registry into the root context.
+3. If the ref points to an unresolved external resource, call the loader with the resolved document URI without the fragment.
+4. Compile the loaded schema and merge its registry into the root context.
 5. Continue validation from the referenced fragment, if any.
 
 ## :base_uri option and $id interaction

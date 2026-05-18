@@ -45,19 +45,19 @@ defmodule JSONSchex.Compiler do
   def compile(raw_schema, opts \\ [])
 
   def compile(raw_schema, opts) when is_map(raw_schema) do
-    external_loader = Keyword.get(opts, :external_loader)
+    loader = Keyword.get(opts, :loader)
     init_base = Keyword.get(opts, :base_uri)
     format_assertion = Keyword.get(opts, :format_assertion, false)
     content_assertion = Keyword.get(opts, :content_assertion, false)
 
     ctx = %{
-      loader: external_loader,
+      loader: loader,
       format_assertion: format_assertion,
       content_assertion: content_assertion
     }
 
     with :ok <- Dialect.validate_required_vocabularies(raw_schema),
-         {:ok, root_vocabs} <- resolve_dialect(raw_schema, external_loader, @default_vocabs_list),
+         {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
       {global_scopes, explicit_refs} = ScopeScanner.scan(raw_schema)
 
@@ -71,7 +71,7 @@ defmodule JSONSchex.Compiler do
             else
               case Dialect.validate_required_vocabularies(sub_raw) do
                 :ok ->
-                  case resolve_dialect(sub_raw, external_loader, root_vocabs) do
+                  case resolve_dialect(sub_raw, loader, root_vocabs) do
                     {:ok, sub_vocabs} ->
                       sub_raw
                       |> Map.delete("$id")
@@ -109,7 +109,7 @@ defmodule JSONSchex.Compiler do
           error
 
         defs ->
-          {:ok, %{root_compiled | defs: defs, external_loader: external_loader}}
+          {:ok, %{root_compiled | defs: defs, loader: loader}}
       end
     end
   end
@@ -227,7 +227,7 @@ defmodule JSONSchex.Compiler do
          defs: compiled_defs,
          source_id: base,
          raw: schema,
-         external_loader: ctx.loader,
+         loader: ctx.loader,
          format_assertion: ctx.format_assertion,
          content_assertion: ctx.content_assertion
        }}

@@ -25,6 +25,7 @@ defmodule JSONSchex.URIUtil do
   @spec resolve(String.t() | nil, String.t() | nil) :: String.t() | nil
   def resolve(nil, uri), do: uri
   def resolve(base, nil), do: base
+
   def resolve(base, uri) do
     try do
       base |> URI.merge(uri) |> URI.to_string()
@@ -60,6 +61,26 @@ defmodule JSONSchex.URIUtil do
       [base, fragment] -> {base, fragment}
       [base] -> {base, nil}
     end
+  end
+
+  @doc """
+  Returns the base portion of a URI or reference, without any fragment.
+
+  ## Examples
+
+      iex> JSONSchex.URIUtil.base("https://example.com/schema#meta")
+      "https://example.com/schema"
+
+      iex> JSONSchex.URIUtil.base("#/$defs/foo")
+      ""
+
+      iex> JSONSchex.URIUtil.base("https://example.com/schema")
+      "https://example.com/schema"
+  """
+  @spec base(String.t()) :: String.t()
+  def base(uri) when is_binary(uri) do
+    {base, _fragment} = split_fragment(uri)
+    base
   end
 
   @doc """
@@ -101,8 +122,11 @@ defmodule JSONSchex.URIUtil do
   """
   @spec with_fragment(String.t(), String.t() | nil) :: String.t()
   def with_fragment(base, nil) when is_binary(base), do: base
-  def with_fragment(base, fragment) when is_binary(base) and is_binary(fragment), do: base <> "#" <> fragment
-  #def with_fragment(base, fragment) when is_binary(base) and is_binary(fragment), do: base <> fragment
+
+  def with_fragment(base, fragment) when is_binary(base) and is_binary(fragment),
+    do: base <> "#" <> fragment
+
+  # def with_fragment(base, fragment) when is_binary(base) and is_binary(fragment), do: base <> fragment
 
   @doc """
   Converts a fragment into a local reference string.
@@ -145,11 +169,14 @@ defmodule JSONSchex.URIUtil do
   @spec remote_ref?(String.t()) :: boolean()
   # Optimization: Use binary pattern matching with case-insensitive check
   def remote_ref?(<<h, t, t2, p, ?:, ?/, ?/, _rest::binary>>)
-      when (h == ?h or h == ?H) and (t == ?t or t == ?T) and (t2 == ?t or t2 == ?T) and (p == ?p or p == ?P),
+      when (h == ?h or h == ?H) and (t == ?t or t == ?T) and (t2 == ?t or t2 == ?T) and
+             (p == ?p or p == ?P),
       do: true
+
   def remote_ref?(<<h, t, t2, p, s, ?:, ?/, ?/, _rest::binary>>)
       when (h == ?h or h == ?H) and (t == ?t or t == ?T) and (t2 == ?t or t2 == ?T) and
-           (p == ?p or p == ?P) and (s == ?s or s == ?S),
+             (p == ?p or p == ?P) and (s == ?s or s == ?S),
       do: true
+
   def remote_ref?(_), do: false
 end

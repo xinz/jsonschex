@@ -48,7 +48,7 @@ defmodule JSONSchex do
 
   ## Options
 
-  - `:external_loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
+  - `:loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
   - `:base_uri` — Starting base URI for resolving relative references
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)

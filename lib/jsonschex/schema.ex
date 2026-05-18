@@ -29,7 +29,7 @@ defmodule JSONSchex.Schema do
   `JSONSchex.Types.Schema` directly into the caller module.
 
   The schema argument must be a compile-time literal map or boolean. Options
-  must also be compile-time literals. If you pass `:external_loader`, prefer a
+  must also be compile-time literals. If you pass `:loader`, prefer a
   remote capture such as `&MyLoader.fetch/1` so the compiled schema remains
   embeddable.
 
@@ -37,7 +37,7 @@ defmodule JSONSchex.Schema do
 
   The available options are the same as `JSONSchex.compile/2`:
 
-  - `:external_loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
+  - `:loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
   - `:base_uri` — Starting base URI for resolving relative references
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)

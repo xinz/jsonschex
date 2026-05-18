@@ -51,7 +51,7 @@ defmodule JSONSchex.Test.RefInternalRegression do
 
   test "validator JIT fallback still resolves local pointer fragments inside loaded schemas with a different root $id" do
     loader = fn
-      "http://example.com/remote.json#/properties/foo" ->
+      "http://example.com/remote.json" ->
         {:ok,
          %{
            "$id" => "http://example.com/actual/loaded.json",
@@ -69,9 +69,48 @@ defmodule JSONSchex.Test.RefInternalRegression do
       "$ref" => "http://example.com/remote.json#/properties/foo"
     }
 
-    assert {:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+    assert {:ok, compiled} = JSONSchex.compile(schema, loader: loader)
 
     assert :ok == JSONSchex.validate(compiled, 42)
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "not an integer")
+  end
+
+  test "runtime validation loads path-like external refs through loader using document URI without fragment" do
+    parent = self()
+
+    loader = fn
+      "specs/schemas/common.json" ->
+        send(parent, {:loaded, "specs/schemas/common.json"})
+
+        {:ok,
+         %{
+           "$defs" => %{
+             "id" => %{"type" => "integer"}
+           }
+         }}
+
+      other ->
+        send(parent, {:unexpected_load, other})
+        {:error, :enoent}
+    end
+
+    schema = %{
+      "type" => "object",
+      "properties" => %{
+        "id" => %{"$ref" => "schemas/common.json#/$defs/id"}
+      }
+    }
+
+    assert {:ok, compiled} =
+             JSONSchex.compile(schema,
+               base_uri: "specs/root.json",
+               loader: loader
+             )
+
+    assert :ok == JSONSchex.validate(compiled, %{"id" => 1})
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, %{"id" => "1"})
+
+    assert_received {:loaded, "specs/schemas/common.json"}
+    refute_received {:unexpected_load, _}
   end
 end
