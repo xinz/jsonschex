@@ -27,7 +27,12 @@ defmodule JSONSchex.Ref do
     `%Resolution{}`, `%Error{}`, and `%Cycle{}` events
   - `transform/3` applies a callback-driven, policy-free structural rewrite over
     discovered `$ref` locations
+  - `rebase/3` rewrites a resource so its refs remain valid under a new root
+    resource URI
   - `render_ref/3` renders a stable `$ref` string for a resolved target
+  - `target_uri/1` returns a canonical absolute URI for a resolved target when available
+  - `collect_external_resources/2` gathers reachable non-root resources keyed by canonical resource URI
+  - `bundle/3` returns a structured bundle-oriented view with rebased root and collected resources
   - `index_walk_events/1` turns ordered walk events into a location-keyed index
 
   ## Options
@@ -198,6 +203,40 @@ defmodule JSONSchex.Ref do
           cycles: %{optional(location_key()) => Cycle.t()}
         }
 
+  @typedoc "Collected external resource entry keyed by canonical resource URI."
+  @type external_resource_entry :: %{
+          required(:document) => document(),
+          optional(:source) => source() | nil,
+          required(:resolutions) => [Resolution.t()]
+        }
+
+  @typedoc "Collected external resources keyed by canonical resource URI."
+  @type external_resource_index :: %{optional(String.t()) => external_resource_entry()}
+
+  @typedoc "Bundle-oriented resource entry keyed by original canonical resource URI."
+  @type bundle_resource_entry :: %{
+          required(:document) => document(),
+          required(:rebased_document) => document(),
+          optional(:source) => source() | nil,
+          required(:resolutions) => [Resolution.t()],
+          required(:rebased_resource_uri) => String.t()
+        }
+
+  @typedoc "Bundle-oriented resource index keyed by original canonical resource URI."
+  @type bundle_resource_index :: %{optional(String.t()) => bundle_resource_entry()}
+
+  @typedoc "Structured bundle-oriented view built from a root document and reachable resources."
+  @type bundle_result :: %{
+          required(:root_document) => document(),
+          required(:resources_by_uri) => external_resource_index(),
+          required(:rebased_resources_by_uri) => %{optional(String.t()) => document()},
+          required(:resource_uri_map) => %{optional(String.t()) => String.t()},
+          required(:walk_events) => [walk_event()],
+          required(:walk_index) => walk_index(),
+          required(:location_index) => walk_index(),
+          required(:resource_index) => bundle_resource_index()
+        }
+
   @typedoc "Outcome passed to `transform/3` callbacks for a discovered location."
   @type transform_outcome ::
           {:ok, Resolution.t()} | {:cycle, Resolution.t(), Cycle.t()} | {:error, Error.t()}
@@ -209,7 +248,7 @@ defmodule JSONSchex.Ref do
   @type transform_callback :: (Location.t(), transform_outcome() -> transform_callback_result())
 
   @typedoc "Rendering mode used by `render_ref/3`."
-  @type render_mode :: :original | :absolute | :prefer_local
+  @type render_mode :: :original | :absolute | :prefer_local | :mounted
 
   @doc """
   Returns `true` if the given ref is a same-document local ref.
@@ -247,6 +286,205 @@ defmodule JSONSchex.Ref do
   @spec location_key(Location.t()) :: location_key()
   def location_key(%Location{} = location) do
     {location.source, location.base_uri, location.path, location.absolute_uri}
+  end
+
+  @doc """
+  Collects reachable external resources keyed by canonical resource URI.
+
+  This helper builds on `walk/2` and groups successful resolutions whose target
+  resources are outside the original input document resource set.
+
+  Each entry contains:
+
+  - `:document` — the resource root document
+  - `:source` — the loaded document source, when available
+  - `:resolutions` — all successful resolutions that targeted that resource
+
+  Root resources that belong to the original input document are excluded, even
+  when the input contains nested `$id` resources. Only successful reachable
+  non-root resources are collected.
+
+  ## Options
+
+  This function accepts the same root-context options as `walk/2`:
+
+  - `:source` — source identifier for the root document. This is used both as
+    provenance metadata and, when `:base_uri` is omitted and `:source` is a
+    binary, as the initial base URI.
+  - `:base_uri` — explicit starting base URI override used for reference
+    resolution.
+  - `:loader` — `(document_uri -> {:ok, document} | {:ok, %{document: document, source: source}} | {:error, term()})`
+
+  ## Notes
+
+  - this helper only includes resources reached through successful
+    `%Resolution{}` events
+  - `%Error{}` and `%Cycle{}` events are ignored for collection purposes
+  - the `:resolutions` list for each collected resource preserves every
+    successful incoming resolution that targeted that resource
+
+  ## Example
+
+      iex> document = %{
+      ...>   "$id" => "specs/root.json",
+      ...>   "start" => %{"$ref" => "schemas/common.json#/schema"}
+      ...> }
+      iex> loader = fn
+      ...>   "specs/schemas/common.json" ->
+      ...>     {:ok,
+      ...>      %{
+      ...>        document: %{
+      ...>          "$id" => "specs/schemas/common.json",
+      ...>          "$defs" => %{"name" => %{"type" => "string"}},
+      ...>          "schema" => %{"$ref" => "#/$defs/name"}
+      ...>        },
+      ...>        source: "specs/schemas/common.json"
+      ...>      }}
+      ...>   _ ->
+      ...>     {:error, :enoent}
+      ...> end
+      iex> {:ok, resources} =
+      ...>   JSONSchex.Ref.collect_external_resources(document,
+      ...>     source: "specs/root.json",
+      ...>     loader: loader
+      ...>   )
+      iex> Map.keys(resources)
+      ["specs/schemas/common.json"]
+      iex> resources["specs/schemas/common.json"].document["schema"]
+      %{"$ref" => "#/$defs/name"}
+  """
+  @spec collect_external_resources(document(), keyword()) :: {:ok, external_resource_index()}
+  def collect_external_resources(document, opts \\ [])
+      when is_map(document) or is_list(document) or is_boolean(document) do
+    source = Keyword.get(opts, :source)
+    base_uri = initial_base_uri(opts, source)
+    root_resource_uris = root_resource_uris(document, source, base_uri)
+
+    {:ok, events} = walk(document, opts)
+
+    resources =
+      Enum.reduce(events, %{}, fn event, acc ->
+        case event do
+          %Resolution{} = resolution ->
+            case resource_uri(resolution) do
+              uri when is_binary(uri) ->
+                if MapSet.member?(root_resource_uris, uri) do
+                  acc
+                else
+                  Map.update(acc, uri, external_resource_entry(resolution), fn entry ->
+                    append_external_resolution(entry, resolution)
+                  end)
+                end
+
+              _ ->
+                acc
+            end
+
+          _ ->
+            acc
+        end
+      end)
+      |> normalize_external_resource_index()
+
+    {:ok, resources}
+  end
+
+  @doc """
+  Builds a structured bundle-oriented view of the root document and its reachable
+  external resources.
+
+  This helper combines:
+
+  - `walk/2`
+  - `index_walk_events/1`
+  - `collect_external_resources/2`
+  - `rebase/3`
+
+  The returned result includes the rebased root document, original collected
+  external resources keyed by canonical resource URI, rebased external resource
+  documents keyed by their original canonical resource URI, a richer
+  `resource_index`, the merged `resource_uri_map`, and the ordered and indexed
+  walk output.
+
+  ## Options
+
+  This function accepts the same root-context options as `walk/2` and `rebase/3`:
+
+  - `:source`
+  - `:base_uri`
+  - `:loader`
+  - `:resource_uri_map`
+
+  ## Example
+
+      iex> document = %{
+      ...>   "$id" => "specs/root.json",
+      ...>   "start" => %{"$ref" => "schemas/common.json#/schema"}
+      ...> }
+      iex> loader = fn
+      ...>   "specs/schemas/common.json" ->
+      ...>     {:ok,
+      ...>      %{
+      ...>        document: %{
+      ...>          "$id" => "specs/schemas/common.json",
+      ...>          "$defs" => %{"name" => %{"type" => "string"}},
+      ...>          "schema" => %{"$ref" => "#/$defs/name"}
+      ...>        },
+      ...>        source: "specs/schemas/common.json"
+      ...>      }}
+      ...>   _ ->
+      ...>     {:error, :enoent}
+      ...> end
+      iex> {:ok, bundle} =
+      ...>   JSONSchex.Ref.bundle(document, "specs/bundle/root.json",
+      ...>     source: "specs/root.json",
+      ...>     loader: loader,
+      ...>     resource_uri_map: %{
+      ...>       "specs/schemas/common.json" => "specs/bundle/common.json"
+      ...>     }
+      ...>   )
+      iex> bundle.root_document["start"]
+      %{"$ref" => "common.json#/schema"}
+      iex> Map.keys(bundle.resources_by_uri)
+      ["specs/schemas/common.json"]
+      iex> bundle.rebased_resources_by_uri["specs/schemas/common.json"]["$id"]
+      "specs/bundle/common.json"
+      iex> bundle.location_index == bundle.walk_index
+      true
+      iex> bundle.resource_index["specs/schemas/common.json"].rebased_resource_uri
+      "specs/bundle/common.json"
+  """
+  @spec bundle(document(), String.t(), keyword()) :: {:ok, bundle_result()} | {:error, term()}
+  def bundle(document, target_base_uri, opts \\ [])
+      when (is_map(document) or is_list(document) or is_boolean(document)) and
+             is_binary(target_base_uri) do
+    source = Keyword.get(opts, :source)
+    current_base_uri = initial_base_uri(opts, source)
+    root_resource_uri_map = build_rebase_resource_uri_map(document, current_base_uri, target_base_uri)
+    resource_uri_map = Map.merge(resource_uri_map_from_opts(opts), root_resource_uri_map)
+    rebase_opts = Keyword.put(opts, :resource_uri_map, resource_uri_map)
+
+    with {:ok, walk_events} <- walk(document, opts),
+         walk_index = index_walk_events(walk_events),
+         {:ok, resources_by_uri} <- collect_external_resources(document, opts),
+         {:ok, root_document} <- rebase(document, target_base_uri, rebase_opts),
+         {:ok, rebased_resources_by_uri} <-
+           rebase_external_resources(resources_by_uri, resource_uri_map) do
+      resource_index =
+        build_bundle_resource_index(resources_by_uri, rebased_resources_by_uri, resource_uri_map)
+
+      {:ok,
+       %{
+         root_document: root_document,
+         resources_by_uri: resources_by_uri,
+         rebased_resources_by_uri: rebased_resources_by_uri,
+         resource_uri_map: resource_uri_map,
+         walk_events: walk_events,
+         walk_index: walk_index,
+         location_index: walk_index,
+         resource_index: resource_index
+       }}
+    end
   end
 
   @doc """
@@ -343,6 +581,36 @@ defmodule JSONSchex.Ref do
   end
 
   @doc """
+  Returns the canonical absolute URI for a resolved target when it can be derived.
+
+  This is primarily useful for downstream tooling that needs a stable identity
+  key for resolved targets, such as rebasing or bundling logic.
+  """
+  @spec target_uri(Resolution.t()) :: String.t() | nil
+  def target_uri(%Resolution{location: %Location{absolute_uri: absolute_uri}})
+      when is_binary(absolute_uri),
+      do: absolute_uri
+
+  def target_uri(%Resolution{} = resolution) do
+    target_resource = resource_uri(resolution)
+    fragment = preferred_fragment(resolution)
+
+    cond do
+      is_binary(target_resource) and is_binary(fragment) ->
+        target_resource <> "#" <> fragment
+
+      is_binary(target_resource) and is_binary(resolution.target_pointer) ->
+        target_resource <> resolution.target_pointer
+
+      is_binary(target_resource) ->
+        target_resource
+
+      true ->
+        nil
+    end
+  end
+
+  @doc """
   Renders a `$ref` string for the given resolved target.
 
   Supported modes are:
@@ -351,8 +619,18 @@ defmodule JSONSchex.Ref do
   - `:absolute` — render the target as an absolute resource URI plus fragment
   - `:prefer_local` — render a local fragment for same-resource targets, otherwise
     a relative ref when it can be computed safely, falling back to absolute
+  - `:mounted` — render the target as it should appear from a rebased or mounted
+    resource context
 
   The default mode is `:prefer_local`.
+
+  `:mounted` expects:
+
+  - `:mount_base_uri` — the rebased containing resource base URI
+
+  and optionally:
+
+  - `:resource_uri_map` — remaps target resource URIs before rendering
 
   ## Examples
 
@@ -386,6 +664,9 @@ defmodule JSONSchex.Ref do
 
       :prefer_local ->
         render_prefer_local_ref(location, resolution)
+
+      :mounted ->
+        render_mounted_ref(location, resolution, opts)
     end
   end
 
@@ -395,28 +676,7 @@ defmodule JSONSchex.Ref do
   defp render_original_ref(_location, %Resolution{} = resolution),
     do: render_prefer_local_ref(nil, resolution)
 
-  defp render_absolute_ref(%Resolution{location: %Location{absolute_uri: absolute_uri}})
-       when is_binary(absolute_uri),
-       do: absolute_uri
-
-  defp render_absolute_ref(%Resolution{} = resolution) do
-    target_resource = resource_uri(resolution)
-    fragment = preferred_fragment(resolution)
-
-    cond do
-      is_binary(target_resource) and is_binary(fragment) ->
-        target_resource <> "#" <> fragment
-
-      is_binary(target_resource) and is_binary(resolution.target_pointer) ->
-        target_resource <> resolution.target_pointer
-
-      is_binary(target_resource) ->
-        target_resource
-
-      true ->
-        nil
-    end
-  end
+  defp render_absolute_ref(%Resolution{} = resolution), do: target_uri(resolution)
 
   defp render_prefer_local_ref(%Location{} = location, %Resolution{} = resolution) do
     source_resource = resource_uri(location)
@@ -438,6 +698,27 @@ defmodule JSONSchex.Ref do
 
   defp render_prefer_local_ref(_location, %Resolution{} = resolution),
     do: render_absolute_ref(resolution)
+
+  defp render_mounted_ref(%Location{} = location, %Resolution{} = resolution, opts) do
+    case Keyword.get(opts, :mount_base_uri) do
+      mount_base_uri when is_binary(mount_base_uri) ->
+        mount_resource = URIUtil.base(mount_base_uri)
+        source_resource = resource_uri(location)
+
+        resource_uri_map =
+          opts
+          |> resource_uri_map_from_opts()
+          |> maybe_put_mounted_source_resource(source_resource, mount_resource)
+
+        mounted_target_uri =
+          rebase_target_uri(mount_resource, target_uri(resolution), resource_uri_map)
+
+        render_rebased_target_uri(mount_resource, mounted_target_uri)
+
+      _ ->
+        render_absolute_ref(resolution)
+    end
+  end
 
   defp render_same_resource_ref(source_resource, %Resolution{} = resolution) do
     fragment = preferred_fragment(resolution)
@@ -508,11 +789,23 @@ defmodule JSONSchex.Ref do
 
       same_hierarchical_uri_origin?(source, target) and is_binary(source.path) and
           is_binary(target.path) ->
-        Path.relative_to(target.path, path_dirname(source.path))
+        relativize_hierarchical_uri_path(source.path, target.path)
 
       true ->
         nil
     end
+  end
+
+  defp relativize_hierarchical_uri_path(source_path, target_path)
+       when is_binary(source_path) and is_binary(target_path) do
+    source_dir =
+      source_path
+      |> String.trim_leading("/")
+      |> path_dirname()
+
+    target_path
+    |> String.trim_leading("/")
+    |> Path.relative_to(source_dir)
   end
 
   defp path_like_resource?(resource) when is_binary(resource) do
@@ -716,6 +1009,53 @@ defmodule JSONSchex.Ref do
     end
   end
 
+  @doc """
+  Rewrites a resource so its refs remain valid under a new root resource URI.
+
+  This helper preserves ref target semantics while changing the document's root
+  resource identity. Nested relative `$id` values continue to derive from the
+  rebased root. Existing absolute `$id` values remain unchanged.
+
+  Refs that target resources inside the rebased document are rewritten to their
+  rebased locations automatically. Refs targeting resources outside the
+  document remain pointed at their original targets unless an explicit
+  `:resource_uri_map` remaps those target resource URIs.
+
+  ## Options
+
+  - `:source` — source identifier for the current document provenance
+  - `:base_uri` — current starting base URI used to interpret relative refs and `$id`
+    values before rebasing
+  - `:resource_uri_map` — map or keyword list of `old_resource_uri => new_resource_uri`
+    overrides for target resources outside the current document
+  """
+  @spec rebase(document(), String.t(), keyword()) :: {:ok, term()} | {:error, term()}
+  def rebase(document, target_base_uri, opts \\ [])
+      when (is_map(document) or is_list(document) or is_boolean(document)) and
+             is_binary(target_base_uri) do
+    source = Keyword.get(opts, :source)
+    current_base_uri = initial_base_uri(opts, source)
+    resource_uri_map = resource_uri_map_from_opts(opts)
+    internal_resource_uri_map = build_rebase_resource_uri_map(document, current_base_uri, target_base_uri)
+    resource_uri_map = Map.merge(resource_uri_map, internal_resource_uri_map)
+
+    case rebase_node(
+           document,
+           [],
+           source,
+           current_base_uri,
+           target_base_uri,
+           resource_uri_map
+         ) do
+      {:ok, rebased_document} ->
+        rebased_document = maybe_put_root_id(rebased_document, target_base_uri)
+        {:ok, rebased_document}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp resolve_location(document, %Location{} = location, opts, cache) do
     source = location.source || Keyword.get(opts, :source)
     root_base_uri = initial_base_uri(opts, source)
@@ -732,6 +1072,220 @@ defmodule JSONSchex.Ref do
         {{:error, error}, updated_cache}
     end
   end
+
+  defp rebase_node(
+         value,
+         _path,
+         _source,
+         _old_base_uri,
+         _new_base_uri,
+         _resource_uri_map
+       )
+       when is_boolean(value) or is_binary(value) or is_number(value) or is_nil(value) do
+    {:ok, value}
+  end
+
+  defp rebase_node(
+         list,
+         path,
+         source,
+         old_base_uri,
+         new_base_uri,
+         resource_uri_map
+       )
+       when is_list(list) do
+    Enum.reduce_while(Enum.with_index(list), {:ok, []}, fn {item, index}, {:ok, acc} ->
+      case rebase_node(
+             item,
+             path ++ [index],
+             source,
+             old_base_uri,
+             new_base_uri,
+             resource_uri_map
+           ) do
+        {:ok, rebased_item} ->
+          {:cont, {:ok, [rebased_item | acc]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp rebase_node(
+         map,
+         path,
+         source,
+         old_base_uri,
+         new_base_uri,
+         resource_uri_map
+       )
+       when is_map(map) do
+    old_effective_base_uri = effective_base_uri(old_base_uri, map)
+
+    new_effective_base_uri =
+      case path do
+        [] -> new_base_uri
+        _ -> effective_base_uri(new_base_uri, map)
+      end
+
+    map
+    |> Enum.sort_by(&sort_entry/1)
+    |> Enum.reduce_while({:ok, %{}}, fn {key, value}, {:ok, acc} ->
+      case rebase_node(
+             value,
+             path ++ [key],
+             source,
+             old_effective_base_uri,
+             new_effective_base_uri,
+             resource_uri_map
+           ) do
+        {:ok, rebased_value} ->
+          {:cont, {:ok, Map.put(acc, key, rebased_value)}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, rebased_map} ->
+        rebased_map = maybe_put_root_id(rebased_map, path, new_base_uri)
+
+        rebase_current_ref(
+          rebased_map,
+          path,
+          source,
+          old_effective_base_uri,
+          new_effective_base_uri,
+          resource_uri_map
+        )
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp rebase_current_ref(
+         map,
+         _path,
+         _source,
+         _old_effective_base_uri,
+         _new_effective_base_uri,
+         _resource_uri_map
+       )
+       when not is_map(map) do
+    {:ok, map}
+  end
+
+  defp rebase_current_ref(
+         map,
+         path,
+         source,
+         old_effective_base_uri,
+         new_effective_base_uri,
+         resource_uri_map
+       ) do
+    case Map.get(map, "$ref") do
+      ref when is_binary(ref) ->
+        location =
+          normalize_location(
+            %Location{raw_ref: ref, path: path ++ ["$ref"], source: source, base_uri: old_effective_base_uri},
+            source,
+            old_effective_base_uri
+          )
+
+        rebased_ref = rebase_ref(new_effective_base_uri, location, resource_uri_map)
+        {:ok, Map.put(map, "$ref", rebased_ref)}
+
+      _ ->
+        {:ok, map}
+    end
+  end
+
+  defp rebase_ref(new_effective_base_uri, %Location{} = location, resource_uri_map) do
+    source_resource = if is_binary(new_effective_base_uri), do: URIUtil.base(new_effective_base_uri), else: nil
+
+    rebased_target_uri =
+      rebase_target_uri(
+        source_resource,
+        rebase_target_reference(location, resource_uri_map),
+        resource_uri_map
+      )
+
+    render_rebased_target_uri(source_resource, rebased_target_uri)
+  end
+
+  defp rebase_target_reference(%Location{raw_ref: raw_ref} = location, resource_uri_map)
+       when is_binary(raw_ref) do
+    case split_target(raw_ref) do
+      {:ok, target_resource, _fragment} when is_binary(target_resource) ->
+        if Map.has_key?(resource_uri_map, target_resource) do
+          raw_ref
+        else
+          location.absolute_uri || raw_ref
+        end
+
+      _ ->
+        location.absolute_uri || raw_ref
+    end
+  end
+
+  defp rebase_target_reference(%Location{} = location, _resource_uri_map),
+    do: location.absolute_uri || location.raw_ref
+
+  defp rebase_target_uri(source_resource, target_uri, resource_uri_map) when is_binary(target_uri) do
+    case split_target(target_uri) do
+      {:ok, target_resource, fragment} ->
+        target_resource =
+          cond do
+            target_resource in [nil, ""] and is_binary(source_resource) ->
+              source_resource
+
+            is_binary(target_resource) ->
+              Map.get(resource_uri_map, target_resource, target_resource)
+
+            true ->
+              nil
+          end
+
+        if is_binary(target_resource) do
+          with_optional_fragment(target_resource, fragment)
+        else
+          target_uri
+        end
+
+      :error ->
+        target_uri
+    end
+  end
+
+  defp rebase_target_uri(_source_resource, target_uri, _resource_uri_map), do: target_uri
+
+  defp render_rebased_target_uri(source_resource, rebased_target_uri)
+       when is_binary(rebased_target_uri) do
+    case split_target(rebased_target_uri) do
+      {:ok, target_resource, fragment} when is_binary(source_resource) and source_resource == target_resource ->
+        URIUtil.local_ref(fragment)
+
+      {:ok, target_resource, fragment} when is_binary(source_resource) and is_binary(target_resource) ->
+        case relativize_resource_uri(source_resource, target_resource) do
+          relative_resource when is_binary(relative_resource) ->
+            with_optional_fragment(relative_resource, fragment)
+
+          _ ->
+            rebased_target_uri
+        end
+
+      _ ->
+        rebased_target_uri
+    end
+  end
+
+  defp render_rebased_target_uri(_source_resource, rebased_target_uri), do: rebased_target_uri
 
   defp transform_node(
          value,
@@ -917,7 +1471,7 @@ defmodule JSONSchex.Ref do
   end
 
   defp transform_resolution(%Resolution{} = resolution, loader, fun, state, trail) do
-    target_uri = resolution_uri(resolution)
+    target_uri = target_uri(resolution)
 
     cond do
       not walkable_document?(resolution.target_value) ->
@@ -1018,7 +1572,7 @@ defmodule JSONSchex.Ref do
   end
 
   defp maybe_walk_resolution(state, %Resolution{} = resolution, loader, trail) do
-    target_uri = resolution_uri(resolution)
+    target_uri = target_uri(resolution)
 
     cond do
       not walkable_document?(resolution.target_value) ->
@@ -1090,7 +1644,7 @@ defmodule JSONSchex.Ref do
   end
 
   defp next_base_uri(%Resolution{target_source: target_source} = resolution) do
-    target_uri = resolution_uri(resolution)
+    target_uri = target_uri(resolution)
 
     cond do
       is_binary(target_uri) ->
@@ -1118,12 +1672,6 @@ defmodule JSONSchex.Ref do
       target_pointer: target.pointer
     }
   end
-
-  defp resolution_uri(%Resolution{location: %Location{absolute_uri: absolute_uri}})
-       when is_binary(absolute_uri),
-       do: absolute_uri
-
-  defp resolution_uri(_), do: nil
 
   defp normalize_location(%Location{} = location, source, root_base_uri) do
     base_uri = location.base_uri || root_base_uri
@@ -1479,6 +2027,161 @@ defmodule JSONSchex.Ref do
     Keyword.get(opts, :loader)
   end
 
+  defp resource_uri_map_from_opts(opts) do
+    opts
+    |> Keyword.get(:resource_uri_map, %{})
+    |> Map.new()
+  end
+
+
+
+  defp maybe_put_mounted_source_resource(resource_uri_map, source_resource, mount_resource)
+       when is_binary(source_resource) and is_binary(mount_resource) do
+    Map.put_new(resource_uri_map, source_resource, mount_resource)
+  end
+
+  defp maybe_put_mounted_source_resource(resource_uri_map, _source_resource, _mount_resource),
+    do: resource_uri_map
+
+  defp root_resource_uris(document, source, base_uri) do
+    document
+    |> build_index(source, base_uri)
+    |> Map.fetch!(:resources)
+    |> Map.keys()
+    |> MapSet.new()
+  end
+
+  defp external_resource_entry(%Resolution{} = resolution) do
+    %{
+      document: resolution.target_document,
+      source: resolution.target_source,
+      resolutions: [resolution]
+    }
+  end
+
+  defp append_external_resolution(entry, %Resolution{} = resolution) do
+    Map.update!(entry, :resolutions, &[resolution | &1])
+  end
+
+  defp normalize_external_resource_index(resources_by_uri) when is_map(resources_by_uri) do
+    Enum.into(resources_by_uri, %{}, fn {uri, entry} ->
+      {uri, Map.update!(entry, :resolutions, &Enum.reverse/1)}
+    end)
+  end
+
+  defp rebase_external_resources(resources_by_uri, resource_uri_map) when is_map(resources_by_uri) do
+    Enum.reduce_while(resources_by_uri, {:ok, %{}}, fn {uri, entry}, {:ok, acc} ->
+      target_base_uri = Map.get(resource_uri_map, uri, uri)
+      source = Map.get(entry, :source)
+
+      opts = [base_uri: uri, resource_uri_map: resource_uri_map]
+      opts = if is_nil(source), do: opts, else: Keyword.put(opts, :source, source)
+
+      case rebase(entry.document, target_base_uri, opts) do
+        {:ok, rebased_document} ->
+          {:cont, {:ok, Map.put(acc, uri, rebased_document)}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp build_bundle_resource_index(resources_by_uri, rebased_resources_by_uri, resource_uri_map)
+       when is_map(resources_by_uri) and is_map(rebased_resources_by_uri) and is_map(resource_uri_map) do
+    Enum.reduce(resources_by_uri, %{}, fn {uri, entry}, acc ->
+      Map.put(acc, uri, %{
+        document: entry.document,
+        rebased_document: Map.get(rebased_resources_by_uri, uri, entry.document),
+        source: Map.get(entry, :source),
+        resolutions: entry.resolutions,
+        rebased_resource_uri: Map.get(resource_uri_map, uri, uri)
+      })
+    end)
+  end
+
+  defp build_rebase_resource_uri_map(document, current_base_uri, target_base_uri) do
+    do_build_rebase_resource_uri_map(document, [], current_base_uri, target_base_uri, %{})
+  end
+
+  defp do_build_rebase_resource_uri_map(value, path, old_base_uri, new_base_uri, acc)
+       when is_boolean(value) or is_binary(value) or is_number(value) or is_nil(value) do
+    if path == [] do
+      put_rebased_resource_uri(acc, old_base_uri, new_base_uri)
+    else
+      acc
+    end
+  end
+
+  defp do_build_rebase_resource_uri_map(list, path, old_base_uri, new_base_uri, acc)
+       when is_list(list) do
+    acc =
+      if path == [] do
+        put_rebased_resource_uri(acc, old_base_uri, new_base_uri)
+      else
+        acc
+      end
+
+    Enum.reduce(Enum.with_index(list), acc, fn {item, index}, inner_acc ->
+      do_build_rebase_resource_uri_map(
+        item,
+        path ++ [index],
+        old_base_uri,
+        new_base_uri,
+        inner_acc
+      )
+    end)
+  end
+
+  defp do_build_rebase_resource_uri_map(map, path, old_base_uri, new_base_uri, acc)
+       when is_map(map) do
+    old_effective_base_uri = effective_base_uri(old_base_uri, map)
+
+    new_effective_base_uri =
+      case path do
+        [] -> new_base_uri
+        _ -> effective_base_uri(new_base_uri, map)
+      end
+
+    acc =
+      if path == [] or is_binary(Map.get(map, "$id")) do
+        put_rebased_resource_uri(acc, old_effective_base_uri, new_effective_base_uri)
+      else
+        acc
+      end
+
+    Enum.reduce(Enum.sort_by(map, &sort_entry/1), acc, fn {key, value}, inner_acc ->
+      do_build_rebase_resource_uri_map(
+        value,
+        path ++ [key],
+        old_effective_base_uri,
+        new_effective_base_uri,
+        inner_acc
+      )
+    end)
+  end
+
+  defp put_rebased_resource_uri(acc, old_resource_uri, new_resource_uri)
+       when is_binary(old_resource_uri) and is_binary(new_resource_uri) do
+    Map.put(acc, URIUtil.base(old_resource_uri), URIUtil.base(new_resource_uri))
+  end
+
+  defp put_rebased_resource_uri(acc, _old_resource_uri, _new_resource_uri), do: acc
+
+  defp maybe_put_root_id(document, target_base_uri)
+       when is_map(document) and is_binary(target_base_uri) do
+    Map.put(document, "$id", target_base_uri)
+  end
+
+  defp maybe_put_root_id(document, _target_base_uri), do: document
+
+  defp maybe_put_root_id(document, [], target_base_uri)
+       when is_map(document) and is_binary(target_base_uri) do
+    Map.put(document, "$id", target_base_uri)
+  end
+
+  defp maybe_put_root_id(document, _path, _target_base_uri), do: document
+
   defp effective_base_uri(base_uri, map) do
     case Map.get(map, "$id") do
       id when is_binary(id) -> resolve_reference(base_uri, id)
@@ -1493,6 +2196,9 @@ defmodule JSONSchex.Ref do
     cond do
       uri == "" ->
         URIUtil.base(base)
+
+      base == uri ->
+        uri
 
       absolute_uri?(uri) ->
         uri

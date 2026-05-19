@@ -4,7 +4,7 @@
 
 ### Bug Fixes and Improvements
 
-  * Add a new public structural `$ref` API in `JSONSchex.Ref` for discovery (`scan/2`), single-step resolution (`resolve/3`), transitive traversal with cycle reporting (`walk/2`), callback-based transformation (`transform/3`), preserved-ref rendering (`render_ref/3`), and location-keyed walk indexing (`index_walk_events/1`)
+  * Expand the public structural `$ref` API in `JSONSchex.Ref` with rebasing (`rebase/3`), canonical target identity (`target_uri/1`), external resource collection (`collect_external_resources/2`), structured bundle output (`bundle/3`), and mount-aware preserved-ref rendering (`render_ref/3` with `mode: :mounted`) alongside discovery (`scan/2`), single-step resolution (`resolve/3`), transitive traversal with cycle reporting (`walk/2`), callback-based transformation (`transform/3`), and location-keyed walk indexing (`index_walk_events/1`)
   * Improve internal scope scanning so `contentSchema` is traversed for nested `$id`, anchor, and local `$ref` discovery
 
 ## v0.6.0 (2026-05-09)

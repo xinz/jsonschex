@@ -29,13 +29,18 @@ That means:
 
 ## Overview
 
-`JSONSchex.Ref` exposes three main entry points:
+`JSONSchex.Ref` exposes a small set of public structural `$ref` entry points and
+helpers:
 
 - `scan/2` — discover structural `$ref` locations
 - `resolve/3` — resolve one location or raw ref string
 - `walk/2` — traverse reachable `$ref` targets transitively
 - `transform/3` — apply a callback-driven structural rewrite over discovered `$ref` locations
+- `rebase/3` — rewrite a resource so its refs remain valid under a new root resource URI
 - `render_ref/3` — render a stable `$ref` string for a resolved target
+- `target_uri/1` — compute a canonical absolute URI for a resolved target
+- `collect_external_resources/2` — collect reachable non-root resources keyed by canonical resource URI
+- `bundle/3` — return a structured bundle-oriented view containing rebased root and collected resources
 - `index_walk_events/1` — convert ordered walk events into a location-keyed index
 
 ## `scan/2`
@@ -281,6 +286,12 @@ Supported modes are:
 - `:original` — reuse the original raw `$ref` spelling from the source location
 - `:absolute` — render an absolute target URI
 - `:prefer_local` — default; render a local fragment for same-resource targets, otherwise prefer a relative resource ref and fall back to absolute rendering
+- `:mounted` — render the target as it should appear from a rebased or mounted resource context
+
+`mode: :mounted` expects:
+
+- `:mount_base_uri` — the rebased containing resource base URI
+- optional `:resource_uri_map` — target-resource remapping applied before rendering
 
 Examples:
 
@@ -288,8 +299,145 @@ Examples:
 - same-resource anchor target → `#name`
 - same-resource root target → `#`
 - cross-resource target → `schemas/common.json#/$defs/name` or an absolute URI
+- mounted nested target → `../common.json#Pet` or another rebased relative form
 
-This is especially useful when `transform/3` decides to preserve a cycle edge instead of expanding it.
+This is especially useful when `transform/3` decides to preserve a cycle edge instead of expanding it, or when downstream bundling code needs to render refs from a rebased resource context.
+
+## `target_uri/1`
+
+`target_uri/1` returns the canonical absolute URI for a `%JSONSchex.Ref.Resolution{}` when it can be derived.
+
+This is useful when downstream code needs a stable identity key for:
+
+- rebasing
+- resource caches
+- bundle indexes
+- comparing original vs rebased targets
+
+```elixir
+resolution = %JSONSchex.Ref.Resolution{
+  location: %JSONSchex.Ref.Location{
+    raw_ref: "schemas/common.json#/$defs/id",
+    path: ["schema", "$ref"],
+    absolute_uri: "specs/schemas/common.json#/$defs/id"
+  },
+  target_source: "specs/schemas/common.json",
+  target_document: %{"$defs" => %{"id" => %{"type" => "integer"}}},
+  target_value: %{"type" => "integer"},
+  target_pointer: "#/$defs/id"
+}
+
+JSONSchex.Ref.target_uri(resolution)
+#=> "specs/schemas/common.json#/$defs/id"
+```
+
+## `rebase/3`
+
+`rebase/3` rewrites a resource so its refs remain valid under a new root resource URI.
+
+This is a structural rebasing helper, not an expansion helper. It:
+
+- rewrites `$ref` strings as needed
+- preserves already-correct same-resource refs when possible
+- keeps nested relative `$id` resources relative to the new root
+- preserves absolute nested `$id` resources as separate identities
+- optionally applies explicit target remaps through `:resource_uri_map`
+
+It accepts:
+
+- `target_base_uri` — the new root resource URI
+- `:source` — provenance for the current document
+- `:base_uri` — current starting base URI used before rebasing
+- `:resource_uri_map` — optional explicit remaps for target resources outside the current document
+
+Example:
+
+```elixir
+root = %{
+  "$id" => "https://example.com/root.json",
+  "$defs" => %{
+    "user" => %{
+      "$id" => "schemas/user.json",
+      "$defs" => %{"name" => %{"type" => "string"}},
+      "schema" => %{"$ref" => "#/$defs/name"}
+    }
+  },
+  "start" => %{"$ref" => "https://example.com/schemas/user.json#/$defs/name"}
+}
+
+{:ok, rebased} =
+  JSONSchex.Ref.rebase(root, "https://bundle.example/root.json")
+
+rebased["$id"]
+#=> "https://bundle.example/root.json"
+
+rebased["start"]["$ref"]
+#=> "schemas/user.json#/$defs/name"
+```
+
+## `collect_external_resources/2`
+
+`collect_external_resources/2` builds on `walk/2` and groups successful reachable non-root resources by canonical resource URI.
+
+Each entry contains:
+
+- `:document` — the resource root document
+- `:source` — the loaded document source, when available
+- `:resolutions` — all successful incoming resolutions that targeted that resource
+
+Only successful `%Resolution{}` events are collected. `%Error{}` and `%Cycle{}` events are ignored for collection purposes.
+
+```elixir
+{:ok, resources} =
+  JSONSchex.Ref.collect_external_resources(document,
+    source: "specs/root.json",
+    loader: loader
+  )
+
+Map.keys(resources)
+#=> ["specs/schemas/common.json"]
+```
+
+## `bundle/3`
+
+`bundle/3` returns a structured bundle-oriented view of the root document and its reachable external resources.
+
+It combines:
+
+- `walk/2`
+- `index_walk_events/1`
+- `collect_external_resources/2`
+- `rebase/3`
+
+The returned map currently includes:
+
+- `:root_document`
+- `:resources_by_uri`
+- `:rebased_resources_by_uri`
+- `:resource_uri_map`
+- `:walk_events`
+- `:walk_index`
+- `:location_index`
+- `:resource_index`
+
+This is intentionally still a low-level, policy-free helper rather than a final downstream bundling contract, but it already removes a lot of repetitive collection and rebasing glue.
+
+```elixir
+{:ok, bundle} =
+  JSONSchex.Ref.bundle(document, "specs/bundle/root.json",
+    source: "specs/root.json",
+    loader: loader,
+    resource_uri_map: %{
+      "specs/schemas/common.json" => "specs/bundle/common.json"
+    }
+  )
+
+bundle.root_document["$id"]
+#=> "specs/bundle/root.json"
+
+bundle.rebased_resources_by_uri["specs/schemas/common.json"]["$id"]
+#=> "specs/bundle/common.json"
+```
 
 ## `index_walk_events/1`
 

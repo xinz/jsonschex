@@ -212,6 +212,7 @@ end
 
 See the `guide/` directory for detailed documentation:
 
+- [Structural `$ref` discovery, rebasing, and bundling helpers](guide/ref.md)
 - [Loader and remote `$ref` handling](guide/loader.md)
 - [Dialect and `$vocabulary` behavior](guide/dialect_and_vocabulary.md)
 - [Feature matrix (Draft 2020-12 support)](guide/feature_matrix.md)
