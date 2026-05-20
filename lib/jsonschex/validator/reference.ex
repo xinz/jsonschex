@@ -56,7 +56,7 @@ defmodule JSONSchex.Validator.Reference do
   Resolves and validates a static `$ref`.
 
   Looks up the target schema in the compiled `defs` registry. If not found locally
-  and the reference points to a remote URI, attempts to load it using the `external_loader`.
+  and the reference points to a remote URI, attempts to load it using the `loader`.
   Supports JSON Pointer references, anchor references, and absolute/relative URIs.
   """
   def validate_ref(data, ref_string, {path, evaluated, validation_context}) do
@@ -85,7 +85,7 @@ defmodule JSONSchex.Validator.Reference do
     uri_to_load = resolve_relative_uri(validation_context.source_id, ref_string)
 
     with nil <- check_registry_for_base(uri_to_load, validation_context.root_schema.defs),
-         :ok <- check_load_remote(validation_context.root_schema.external_loader, uri_to_load),
+         :ok <- check_load_remote(validation_context.root_schema.loader, uri_to_load),
          result <- load_remote_schema(data, uri_to_load, path, validation_context, evaluated) do
       result
     else
@@ -132,8 +132,8 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
-  defp check_load_remote(external_loader, uri_to_load) when is_function(external_loader) do
-    if URIUtil.remote_ref?(uri_to_load), do: :ok, else: :halt
+  defp check_load_remote(loader, uri_to_load) when is_function(loader) do
+    if URIUtil.remote_ref?(uri_to_load) or URIUtil.external_ref?(uri_to_load), do: :ok, else: :halt
   end
   defp check_load_remote(_, _), do: :halt
 
@@ -173,10 +173,13 @@ defmodule JSONSchex.Validator.Reference do
         case URI.parse(base_uri) do
           %{scheme: "urn"} ->
             ref_string
-          %{scheme: scheme} when scheme != nil ->
-            URIUtil.resolve(base_uri, ref_string)
+
           _ ->
-            ref_string
+            if String.starts_with?(ref_string, "#") do
+              ref_string
+            else
+              URIUtil.resolve(base_uri, ref_string)
+            end
         end
     end
   end
@@ -219,26 +222,11 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp load_external_schema(uri, base, validation_context) do
-    case validation_context.root_schema.external_loader do
+    case validation_context.root_schema.loader do
       loader when is_function(loader) ->
-        case loader.(uri) do
-          {:ok, remote_raw_map} ->
-            opts = [
-              external_loader: validation_context.root_schema.external_loader,
-              base_uri: base,
-              format_assertion: validation_context.root_schema.format_assertion,
-              content_assertion: validation_context.root_schema.content_assertion
-            ]
-
-            case Compiler.compile(remote_raw_map, opts) do
-              {:ok, compiled_remote} ->
-                merged_defs = Map.put(compiled_remote.defs || %{}, base, compiled_remote)
-                merged_context = merge_defs_into_context(validation_context, merged_defs)
-                {:ok, compiled_remote, merged_context}
-
-              {:error, error} ->
-                {:error, %ErrorContext{contrast: "compile_remote", input: uri, error_detail: error}}
-            end
+        case loader.(base) do
+          {:ok, remote_raw} ->
+            compile_loaded_external_schema(remote_raw, uri, base, validation_context)
 
           other ->
             other
@@ -248,6 +236,40 @@ defmodule JSONSchex.Validator.Reference do
         :halt
     end
   end
+
+  defp compile_loaded_external_schema(%{document: document} = loaded, uri, original_base, validation_context)
+       when is_map(document) or is_boolean(document) do
+    base_uri = loaded |> Map.get(:base_uri) |> base_uri_or_original(original_base)
+    compile_loaded_external_schema(document, uri, base_uri, validation_context)
+  end
+
+  defp compile_loaded_external_schema(remote_raw, uri, base, validation_context)
+       when is_map(remote_raw) or is_boolean(remote_raw) do
+    opts = [
+      loader: validation_context.root_schema.loader,
+      base_uri: base,
+      format_assertion: validation_context.root_schema.format_assertion,
+      content_assertion: validation_context.root_schema.content_assertion
+    ]
+
+    case Compiler.compile(remote_raw, opts) do
+      {:ok, compiled_remote} ->
+        merged_defs = Map.put(compiled_remote.defs || %{}, base, compiled_remote)
+
+        merged_context = merge_defs_into_context(validation_context, merged_defs)
+        {:ok, compiled_remote, merged_context}
+
+      {:error, error} ->
+        {:error, %ErrorContext{contrast: "compile_remote", input: uri, error_detail: error}}
+    end
+  end
+
+  defp compile_loaded_external_schema(_remote_raw, uri, _base, _validation_context) do
+    {:error, %ErrorContext{contrast: "invalid_loader_response", input: uri}}
+  end
+
+  defp base_uri_or_original(base_uri, _original_base) when is_binary(base_uri), do: base_uri
+  defp base_uri_or_original(_base_uri, original_base), do: original_base
 
   defp validate_loaded_schema(data, compiled_schema, fragment, current_path, validation_context, evaluated) do
     updated_context = loaded_schema_context(validation_context, compiled_schema)
@@ -278,7 +300,8 @@ defmodule JSONSchex.Validator.Reference do
     case ExJSONPointer.resolve(raw_root, pointer) do
       {:ok, found_fragment} ->
         opts = [
-          external_loader: validation_context.root_schema.external_loader,
+          loader: validation_context.root_schema.loader,
+          base_uri: validation_context.source_id,
           format_assertion: validation_context.root_schema.format_assertion,
           content_assertion: validation_context.root_schema.content_assertion
         ]

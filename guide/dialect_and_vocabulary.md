@@ -12,9 +12,9 @@ This guide explains how JSONSchex interprets `$schema` and `$vocabulary`, and ho
 
 JSONSchex resolves dialect in this order:
 
-1. If the root schema declares the canonical Draft 2020-12 meta-schema URI (`https://json-schema.org/draft/2020-12/schema`), JSONSchex treats it as a built-in dialect and does not invoke the external loader for that URI.
+1. If the root schema declares the canonical Draft 2020-12 meta-schema URI (`https://json-schema.org/draft/2020-12/schema`), JSONSchex treats it as a built-in dialect and does not invoke the configured loader for that URI.
 2. For the built-in Draft 2020-12 dialect, JSONSchex uses the standard Draft 2020-12 active vocabulary defaults, while still honoring an explicit root-level `$vocabulary` declaration when present.
-3. If the root schema contains another `$schema` URI and an `external_loader` is provided, JSONSchex attempts to load that meta-schema remotely.
+3. If the root schema contains another `$schema` URI and a `:loader` is provided, JSONSchex attempts to load that meta-schema remotely.
 4. If a custom meta-schema loads successfully, JSONSchex reads `$vocabulary` from it to build the enabled vocabulary set.
 5. If no loader is available or the meta-schema cannot be loaded, JSONSchex proceeds with the implementation default capability set.
 
@@ -150,7 +150,7 @@ schema = %{
 }
 
 # Compile with the custom loader
-{:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+{:ok, compiled} = JSONSchex.compile(schema, loader: loader)
 
 # The schema compiles, but 'allOf' is ignored because the applicator
 # vocabulary is not in the restricted meta-schema's vocabulary list
@@ -192,7 +192,7 @@ JSONSchex.validate(compiled2, "not-an-email")  # => {:error, [...]}
 ## Practical guidance
 
 - Use the canonical Draft 2020-12 `$schema` URI when you want standard behavior without requiring a remote meta-schema fetch.
-- If you rely on a custom meta-schema or vocabulary, provide an `external_loader`.
+- If you rely on a custom meta-schema or vocabulary, provide a `:loader`.
 - Use `$schema` to make the dialect explicit and predictable.
 - Use an explicit root `$vocabulary` only when you need to override the built-in active vocabulary set for the selected dialect.
 - Avoid mixing keywords from unsupported vocabularies unless you also ship a loader that resolves the meta-schema.

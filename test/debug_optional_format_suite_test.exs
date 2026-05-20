@@ -30,7 +30,7 @@ defmodule JSONSchex.Test.DebugOptionalFormatSuite do
   #  }
   #  """
   #  {:ok, a} = JSON.decode(schema)
-  #  {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1, format_assertion: true])
+  #  {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1, format_assertion: true])
   #  assert {:error, _} = JSONSchex.validate(c, "2020-04-31")
   #  assert :ok == JSONSchex.validate(c, "2020-04-30")
   #end
@@ -43,7 +43,7 @@ defmodule JSONSchex.Test.DebugOptionalFormatSuite do
   #  }
   #  """
   #  {:ok, a} = JSON.decode(schema)
-  #  {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1, format_assertion: true])
+  #  {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1, format_assertion: true])
   #  assert :ok == JSONSchex.validate(c, "실례@실례.테스트")
   #end
 end
