@@ -124,7 +124,7 @@ defmodule JSONSchex.Test.SuiteRunner do
             quote do
               @tag :jsts
               test unquote("Case: #{description}") do
-                opts = [external_loader: &JSONSchex.Test.SuiteLoader.load/1]
+                opts = [loader: &JSONSchex.Test.SuiteLoader.load/1]
                 opts =
                   if unquote(add_format_assertion) do
                     opts ++ [format_assertion: true]

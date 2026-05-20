@@ -92,7 +92,7 @@ end
 - `f` — `format_assertion: true`
 - `c` — `content_assertion: true`
 
-For compile-time embeddable options such as `:external_loader`, prefer remote
+For compile-time embeddable options such as `:loader`, prefer remote
 captures like `&MyLoader.fetch/1` over anonymous functions.
 
 `~X` is preferred over `~J` to avoid the common sigil-name conflict with Jason.
@@ -104,7 +104,7 @@ JSONSchex follows a **two-phase approach** for optimal performance:
 1. **Compile** — Parse and optimize a JSON Schema into an executable `Schema` struct. During compilation:
    - All `$id`, `$anchor`, and discovered local fragment references are scanned and registered
    - Keywords are compiled into serializable rule descriptors consumed by the validator
-   - Remote `$ref` schemas can be loaded via an external loader
+   - Remote `$ref` schemas can be loaded via a configured loader
    - The built-in Draft 2020-12 dialect is recognized without requiring a remote meta-schema load
    - Vocabularies are resolved based on `$schema` and `$vocabulary` declarations
 
@@ -181,10 +181,12 @@ Enum.map(errors, &JSONSchex.format_error/1)
 
 `JSONSchex.compile/2` accepts an optional keyword list with the following options:
 
-- `:external_loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
+- `:loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
 - `:base_uri` — Starting base URI for resolving relative references (see [Loader guide](guide/loader.md))
 - `:format_assertion` — Enable strict `format` validation (default: `false`; the built-in Draft 2020-12 dialect keeps `format` annotation-only unless explicitly enabled, see [Content and format guide](guide/content_and_format.md))
 - `:content_assertion` — Enable strict content vocabulary validation (default: `false`, see [Content and format guide](guide/content_and_format.md))
+
+`JSONSchex.compile_fragment/2` accepts a containing document plus exactly one of `:entry_pointer` or `:entry_ref`. Use `:base_uri` when an `:entry_pointer` fragment contains relative external references. If `:entry_ref` includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution. `JSONSchex.bundle_fragment/2` uses the same entrypoint options and returns a raw schema with reachable external resources mounted under `$defs`. Loader wrapper responses use atom metadata keys only: `{:ok, %{document: schema, base_uri: base_uri}}`.
 
 ## Optional Dependencies
 

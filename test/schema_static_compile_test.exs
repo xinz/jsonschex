@@ -31,7 +31,7 @@ defmodule JSONSchex.Test.SchemaStaticCompile.LoaderModule do
   end
 
   @compiled JSONSchex.Schema.compile!(%{"$ref" => "https://example.com/integer"},
-              external_loader: &__MODULE__.load/1
+              loader: &__MODULE__.load/1
             )
 
   def schema, do: @compiled

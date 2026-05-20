@@ -31,7 +31,7 @@ defmodule JSONSchex.Test.MetaSchema do
     assert {:error, _} = JSONSchex.validate(compiled, %{"nested" => 123})
   end
 
-  test "ensure draft2020-12 $schema won't trigger external loader in compile" do
+  test "ensure draft2020-12 $schema won't trigger configured loader in compile" do
     schema = %{
       "$schema" => "https://json-schema.org/draft/2020-12/schema",
       "const" => %{"foo" => "bar", "baz" => "bax"}
@@ -42,7 +42,7 @@ defmodule JSONSchex.Test.MetaSchema do
         raise "#{uri} is unknown"
     end
 
-    {:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+    {:ok, compiled} = JSONSchex.compile(schema, loader: loader)
 
     data = %{"foo" => "bar", "baz" => "bax"}
     assert JSONSchex.validate(compiled, data) == :ok
@@ -55,7 +55,7 @@ defmodule JSONSchex.Test.MetaSchema do
     }
 
     assert_raise RuntimeError, ~r/#{invalid_schema} is unknown/, fn ->
-      JSONSchex.compile(schema, external_loader: loader)
+      JSONSchex.compile(schema, loader: loader)
     end
   end
 
@@ -76,7 +76,7 @@ defmodule JSONSchex.Test.MetaSchema do
         raise "#{uri} is unknown"
     end
 
-    assert {:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+    assert {:ok, compiled} = JSONSchex.compile(schema, loader: loader)
     assert JSONSchex.validate(compiled, "not-an-email") == :ok
   end
 
@@ -94,7 +94,7 @@ defmodule JSONSchex.Test.MetaSchema do
         raise "#{uri} is unknown"
     end
 
-    assert {:error, error} = JSONSchex.compile(schema, external_loader: loader)
+    assert {:error, error} = JSONSchex.compile(schema, loader: loader)
     assert error.rule == :unsupported_vocabulary
     assert error.path == ["$vocabulary", "https://example.com/custom-vocab"]
     assert error.value == true

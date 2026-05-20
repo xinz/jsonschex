@@ -29,7 +29,7 @@ defmodule JSONSchex.Schema do
   `JSONSchex.Types.Schema` directly into the caller module.
 
   The schema argument must be a compile-time literal map or boolean. Options
-  must also be compile-time literals. If you pass `:external_loader`, prefer a
+  must also be compile-time literals. If you pass `:loader`, prefer a
   remote capture such as `&MyLoader.fetch/1` so the compiled schema remains
   embeddable.
 
@@ -37,7 +37,7 @@ defmodule JSONSchex.Schema do
 
   The available options are the same as `JSONSchex.compile/2`:
 
-  - `:external_loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
+  - `:loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
   - `:base_uri` — Starting base URI for resolving relative references
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
@@ -50,6 +50,28 @@ defmodule JSONSchex.Schema do
   """
   defmacro compile!(schema_ast, opts_ast \\ []) do
     compile_ast!(schema_ast, opts_ast, __CALLER__)
+  end
+
+  @doc """
+  Compiles a static JSON Schema fragment at compile time and embeds the compiled
+  `JSONSchex.Types.Schema` directly into the caller module.
+
+  Accepts a containing document plus options. Local references inside the
+  fragment resolve against the containing document, which is useful for OpenAPI
+  3.1 request/response schemas.
+
+  ## Examples
+
+      iex> require JSONSchex.Schema
+      iex> schema = JSONSchex.Schema.compile_fragment!(
+      ...>   %{"components" => %{"schemas" => %{"Name" => %{"type" => "string"}}}, "schema" => %{"$ref" => "#/components/schemas/Name"}},
+      ...>   entry_pointer: "#/schema"
+      ...> )
+      iex> JSONSchex.validate(schema, "Alice")
+      :ok
+  """
+  defmacro compile_fragment!(document_ast, opts_ast) do
+    compile_fragment_ast!(document_ast, opts_ast, __CALLER__)
   end
 
   @doc false
@@ -71,6 +93,27 @@ defmodule JSONSchex.Schema do
   @doc false
   def embed!(schema, opts, file, line) do
     compile_schema_value!(schema, opts, %{file: file, line: line})
+  end
+
+  @doc false
+  def compile_fragment_ast!(document_ast, opts_ast, caller) do
+    if contains_module_attribute?(document_ast) or contains_module_attribute?(opts_ast) do
+      quote do
+        JSONSchex.Schema.embed_fragment!(
+          unquote(document_ast),
+          unquote(opts_ast),
+          unquote(caller.file),
+          unquote(caller.line)
+        )
+      end
+    else
+      compile_fragment_literal_ast!(document_ast, opts_ast, caller)
+    end
+  end
+
+  @doc false
+  def embed_fragment!(document, opts, file, line) do
+    compile_fragment_value!(document, opts, %{file: file, line: line})
   end
 
   defp compile_literal_ast!(schema_ast, opts_ast, caller) do
@@ -110,6 +153,38 @@ defmodule JSONSchex.Schema do
 
       {:error, error} ->
         raise_compile_error!(caller, "JSONSchex.Schema.compile!/2 failed: #{inspect(error)}")
+    end
+  end
+
+  defp compile_fragment_literal_ast!(document_ast, opts_ast, caller) do
+    document = static_term!(document_ast, caller, "document")
+    opts = static_term!(opts_ast, caller, "options")
+
+    document
+    |> compile_fragment_value!(opts, caller)
+    |> escape_embeddable!(caller)
+  end
+
+  defp compile_fragment_value!(document, opts, caller) do
+    if not Keyword.keyword?(opts) do
+      raise_compile_error!(
+        caller,
+        "JSONSchex.Schema.compile_fragment!/2 expects options to be a compile-time keyword list"
+      )
+    end
+
+    case Compiler.compile_fragment(document, opts) do
+      {:ok, compiled} ->
+        compiled
+
+      {:error, %Error{} = error} ->
+        raise_compile_error!(
+          caller,
+          "JSONSchex.Schema.compile_fragment!/2 failed: #{JSONSchex.format_error(error)}"
+        )
+
+      {:error, error} ->
+        raise_compile_error!(caller, "JSONSchex.Schema.compile_fragment!/2 failed: #{inspect(error)}")
     end
   end
 

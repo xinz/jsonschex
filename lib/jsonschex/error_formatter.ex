@@ -143,6 +143,19 @@ defmodule JSONSchex.ErrorFormatter do
     "Reference not found: #{pointer}"
   end
 
+  defp format_message(%Error{rule: :compile_fragment, context: %{contrast: contrast, input: input, error_detail: detail}}) do
+    base = "Failed to compile schema fragment (#{contrast})"
+
+    details =
+      [
+        if(input, do: "input: #{inspect(input)}", else: nil),
+        if(detail, do: "detail: #{inspect(detail)}", else: nil)
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    if details == [], do: base, else: base <> ": " <> Enum.join(details, ", ")
+  end
+
   defp format_message(%Error{rule: :multipleOf, context: %{contrast: factor, input: data}}) do
     "Value #{data} is not a multiple of #{factor}"
   end
