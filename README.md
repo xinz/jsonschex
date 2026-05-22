@@ -188,6 +188,8 @@ Enum.map(errors, &JSONSchex.format_error/1)
 
 `JSONSchex.compile_fragment/2` accepts a containing document plus exactly one of `:entry_pointer` or `:entry_ref`. Use `:base_uri` when an `:entry_pointer` fragment contains relative external references. If `:entry_ref` includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution. `JSONSchex.bundle_fragment/2` uses the same entrypoint options and returns a raw schema with reachable external resources mounted under `$defs`. Loader wrapper responses use atom metadata keys only: `{:ok, %{document: schema, base_uri: base_uri}}`.
 
+`JSONSchex.Ref.resolve_selected/2` provides selector-driven `$ref` resolution for JSON-like documents. It resolves only `$ref` nodes selected by a caller-provided `:select` function, replaces selected refs with their target values, preserves unselected refs unchanged, and uses the same `:base_uri` / `:loader` mechanics for external resources.
+
 ## Optional Dependencies
 
 JSONSchex has these optional dependencies that enable additional functionality:
