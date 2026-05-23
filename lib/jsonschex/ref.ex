@@ -82,6 +82,42 @@ defmodule JSONSchex.Ref do
 
   Selected `$ref` nodes are replaced by the resolved target value. Unselected
   `$ref` nodes are preserved unchanged and are not interpreted as references.
+
+  ## Examples
+
+  Resolve only the selected local `$ref` node:
+
+      iex> document = %{
+      ...>   "parameter" => %{"$ref" => "#/components/parameters/UserId"},
+      ...>   "schema" => %{"$ref" => "#/components/schemas/User"},
+      ...>   "components" => %{
+      ...>     "parameters" => %{"UserId" => %{"name" => "id", "in" => "path"}},
+      ...>     "schemas" => %{"User" => %{"type" => "object"}}
+      ...>   }
+      ...> }
+      iex> select = fn
+      ...>   ["parameter"], %{"$ref" => _} -> true
+      ...>   _path, _node -> false
+      ...> end
+      iex> {:ok, resolved} = JSONSchex.Ref.resolve_selected(document, select: select)
+      iex> resolved["parameter"]
+      %{"in" => "path", "name" => "id"}
+      iex> resolved["schema"]
+      %{"$ref" => "#/components/schemas/User"}
+
+  Resolve a selected external `$ref` with a loader:
+
+      iex> document = %{"parameter" => %{"$ref" => "./common.yaml#/components/parameters/UserId"}}
+      iex> loader = fn "/api/common.yaml" ->
+      ...>   {:ok, %{"components" => %{"parameters" => %{"UserId" => %{"name" => "id", "in" => "path"}}}}}
+      ...> end
+      iex> {:ok, resolved} = JSONSchex.Ref.resolve_selected(document,
+      ...>   base_uri: "/api/openapi.yaml",
+      ...>   loader: loader,
+      ...>   select: fn _path, %{"$ref" => _} -> true; _path, _node -> false end
+      ...> )
+      iex> resolved["parameter"]
+      %{"in" => "path", "name" => "id"}
   """
   @spec resolve_selected(term(), keyword()) :: {:ok, term()} | {:error, Error.t()}
   def resolve_selected(document, opts) when is_list(opts) do

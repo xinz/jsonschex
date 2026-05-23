@@ -85,6 +85,22 @@ defmodule JSONSchex do
   supplied separately with `:base_uri` or when no relative external refs are
   reachable. `:entry_ref` is useful when the entrypoint and base URI/path can be
   represented as one reference, such as `"/api/openapi.yaml#/components/schemas/User"`.
+
+  ## Examples
+
+      iex> document = %{
+      ...>   "components" => %{"schemas" => %{"Name" => %{"type" => "string"}}},
+      ...>   "schema" => %{"$ref" => "#/components/schemas/Name"}
+      ...> }
+      iex> {:ok, schema} = JSONSchex.compile_fragment(document, entry_pointer: "#/schema")
+      iex> JSONSchex.validate(schema, "Ada")
+      :ok
+      iex> {:error, [%{rule: :type}]} = JSONSchex.validate(schema, 123)
+
+      iex> document = %{"schema" => %{"type" => "integer"}}
+      iex> {:ok, schema} = JSONSchex.compile_fragment(document, entry_ref: "/api/openapi.yaml#/schema")
+      iex> JSONSchex.validate(schema, 42)
+      :ok
   """
   @spec compile_fragment(map() | boolean(), keyword()) :: {:ok, Schema.t()} | {:error, Error.t()}
   defdelegate compile_fragment(document, opts), to: Compiler
@@ -95,6 +111,17 @@ defmodule JSONSchex do
   This uses the same entrypoint and reference-context options as `compile_fragment/2`,
   mounts reachable external resources under `$defs`, and returns a raw JSON Schema
   map or boolean that can be compiled later with `compile/2`.
+
+  ## Examples
+
+      iex> document = %{
+      ...>   "components" => %{"schemas" => %{"Name" => %{"type" => "string"}}},
+      ...>   "schema" => %{"$ref" => "#/components/schemas/Name"}
+      ...> }
+      iex> {:ok, bundled} = JSONSchex.bundle_fragment(document, entry_pointer: "#/schema")
+      iex> {:ok, schema} = JSONSchex.compile(bundled)
+      iex> JSONSchex.validate(schema, "Ada")
+      :ok
   """
   @spec bundle_fragment(map() | boolean(), keyword()) :: {:ok, map() | boolean()} | {:error, Error.t()}
   defdelegate bundle_fragment(document, opts), to: Compiler
