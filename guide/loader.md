@@ -1,6 +1,6 @@
 # Loader and Remote $ref Guide
 
-This guide explains how JSONSchex resolves remote references and how to supply an external loader when compiling schemas.
+This guide explains how JSONSchex resolves remote references and how to supply a loader when compiling schemas.
 
 ## Overview
 
@@ -10,14 +10,19 @@ JSONSchex supports:
 - `$schema` resolution when a meta-schema needs to be fetched
 - `$id`-based base URI scoping for nested schemas
 
-Remote fetching is **opt-in** via the `external_loader` option passed to `JSONSchex.compile/2`.
+Remote fetching is **opt-in** via the `loader` option passed to `JSONSchex.compile/2`.
 
 ## Loader contract
 
 Your loader is a function that receives a URI string and returns one of:
 
-- `{:ok, map}` — a decoded JSON Schema map
+- `{:ok, map}` or `{:ok, boolean}` — a decoded JSON Schema resource
+- `{:ok, %{document: map | boolean, base_uri: binary}}` — a decoded resource plus its canonical base URI/path
 - `{:error, term}` — any error reason you want to propagate
+
+When returning a wrapper map, use the atom keys `:document` and `:base_uri`. JSONSchex does not treat string keys such as `"document"` or `"base_uri"` as loader metadata, because decoded JSON documents commonly use string keys for schema content.
+
+`:base_uri` is optional. If omitted, JSONSchex uses the URI passed to the loader as the loaded resource's base URI. If present, `:base_uri` is used as the loaded resource's base URI so nested relative `$ref` values resolve from that base.
 
 Any other return value is treated as invalid.
 
@@ -40,7 +45,7 @@ loader = fn uri ->
 end
 
 {:ok, compiled} =
-  JSONSchex.compile(schema, external_loader: loader, base_uri: "https://example.com/root.json")
+  JSONSchex.compile(schema, loader: loader, base_uri: "https://example.com/root.json")
 ```
 
 ### HTTP-based loader example
@@ -94,7 +99,7 @@ schema = %{
   "$ref" => "https://json-schema.org/draft/2020-12/schema"
 }
 
-{:ok, compiled} = JSONSchex.compile(schema, external_loader: &MyApp.SchemaLoader.loader/1)
+{:ok, compiled} = JSONSchex.compile(schema, loader: &MyApp.SchemaLoader.loader/1)
 ```
 
 **Important considerations for HTTP loaders:**

@@ -31,7 +31,7 @@ defmodule JSONSchex.Test.DebugDynamicRefSuite do
   #  }
   #  """
   #  {:ok, a} = JSON.decode(schema)
-  #  {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1])
+  #  {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1])
   #  assert {:error, _} = JSONSchex.validate(c, %{"a" => true})
   #  assert {:error, _} = JSONSchex.validate(c, %{"elements" => [%{"b" => 1}]})
   #  assert :ok == JSONSchex.validate(c, %{"elements" => [%{"a" => 1}]})
@@ -68,7 +68,7 @@ defmodule JSONSchex.Test.DebugDynamicRefSuite do
   #  }
   #  """
   #  {:ok, a} = JSON.decode(schema)
-  #  {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1])
+  #  {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1])
   #  assert :ok = JSONSchex.validate(c, ["foo", "1"])
   #  assert {:error, _} = JSONSchex.validate(c, ["foo", 1])
   #end
@@ -115,7 +115,7 @@ defmodule JSONSchex.Test.DebugDynamicRefSuite do
   #  }
   #  """
   #  {:ok, a} = JSON.decode(schema)
-  #  {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1])
+  #  {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1])
   #  assert {:error, _} = JSONSchex.validate(c, "a string")
   #  assert {:error, _} = JSONSchex.validate(c, 42)
   #  assert :ok == JSONSchex.validate(c, nil)
@@ -168,7 +168,7 @@ defmodule JSONSchex.Test.DebugDynamicRefSuite do
     }
     """
     {:ok, a} = JSON.decode(schema)
-    {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1])
+    {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1])
     assert {:error, _} = JSONSchex.validate(c, "a string")
     assert {:error, _} = JSONSchex.validate(c, "hey")
     assert :ok == JSONSchex.validate(c, "hi")

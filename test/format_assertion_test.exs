@@ -8,7 +8,7 @@ defmodule JSONSchex.Test.FormatAssertionTest do
     }
 
     # Default behavior: format is annotation only
-    {:ok, compiled} = JSONSchex.compile(schema, external_loader: &JSONSchex.Test.SuiteLoader.load/1)
+    {:ok, compiled} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
     assert JSONSchex.validate(compiled, "not-an-email") == :ok
     assert JSONSchex.validate(compiled, "test@example.com") == :ok
   end
@@ -20,7 +20,7 @@ defmodule JSONSchex.Test.FormatAssertionTest do
     }
 
     # Forced assertion
-    {:ok, compiled} = JSONSchex.compile(schema, format_assertion: true, external_loader: &JSONSchex.Test.SuiteLoader.load/1)
+    {:ok, compiled} = JSONSchex.compile(schema, format_assertion: true, loader: &JSONSchex.Test.SuiteLoader.load/1)
     
     assert {:error, errors} = JSONSchex.validate(compiled, "not-an-email")
     assert Enum.any?(errors, fn e -> e.rule == :format end)
@@ -61,7 +61,7 @@ defmodule JSONSchex.Test.FormatAssertionTest do
       "format" => "email"
     }
 
-    {:ok, compiled} = JSONSchex.compile(schema, external_loader: loader)
+    {:ok, compiled} = JSONSchex.compile(schema, loader: loader)
 
     assert {:error, errors} = JSONSchex.validate(compiled, "not-an-email")
     assert Enum.any?(errors, fn e -> e.rule == :format end)
@@ -84,11 +84,11 @@ defmodule JSONSchex.Test.FormatAssertionTest do
     }
 
     # Without assertion option (should pass invalid email)
-    {:ok, compiled_default} = JSONSchex.compile(main_schema, external_loader: loader)
+    {:ok, compiled_default} = JSONSchex.compile(main_schema, loader: loader)
     assert JSONSchex.validate(compiled_default, "not-an-email") == :ok
 
     # With assertion option (should fail invalid email)
-    {:ok, compiled_forced} = JSONSchex.compile(main_schema, external_loader: loader, format_assertion: true)
+    {:ok, compiled_forced} = JSONSchex.compile(main_schema, loader: loader, format_assertion: true)
     assert {:error, errors} = JSONSchex.validate(compiled_forced, "not-an-email")
     assert Enum.any?(errors, fn e -> e.rule == :format end)
   end

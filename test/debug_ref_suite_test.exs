@@ -186,7 +186,7 @@ defmodule JSONSchex.Test.DebugRefSuite do
   #  }
   #  """
   #  {:ok, a} = JSON.decode(schema)
-  #  {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1])
+  #  {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1])
   ##  {:ok, c} = JSONSchex.compile(a)
   #  IO.puts "final compiled: #{inspect(c, pretty: true)}"
   #  IO.puts "***start validate***"

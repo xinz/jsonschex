@@ -47,6 +47,7 @@ defmodule JSONSchex.MixProject do
       groups_for_modules: [
         "Public API": [
           JSONSchex,
+          JSONSchex.Ref,
           JSONSchex.Schema,
           JSONSchex.Sigil
         ],

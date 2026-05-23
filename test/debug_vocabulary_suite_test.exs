@@ -20,7 +20,7 @@ defmodule JSONSchex.Test.DebugVocabularySuite do
     }
     """
     {:ok, a} = JSON.decode(schema)
-    {:ok, c} = JSONSchex.compile(a, [external_loader: &JSONSchex.Test.SuiteLoader.load/1])
+    {:ok, c} = JSONSchex.compile(a, [loader: &JSONSchex.Test.SuiteLoader.load/1])
     assert {:error, _} = JSONSchex.validate(c, %{"badProperty" => "this property should not exist"})
     assert :ok == JSONSchex.validate(c, %{"numberProperty" => 1})
     assert :ok == JSONSchex.validate(c, %{"numberProperty" => 20})

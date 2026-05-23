@@ -23,6 +23,8 @@ defmodule JSONSchex.Compiler do
   alias JSONSchex.ScopeScanner
   alias JSONSchex.Draft202012.{Vocabulary, Dialect}
   alias JSONSchex.URIUtil
+  alias JSONSchex.Compiler.Fragment
+  alias JSONSchex.Compiler.Fragment.Bundle
 
   import JSONSchex.Types,
     only: [
@@ -45,21 +47,62 @@ defmodule JSONSchex.Compiler do
   def compile(raw_schema, opts \\ [])
 
   def compile(raw_schema, opts) when is_map(raw_schema) do
-    external_loader = Keyword.get(opts, :external_loader)
-    init_base = Keyword.get(opts, :base_uri)
+    compile_root_schema(raw_schema, raw_schema, Keyword.get(opts, :base_uri), opts, :schema)
+  end
+
+  def compile(value, opts) when is_boolean(value) do
+    format_assertion = Keyword.get(opts, :format_assertion, false)
+    content_assertion = Keyword.get(opts, :content_assertion, false)
+
+    compile_schema_node(value, nil, @default_vocabs_list, %{
+      loader: nil,
+      format_assertion: format_assertion,
+      content_assertion: content_assertion
+    })
+  end
+
+  @doc """
+  Compiles a JSON Schema fragment from a containing document while preserving
+  that document as the reference-resolution context.
+  """
+  @spec compile_fragment(map() | boolean(), keyword()) :: {:ok, Schema.t()} | {:error, Error.t()}
+  def compile_fragment(document, opts) when (is_map(document) or is_boolean(document)) and is_list(opts) do
+    with {:ok, entry_schema, base_uri} <- Fragment.entry(document, opts) do
+      compile_root_schema(entry_schema, document, base_uri, opts, :document)
+    end
+  end
+
+  def compile_fragment(_document, _opts) do
+    {:error,
+     Fragment.error(
+       "invalid_document",
+       nil,
+       "JSONSchex.compile_fragment/2 expects the document to be a map or boolean"
+     )}
+  end
+
+  @doc """
+  Bundles a JSON Schema fragment into a standalone raw schema document.
+  """
+  @spec bundle_fragment(map() | boolean(), keyword()) :: {:ok, map() | boolean()} | {:error, Error.t()}
+  defdelegate bundle_fragment(document, opts), to: Bundle, as: :bundle
+
+  defp compile_root_schema(raw_schema, context_document, init_base, opts, scope_mode) do
+    loader = Keyword.get(opts, :loader)
     format_assertion = Keyword.get(opts, :format_assertion, false)
     content_assertion = Keyword.get(opts, :content_assertion, false)
 
     ctx = %{
-      loader: external_loader,
+      loader: loader,
       format_assertion: format_assertion,
       content_assertion: content_assertion
     }
 
     with :ok <- Dialect.validate_required_vocabularies(raw_schema),
-         {:ok, root_vocabs} <- resolve_dialect(raw_schema, external_loader, @default_vocabs_list),
+         {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
-      {global_scopes, explicit_refs} = ScopeScanner.scan(raw_schema)
+      root_compiled = %{root_compiled | raw: context_document}
+      {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode)
 
       full_defs =
         Enum.reduce_while(global_scopes, root_compiled.defs, fn {id, sub_raw}, acc_defs ->
@@ -71,7 +114,7 @@ defmodule JSONSchex.Compiler do
             else
               case Dialect.validate_required_vocabularies(sub_raw) do
                 :ok ->
-                  case resolve_dialect(sub_raw, external_loader, root_vocabs) do
+                  case resolve_dialect(sub_raw, loader, root_vocabs) do
                     {:ok, sub_vocabs} ->
                       sub_raw
                       |> Map.delete("$id")
@@ -97,28 +140,20 @@ defmodule JSONSchex.Compiler do
         end)
 
       resolved_runtime_defs =
-        resolve_refs(raw_schema, MapSet.to_list(explicit_refs), root_vocabs, ctx)
+        resolve_refs(context_document, MapSet.to_list(explicit_refs), root_vocabs, ctx, init_base)
 
       case merge_defs(full_defs, resolved_runtime_defs) do
         {:error, _} = error ->
           error
 
         defs ->
-          {:ok, %{root_compiled | defs: defs, external_loader: external_loader}}
+          {:ok, %{root_compiled | defs: defs, loader: loader}}
       end
     end
   end
 
-  def compile(value, opts) when is_boolean(value) do
-    format_assertion = Keyword.get(opts, :format_assertion, false)
-    content_assertion = Keyword.get(opts, :content_assertion, false)
-
-    compile_schema_node(value, nil, @default_vocabs_list, %{
-      loader: nil,
-      format_assertion: format_assertion,
-      content_assertion: content_assertion
-    })
-  end
+  defp scan_context(context_document, _base_uri, :schema), do: ScopeScanner.scan(context_document)
+  defp scan_context(context_document, base_uri, :document), do: ScopeScanner.scan_all(context_document, base_uri)
 
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
@@ -154,13 +189,15 @@ defmodule JSONSchex.Compiler do
     {:ok, current_vocabs}
   end
 
-  defp resolve_refs(raw_schema, refs, vocabs, ctx) do
+  defp resolve_refs(raw_schema, refs, vocabs, ctx, base_uri) do
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
       case result do
         {:ok, fragment} ->
-          case compile_schema_node(fragment, nil, vocabs, ctx) do
+          case compile_schema_node(fragment, base_uri, vocabs, ctx) do
             {:ok, compiled_sub} ->
-              Map.put(acc, ref, %{compiled_sub | raw: fragment})
+              compiled_sub = %{compiled_sub | raw: fragment}
+
+              Map.put(acc, ref, compiled_sub)
 
             _ ->
               acc
@@ -217,7 +254,7 @@ defmodule JSONSchex.Compiler do
          defs: compiled_defs,
          source_id: base,
          raw: schema,
-         external_loader: ctx.loader,
+         loader: ctx.loader,
          format_assertion: ctx.format_assertion,
          content_assertion: ctx.content_assertion
        }}
@@ -232,10 +269,9 @@ defmodule JSONSchex.Compiler do
     Enum.reduce_while(raw_defs, {:ok, %{}}, fn {key, sub}, {:ok, acc} ->
       case compile_schema_node(sub, base, vocabs, ctx) do
         {:ok, compiled_sub} ->
-          updated_acc =
-            acc
-            |> Map.put("#/$defs/" <> key, compiled_sub)
-            |> register_id_alias(sub, compiled_sub)
+          local_ref = "#/$defs/" <> key
+
+          updated_acc = Map.put(acc, local_ref, compiled_sub)
 
           {:cont, {:ok, updated_acc}}
 
@@ -244,15 +280,6 @@ defmodule JSONSchex.Compiler do
       end
     end)
   end
-
-  defp register_id_alias(registry, raw_sub_schema, compiled_sub) when is_map(raw_sub_schema) do
-    case Map.get(raw_sub_schema, "$id") do
-      id when is_binary(id) -> Map.put(registry, id, compiled_sub)
-      _ -> registry
-    end
-  end
-
-  defp register_id_alias(registry, _raw_sub_schema, _compiled_sub), do: registry
 
   defp compile_standard_keywords(schema, base, vocabs, ctx) do
     {uneval_props, rest} = Map.pop(schema, "unevaluatedProperties")

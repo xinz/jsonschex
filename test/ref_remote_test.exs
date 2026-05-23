@@ -7,7 +7,7 @@ defmodule JSONSchex.Test.RefRemote do
       "$ref" => "http://localhost:1234/different-id-ref-string.json"
     }
 
-    assert {:ok, c} = JSONSchex.compile(schema, external_loader: &JSONSchex.Test.SuiteLoader.load/1)
+    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
     assert {:error, _e} = JSONSchex.validate(c, 1)
   end
 
@@ -20,7 +20,7 @@ defmodule JSONSchex.Test.RefRemote do
           "name" => %{"$ref" => "name-defs.json#/$defs/orNull"}
       }
     }
-    assert {:ok, c} = JSONSchex.compile(schema, external_loader: &JSONSchex.Test.SuiteLoader.load/1)
+    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
     assert :ok == JSONSchex.validate(c, %{"name" => "foo"})
     assert :ok == JSONSchex.validate(c, %{"name" => nil})
     assert {:error, _} = JSONSchex.validate(c, 1)
@@ -49,7 +49,7 @@ defmodule JSONSchex.Test.RefRemote do
         }
       }
     }
-    assert {:ok, c} = JSONSchex.compile(schema, external_loader: &JSONSchex.Test.SuiteLoader.load/1)
+    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
     assert :ok == JSONSchex.validate(c, %{"list" => [1]})
     assert {:error, [e]} = JSONSchex.validate(c, %{"list" => ["1"]})
     assert e.rule == :type
@@ -63,7 +63,7 @@ defmodule JSONSchex.Test.RefRemote do
           "name" => %{"$ref" => "nested/foo-ref-string.json"}
       }
     }
-    assert {:ok, c} = JSONSchex.compile(schema, external_loader: &JSONSchex.Test.SuiteLoader.load/1)
+    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
     assert :ok == JSONSchex.validate(c, %{"name" => %{"foo" => "a"}})
     assert {:error, _e} = JSONSchex.validate(c, %{"name" => %{"foo" => 1}})
   end
@@ -104,7 +104,7 @@ defmodule JSONSchex.Test.RefRemote do
       "$ref" => "http://example.com/remote.json#/properties/foo"
     }
 
-    assert {:ok, compiled} = JSONSchex.compile(schema, external_loader: &dummy_loader/1)
+    assert {:ok, compiled} = JSONSchex.compile(schema, loader: &dummy_loader/1)
 
     assert :ok == JSONSchex.validate(compiled, 42)
 
@@ -116,7 +116,7 @@ defmodule JSONSchex.Test.RefRemote do
       "$ref" => "http://example.com/remote.json#/properties/does_not_exist"
     }
 
-    assert {:ok, compiled} = JSONSchex.compile(schema, external_loader: &dummy_loader/1)
+    assert {:ok, compiled} = JSONSchex.compile(schema, loader: &dummy_loader/1)
 
     assert {:error, [%{rule: :ref, context: %{contrast: "ref_not_found"}}]} =
              JSONSchex.validate(compiled, 42)
