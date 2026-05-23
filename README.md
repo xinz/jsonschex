@@ -196,7 +196,7 @@ JSONSchex has these optional dependencies that enable additional functionality:
 
 - **`jason` (~> 1.4)**: Required for JSON decoding only when using Elixir earlier than 1.18.
 
-- **`decimal` (~> 2.0)**: Required for arbitrary precision decimal validation in the `multipleOf` keyword. Without this dependency, `multipleOf` validation may have precision issues with very large or very small decimal numbers.
+- **`decimal` (~> 3.0)**: Required for arbitrary precision decimal validation in the `multipleOf` keyword. Without this dependency, `multipleOf` validation may have precision issues with very large or very small decimal numbers.
 
 - **`idna` (~> 6.0 or ~> 7.1)**: Required for internationalized domain name (IDN) support. Enables validation of `idn-hostname` and `idn-email` formats. Without this dependency, these formats may not be validated in expected ways.
 
@@ -206,7 +206,7 @@ To include these dependencies, add them to your `mix.exs`:
 def deps do
   [
     {:jason, "~> 1.4"},
-    {:decimal, "~> 2.0"},
+    {:decimal, "~> 3.0"},
     {:idna, "~> 6.0 or ~> 7.1"}
   ]
 end
