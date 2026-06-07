@@ -2,6 +2,8 @@
 
 ## unreleased
 
+## v0.8.0 (2026-06-07)
+
 ### Breaking Changes
 
   * Replace the separate `:entry_pointer` and `:entry_ref` options for `JSONSchex.compile_fragment/2`, `JSONSchex.bundle_fragment/2`, and `JSONSchex.Schema.compile_fragment!/2` with a single `:entry` option that accepts either a JSON Pointer or URI reference
@@ -13,7 +15,10 @@
   * Add `JSONSchex.compile_fragment/2` and `JSONSchex.Schema.compile_fragment!/2` for compiling JSON Schema fragments while preserving the containing document as the local reference context, useful for OpenAPI 3.1 schemas under paths and components. Fragment entrypoints support exactly one of `:entry_pointer` or `:entry_ref`, with `:entry_ref` providing a base URI/path when `:base_uri` is omitted
   * Add `JSONSchex.bundle_fragment/2` for producing standalone raw schemas from document fragments, including reachable external resources mounted under `$defs`
   * Add `JSONSchex.Ref.resolve_selected/2` for selector-driven `$ref` resolution in JSON-like documents, allowing callers such as OpenAPI tooling to choose which `$ref` nodes are replaced while preserving unselected refs
-  * Breaking change: rename the remote/reference loading option from `:external_loader` to `:loader`
+
+### Breaking Changes
+
+  * Rename the remote/reference loading option from `:external_loader` to `:loader`
 
 ## v0.6.0 (2026-05-09)
 
