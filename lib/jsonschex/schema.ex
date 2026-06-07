@@ -65,7 +65,7 @@ defmodule JSONSchex.Schema do
       iex> require JSONSchex.Schema
       iex> schema = JSONSchex.Schema.compile_fragment!(
       ...>   %{"components" => %{"schemas" => %{"Name" => %{"type" => "string"}}}, "schema" => %{"$ref" => "#/components/schemas/Name"}},
-      ...>   entry_pointer: "#/schema"
+      ...>   entry: "#/schema"
       ...> )
       iex> JSONSchex.validate(schema, "Alice")
       :ok

@@ -13,7 +13,7 @@ defmodule JSONSchex.Test.CompileFragment do
                 },
                 "schema" => %{"$ref" => "#/components/schemas/Name"}
               },
-              entry_pointer: "#/schema"
+              entry: "#/schema"
             )
 
     def schema, do: @schema
@@ -64,7 +64,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: @request_body_pointer,
+               entry: @request_body_pointer,
                base_uri: @base_uri
              )
 
@@ -73,12 +73,24 @@ defmodule JSONSchex.Test.CompileFragment do
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, %{"name" => "Ada", "manager" => %{"id" => "1"}})
   end
 
+  test "accepts root entry aliases" do
+    document = %{"type" => "string"}
+
+    assert {:ok, empty_entry} = JSONSchex.compile_fragment(document, entry: "")
+    assert {:ok, hash_entry} = JSONSchex.compile_fragment(document, entry: "#")
+
+    assert :ok == JSONSchex.validate(empty_entry, "Ada")
+    assert :ok == JSONSchex.validate(hash_entry, "Ada")
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(empty_entry, 123)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(hash_entry, 123)
+  end
+
   test "accepts slash-prefixed entry pointers" do
     document = %{"schemas" => %{"Name" => %{"type" => "string"}}}
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "/schemas/Name",
+               entry: "/schemas/Name",
                base_uri: @base_uri
              )
 
@@ -86,19 +98,40 @@ defmodule JSONSchex.Test.CompileFragment do
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, 123)
   end
 
-  test "accepts entry_ref as an entrypoint" do
-    document = %{"components" => %{"schemas" => %{"Id" => %{"type" => "integer"}}}}
+  test "accepts slash-prefixed entry pointers without base_uri" do
+    document = %{"schemas" => %{"Name" => %{"type" => "string"}}}
+
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document, entry: "/schemas/Name")
+
+    assert :ok == JSONSchex.validate(compiled, "Ada")
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, 123)
+  end
+
+  test "accepts absolute URI entries" do
+    document = %{"schemas" => %{"Id" => %{"type" => "integer"}}}
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_ref: @base_uri <> "#/components/schemas/Id"
+               entry: "https://example.com/openapi.yaml#/schemas/Id"
              )
 
     assert :ok == JSONSchex.validate(compiled, 123)
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "123")
   end
 
-  test "uses entry_ref base when base_uri is omitted" do
+  test "accepts entry as an entrypoint" do
+    document = %{"components" => %{"schemas" => %{"Id" => %{"type" => "integer"}}}}
+
+    assert {:ok, compiled} =
+             JSONSchex.compile_fragment(document,
+               entry: @base_uri <> "#/components/schemas/Id"
+             )
+
+    assert :ok == JSONSchex.validate(compiled, 123)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "123")
+  end
+
+  test "uses entry base when base_uri is omitted" do
     parent = self()
 
     loader = fn
@@ -114,7 +147,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_ref: @base_uri <> "#/schema",
+               entry: @base_uri <> "#/schema",
                loader: loader
              )
 
@@ -138,7 +171,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri
              )
 
@@ -146,7 +179,7 @@ defmodule JSONSchex.Test.CompileFragment do
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, 42)
   end
 
-  test "loads relative external file refs against the base path" do
+  test "loads relative external file refs from a slash-prefixed entry against the base path" do
     parent = self()
 
     loader = fn
@@ -168,7 +201,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -200,7 +233,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -235,7 +268,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -270,7 +303,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -298,7 +331,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri
              )
 
@@ -328,7 +361,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -365,7 +398,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -391,7 +424,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, bundle} =
              JSONSchex.bundle_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri
              )
 
@@ -422,7 +455,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, bundle} =
              JSONSchex.bundle_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -437,7 +470,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:error, error} =
              JSONSchex.bundle_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri
              )
 
@@ -445,25 +478,14 @@ defmodule JSONSchex.Test.CompileFragment do
     assert error.context.error_detail == :no_loader
   end
 
-  test "returns an error when both entry_pointer and entry_ref are provided" do
-    document = %{"schema" => %{"type" => "string"}}
 
-    assert {:error, error} =
-             JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
-               entry_ref: @base_uri <> "#/schema"
-             )
-
-    assert error.rule == :compile_fragment
-    assert error.context.contrast == "ambiguous_entrypoint"
-  end
 
   test "returns a validation diagnostic when a local ref is missing" do
     document = %{"schema" => %{"$ref" => "#/components/schemas/Missing"}}
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri
              )
 
@@ -477,7 +499,7 @@ defmodule JSONSchex.Test.CompileFragment do
 
     assert {:ok, compiled} =
              JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
+               entry: "#/schema",
                base_uri: @base_uri,
                loader: loader
              )
@@ -486,56 +508,43 @@ defmodule JSONSchex.Test.CompileFragment do
              JSONSchex.validate(compiled, %{})
   end
 
-  test "formats compile_fragment missing entrypoint errors" do
+  test "formats compile_fragment missing entry errors" do
     assert {:error, error} = JSONSchex.compile_fragment(%{}, [])
 
     assert JSONSchex.format_error(error) ==
-             ~s|Failed to compile schema fragment (missing_entry_pointer): detail: "Expected exactly one of :entry_pointer or :entry_ref"|
+             ~s|Failed to compile schema fragment (missing_entry): detail: "Expected :entry option"|
   end
 
-  test "formats compile_fragment ambiguous entrypoint errors" do
-    document = %{"schema" => %{"type" => "string"}}
-
-    assert {:error, error} =
-             JSONSchex.compile_fragment(document,
-               entry_pointer: "#/schema",
-               entry_ref: @base_uri <> "#/schema"
-             )
+  test "formats compile_fragment invalid entry errors" do
+    assert {:error, error} = JSONSchex.compile_fragment(%{}, entry: "not-a-pointer")
 
     assert JSONSchex.format_error(error) ==
-             ~s|Failed to compile schema fragment (ambiguous_entrypoint): detail: "Expected exactly one of :entry_pointer or :entry_ref"|
-  end
-
-  test "formats compile_fragment invalid entry pointer errors" do
-    assert {:error, error} = JSONSchex.compile_fragment(%{}, entry_pointer: "not-a-pointer")
-
-    assert JSONSchex.format_error(error) ==
-             ~s|Failed to compile schema fragment (invalid_entry_pointer): input: "not-a-pointer", detail: "Entry pointer must be a JSON Pointer such as #/components/schemas/User or /components/schemas/User"|
+             ~s|Failed to compile schema fragment (invalid_entry): input: "not-a-pointer", detail: "Entry must be a JSON Pointer or URI reference string with a fragment"|
   end
 
   test "formats compile_fragment entry-not-found errors" do
-    assert {:error, error} = JSONSchex.compile_fragment(%{}, entry_pointer: "#/missing")
+    assert {:error, error} = JSONSchex.compile_fragment(%{}, entry: "#/missing")
 
     assert JSONSchex.format_error(error) ==
              ~s|Failed to compile schema fragment (entry_not_found): input: "#/missing", detail: "not found"|
   end
 
   test "formats compile_fragment invalid entry schema errors" do
-    assert {:error, error} = JSONSchex.compile_fragment(%{"schema" => "not a schema"}, entry_pointer: "#/schema")
+    assert {:error, error} = JSONSchex.compile_fragment(%{"schema" => "not a schema"}, entry: "#/schema")
 
     assert JSONSchex.format_error(error) ==
              ~s|Failed to compile schema fragment (invalid_entry_schema): input: "#/schema", detail: "The entrypoint must resolve to a JSON Schema map or boolean"|
   end
 
   test "formats compile_fragment invalid document errors" do
-    assert {:error, error} = JSONSchex.compile_fragment("not a document", entry_pointer: "#/schema")
+    assert {:error, error} = JSONSchex.compile_fragment("not a document", entry: "#/schema")
 
     assert JSONSchex.format_error(error) ==
              ~s|Failed to compile schema fragment (invalid_document): detail: "JSONSchex.compile_fragment/2 expects the document to be a map or boolean"|
   end
 
   test "formats bundle_fragment invalid document errors" do
-    assert {:error, error} = JSONSchex.bundle_fragment("not a document", entry_pointer: "#/schema")
+    assert {:error, error} = JSONSchex.bundle_fragment("not a document", entry: "#/schema")
 
     assert JSONSchex.format_error(error) ==
              ~s|Failed to compile schema fragment (invalid_document): detail: "JSONSchex.bundle_fragment/2 expects the document to be a map or boolean"|

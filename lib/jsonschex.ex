@@ -74,17 +74,17 @@ defmodule JSONSchex do
 
   ## Options
 
-  - `:entry_pointer` — JSON Pointer to the schema fragment (`#/...` or `/...`). Provide exactly one of `:entry_pointer` or `:entry_ref`.
-  - `:entry_ref` — URI-reference style entrypoint alternative (`#/...` or `path-or-uri#/...`). If it includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution.
-  - `:base_uri` — optional starting base URI/path for resolving relative references when the entrypoint is provided as `:entry_pointer`
+  - `:entry` — JSON Pointer or URI-reference style entrypoint (`#/...`, `/...`, or `path-or-uri#/...`). If it includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution.
+  - `:base_uri` — optional starting base URI/path for resolving relative references when `:entry` is a document-local pointer
   - `:loader` — optional loader for external resources. It may return `{:ok, schema}` or `{:ok, %{document: schema, base_uri: base_uri}}`; wrapper metadata uses atom keys only.
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
 
-  `:entry_pointer` is the simplest form when the containing document's base is
-  supplied separately with `:base_uri` or when no relative external refs are
-  reachable. `:entry_ref` is useful when the entrypoint and base URI/path can be
-  represented as one reference, such as `"/api/openapi.yaml#/components/schemas/User"`.
+  Use a document-local entry such as `"#/components/schemas/User"` when the
+  containing document's base is supplied separately with `:base_uri` or when no
+  relative external refs are reachable. Use a URI-reference entry such as
+  `"/api/openapi.yaml#/components/schemas/User"` when the entrypoint and base
+  URI/path can be represented together.
 
   ## Examples
 
@@ -92,13 +92,13 @@ defmodule JSONSchex do
       ...>   "components" => %{"schemas" => %{"Name" => %{"type" => "string"}}},
       ...>   "schema" => %{"$ref" => "#/components/schemas/Name"}
       ...> }
-      iex> {:ok, schema} = JSONSchex.compile_fragment(document, entry_pointer: "#/schema")
+      iex> {:ok, schema} = JSONSchex.compile_fragment(document, entry: "#/schema")
       iex> JSONSchex.validate(schema, "Ada")
       :ok
       iex> {:error, [%{rule: :type}]} = JSONSchex.validate(schema, 123)
 
       iex> document = %{"schema" => %{"type" => "integer"}}
-      iex> {:ok, schema} = JSONSchex.compile_fragment(document, entry_ref: "/api/openapi.yaml#/schema")
+      iex> {:ok, schema} = JSONSchex.compile_fragment(document, entry: "/api/openapi.yaml#/schema")
       iex> JSONSchex.validate(schema, 42)
       :ok
   """
@@ -118,7 +118,7 @@ defmodule JSONSchex do
       ...>   "components" => %{"schemas" => %{"Name" => %{"type" => "string"}}},
       ...>   "schema" => %{"$ref" => "#/components/schemas/Name"}
       ...> }
-      iex> {:ok, bundled} = JSONSchex.bundle_fragment(document, entry_pointer: "#/schema")
+      iex> {:ok, bundled} = JSONSchex.bundle_fragment(document, entry: "#/schema")
       iex> {:ok, schema} = JSONSchex.compile(bundled)
       iex> JSONSchex.validate(schema, "Ada")
       :ok

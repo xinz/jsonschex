@@ -1,5 +1,11 @@
 # Changelog
 
+## unreleased
+
+### Breaking Changes
+
+  * Replace the separate `:entry_pointer` and `:entry_ref` options for `JSONSchex.compile_fragment/2`, `JSONSchex.bundle_fragment/2`, and `JSONSchex.Schema.compile_fragment!/2` with a single `:entry` option that accepts either a JSON Pointer or URI reference
+
 ## v0.7.0 (2026-05-23)
 
 ### Bug Fixes and Improvements

@@ -4,23 +4,19 @@ defmodule JSONSchex.Compiler.Fragment do
   alias JSONSchex.Types.{Error, ErrorContext}
   alias JSONSchex.URIUtil
 
-  @doc false
   def entry(document, opts) do
-    base_uri = base_uri(opts)
-
-    with {:ok, pointer} <- entry_pointer(opts),
+    with {:ok, entry} <- fetch_entry(opts),
+         {:ok, pointer, base_uri_from_entry} <- entry_to_pointer(entry),
          {:ok, entry_schema} <- resolve_entry(document, pointer),
          :ok <- validate_entry_schema(entry_schema, pointer) do
-      {:ok, entry_schema, base_uri}
+      {:ok, entry_schema, base_uri(opts, base_uri_from_entry)}
     end
   end
 
-  @doc false
-  def base_uri(opts) do
-    Keyword.get(opts, :base_uri) || entry_ref_base_uri(opts)
+  defp base_uri(opts, base_uri_from_entry) do
+    Keyword.get(opts, :base_uri) || base_uri_from_entry
   end
 
-  @doc false
   def error(contrast, input, detail) do
     %Error{
       rule: :compile_fragment,
@@ -29,70 +25,61 @@ defmodule JSONSchex.Compiler.Fragment do
     }
   end
 
-  defp entry_ref_base_uri(opts) do
-    case Keyword.get(opts, :entry_ref) do
-      entry_ref when is_binary(entry_ref) ->
-        case URIUtil.split_fragment(entry_ref) do
-          {"", _fragment} -> nil
-          {base, _fragment} -> base
-        end
+  defp fetch_entry(opts) do
+    case Keyword.get(opts, :entry) do
+      entry when is_binary(entry) ->
+        {:ok, entry}
 
-      _ ->
-        nil
-    end
-  end
-
-  defp entry_pointer(opts) do
-    entry_pointer = Keyword.get(opts, :entry_pointer)
-    entry_ref = Keyword.get(opts, :entry_ref)
-
-    cond do
-      is_binary(entry_pointer) and is_binary(entry_ref) ->
+      nil ->
         {:error,
          error(
-           "ambiguous_entrypoint",
+           "missing_entry",
            nil,
-           "Expected exactly one of :entry_pointer or :entry_ref"
+           "Expected :entry option"
          )}
 
-      is_binary(entry_pointer) ->
-        canonical_entry_pointer(entry_pointer)
-
-      is_binary(entry_ref) ->
-        entry_ref_to_pointer(entry_ref)
-
-      true ->
+      entry ->
         {:error,
          error(
-           "missing_entry_pointer",
-           nil,
-           "Expected exactly one of :entry_pointer or :entry_ref"
+           "invalid_entry",
+           entry,
+           "Entry must be a JSON Pointer or URI reference string"
          )}
     end
   end
 
-  defp canonical_entry_pointer(""), do: {:ok, ""}
-  defp canonical_entry_pointer("#"), do: {:ok, "#"}
-  defp canonical_entry_pointer("#" <> _ = pointer), do: {:ok, pointer}
-  defp canonical_entry_pointer("/" <> _ = pointer), do: {:ok, pointer}
+  defp entry_to_pointer(""), do: {:ok, "", nil}
+  defp entry_to_pointer("#"), do: {:ok, "#", nil}
+  defp entry_to_pointer("#" <> _ = pointer), do: {:ok, pointer, nil}
+  defp entry_to_pointer(entry) do
+    entry
+    |> URIUtil.split_fragment()
+    |> entry_to_pointer(entry)
+  end
 
-  defp canonical_entry_pointer(pointer) do
+  defp entry_to_pointer({"", _fragment}, "/" <> _ = entry) do
+    {:ok, entry, nil}
+  end
+  defp entry_to_pointer({"", nil}, entry) do
+    invalid_entry(entry)
+  end
+  defp entry_to_pointer({base, nil}, "/" <> _ = entry) do
+    {:ok, entry, base}
+  end
+  defp entry_to_pointer({base, nil}, entry) when is_binary(base) do
+    invalid_entry(entry)
+  end
+  defp entry_to_pointer({base, fragment}, _entry) do
+    {:ok, "#" <> fragment, base}
+  end
+
+  defp invalid_entry(entry) do
     {:error,
      error(
-       "invalid_entry_pointer",
-       pointer,
-       "Entry pointer must be a JSON Pointer such as #/components/schemas/User or /components/schemas/User"
+       "invalid_entry",
+       entry,
+       "Entry must be a JSON Pointer or URI reference string with a fragment"
      )}
-  end
-
-  defp entry_ref_to_pointer(ref) do
-    {_base, fragment} = URIUtil.split_fragment(ref)
-
-    case fragment do
-      nil -> {:ok, "#"}
-      "/" <> _ = pointer -> {:ok, "#" <> pointer}
-      other -> {:ok, "#" <> other}
-    end
   end
 
   defp resolve_entry(document, pointer) do
