@@ -55,7 +55,8 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Types,
           JSONSchex.Types.Schema,
           JSONSchex.Types.Rule,
-          JSONSchex.Types.Error
+          JSONSchex.Types.Error,
+          JSONSchex.ErrorFormatter
         ],
         Compiler: [
           JSONSchex.Compiler,
@@ -82,13 +83,19 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Vocabulary,
           JSONSchex.ScopeScanner,
           JSONSchex.URIUtil
+        ],
+        Draft202012: [
+          JSONSchex.Draft202012.Vocabulary,
+          JSONSchex.Draft202012.Schemas,
+          JSONSchex.Draft202012.Dialect,
         ]
       ],
       nest_modules_by_prefix: [
         JSONSchex.Types,
         JSONSchex.Compiler,
         JSONSchex.Validator,
-        JSONSchex.Formats
+        JSONSchex.Formats,
+        JSONSchex.Draft202012
       ]
     ]
   end
