@@ -81,7 +81,10 @@ defmodule JSONSchex.Ref do
   - `:loader` — optional loader for external resources.
 
   Selected `$ref` nodes are replaced by the resolved target value. Unselected
-  `$ref` nodes are preserved unchanged and are not interpreted as references.
+  `$ref` nodes are preserved and are not interpreted as references. When an
+  external selected target is inlined, nested unselected `$ref` string values are
+  rebased against the loaded resource's effective base URI so they continue to
+  point at their original resource.
 
   ## Examples
 
@@ -130,7 +133,7 @@ defmodule JSONSchex.Ref do
         cache: %{}
       }
 
-      case walk(document, [], document, base_uri, state, []) do
+      case walk(document, [], document, base_uri, nil, state, []) do
         {:ok, resolved, _state} -> {:ok, resolved}
         {:error, %Error{} = error} -> {:error, error}
       end
@@ -149,23 +152,23 @@ defmodule JSONSchex.Ref do
     end
   end
 
-  defp walk(%{"$ref" => _} = node, path, resource_document, current_base, state, stack) do
+  defp walk(%{"$ref" => _} = node, path, resource_document, current_base_uri, rebase_base_uri, state, stack) do
     if state.select.(Enum.reverse(path), node) do
-      resolve_selected_node(node, path, resource_document, current_base, state, stack)
+      resolve_selected_node(node, path, resource_document, current_base_uri, rebase_base_uri, state, stack)
     else
-      {:ok, node, state}
+      {:ok, rebase_unselected_ref(node, rebase_base_uri), state}
     end
   end
 
-  defp walk(%{} = node, path, resource_document, current_base, state, stack) do
-    walk_map(node, path, resource_document, current_base, state, stack)
+  defp walk(%{} = node, path, resource_document, current_base_uri, rebase_base_uri, state, stack) do
+    walk_map(node, path, resource_document, current_base_uri, rebase_base_uri, state, stack)
   end
 
-  defp walk(list, path, resource_document, current_base, state, stack) when is_list(list) do
+  defp walk(list, path, resource_document, current_base_uri, rebase_base_uri, state, stack) when is_list(list) do
     list
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, [], state}, fn {value, index}, {:ok, acc, state} ->
-      case walk(value, [index | path], resource_document, current_base, state, stack) do
+      case walk(value, [index | path], resource_document, current_base_uri, rebase_base_uri, state, stack) do
         {:ok, resolved_value, state} -> {:cont, {:ok, [resolved_value | acc], state}}
         {:error, %Error{} = error} -> {:halt, {:error, error}}
       end
@@ -176,33 +179,69 @@ defmodule JSONSchex.Ref do
     end
   end
 
-  defp walk(value, _path, _resource_document, _current_base, state, _stack) do
+  defp walk(value, _path, _resource_document, _current_base_uri, _rebase_base_uri, state, _stack) do
     {:ok, value, state}
   end
 
-  defp walk_map(node, path, resource_document, current_base, state, stack) do
+  defp walk_map(node, path, resource_document, current_base_uri, rebase_base_uri, state, stack) do
     Enum.reduce_while(node, {:ok, %{}, state}, fn {key, value}, {:ok, acc, state} ->
-      case walk(value, [key | path], resource_document, current_base, state, stack) do
+      case walk(value, [key | path], resource_document, current_base_uri, rebase_base_uri, state, stack) do
         {:ok, resolved_value, state} -> {:cont, {:ok, Map.put(acc, key, resolved_value), state}}
         {:error, %Error{} = error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp resolve_selected_node(%{"$ref" => ref}, path, resource_document, current_base, state, stack)
+  defp resolve_selected_node(
+         %{"$ref" => ref},
+         path,
+         resource_document,
+         current_base_uri,
+         rebase_base_uri,
+         state,
+         stack
+       )
        when is_binary(ref) do
-    with {:ok, resolved_uri} <- resolve_ref_uri(ref, path, current_base),
-         {:ok, target, target_base, fragment, state} <- resolve_target(ref, resolved_uri, path, resource_document, current_base, state),
+    with {:ok, resolved_uri} <- resolve_ref_uri(ref, path, current_base_uri),
+         {:ok, target, target_base, fragment, state} <-
+           resolve_target(ref, resolved_uri, path, resource_document, current_base_uri, state),
          target_uri <- target_uri(target_base, resolved_uri, fragment),
          :ok <- check_cycle(target_uri, ref, path, stack),
-         {:ok, resolved_target, state} <- walk(target, path, target_resource_document(target, target_base, state, resource_document), target_base, state, [target_uri | stack]) do
+         {:ok, resolved_target, state} <-
+           walk(
+             target,
+             path,
+             target_resource_document(target, target_base, state, resource_document),
+             target_base,
+             target_rebase_base_uri(rebase_base_uri, current_base_uri, target_base),
+             state,
+             [target_uri | stack]
+           ) do
       {:ok, resolved_target, state}
     end
   end
 
-  defp resolve_selected_node(%{"$ref" => ref}, path, _resource_document, _current_base, _state, _stack) do
+  defp resolve_selected_node(
+         %{"$ref" => ref},
+         path,
+         _resource_document,
+         _current_base_uri,
+         _rebase_base_uri,
+         _state,
+         _stack
+       ) do
     {:error, error(:invalid_ref_value, path, ref, nil, "selected $ref value must be a string")}
   end
+
+  defp rebase_unselected_ref(%{"$ref" => ref} = node, rebase_base_uri)
+       when is_binary(ref) and is_binary(rebase_base_uri) do
+    Map.put(node, "$ref", URIUtil.resolve(rebase_base_uri, ref))
+  end
+
+  defp rebase_unselected_ref(node, _rebase_base_uri), do: node
+
+  defp target_rebase_base_uri(nil, current_base_uri, target_base) when target_base == current_base_uri, do: nil
+  defp target_rebase_base_uri(_rebase_base_uri, _current_base_uri, target_base), do: target_base
 
   defp resolve_ref_uri(ref, path, nil) do
     if relative_external_ref?(ref) do
@@ -212,7 +251,7 @@ defmodule JSONSchex.Ref do
     end
   end
 
-  defp resolve_ref_uri(ref, _path, current_base), do: {:ok, URIUtil.resolve(current_base, ref)}
+  defp resolve_ref_uri(ref, _path, current_base_uri), do: {:ok, URIUtil.resolve(current_base_uri, ref)}
 
   defp relative_external_ref?(ref) do
     {base, _fragment} = URIUtil.split_fragment(ref)
@@ -225,25 +264,25 @@ defmodule JSONSchex.Ref do
     end
   end
 
-  defp resolve_target(ref, resolved_uri, path, resource_document, current_base, state) do
+  defp resolve_target(ref, resolved_uri, path, resource_document, current_base_uri, state) do
     {base, fragment} = URIUtil.split_fragment(resolved_uri)
 
-    if local_base?(base, current_base) do
+    if local_base?(base, current_base_uri) do
       resolve_pointer(resource_document, ref, resolved_uri, fragment, path)
       |> case do
-        {:ok, target} -> {:ok, target, current_base, fragment, state}
+        {:ok, target} -> {:ok, target, current_base_uri, fragment, state}
         {:error, %Error{} = error} -> {:error, error}
       end
     else
-      with {:ok, external_document, external_base, state} <- load_external(base, ref, resolved_uri, path, state),
-           {:ok, target} <- resolve_pointer(external_document, ref, URIUtil.with_fragment(external_base, fragment), fragment, path) do
-        {:ok, target, external_base, fragment, state}
+      with {:ok, external_document, external_base_uri, state} <- load_external(base, ref, resolved_uri, path, state),
+           {:ok, target} <- resolve_pointer(external_document, ref, URIUtil.with_fragment(external_base_uri, fragment), fragment, path) do
+        {:ok, target, external_base_uri, fragment, state}
       end
     end
   end
 
-  defp local_base?("", _current_base), do: true
-  defp local_base?(base, current_base) when is_binary(base), do: base == current_base
+  defp local_base?("", _current_base_uri), do: true
+  defp local_base?(base, current_base_uri) when is_binary(base), do: base == current_base_uri
 
   defp resolve_pointer(document, ref, uri, fragment, path) do
     pointer = URIUtil.local_ref(fragment)
@@ -298,8 +337,8 @@ defmodule JSONSchex.Ref do
   defp base_uri_or_original(_base_uri, original_base), do: original_base
 
   defp target_uri(nil, resolved_uri, _fragment), do: resolved_uri
-  defp target_uri(target_base, _resolved_uri, fragment) do
-    URIUtil.with_fragment(target_base, fragment)
+  defp target_uri(target_base_uri, _resolved_uri, fragment) do
+    URIUtil.with_fragment(target_base_uri, fragment)
   end
 
   defp check_cycle(uri, ref, path, stack) do

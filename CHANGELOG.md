@@ -2,6 +2,10 @@
 
 ## unreleased
 
+### Bug Fixes and Improvements
+
+  * Preserve the loaded resource base for unselected nested `$ref`s inside external targets resolved by `JSONSchex.Ref.resolve_selected/2`, so later `JSONSchex.bundle_fragment/2` and `JSONSchex.compile_fragment/2` calls resolve those refs against their original document
+
 ## v0.8.0 (2026-06-07)
 
 ### Breaking Changes

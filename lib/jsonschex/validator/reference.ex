@@ -100,14 +100,34 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
-  defp resolve_registry_base_match(data, _ref_string, path, validation_context, evaluated, base_schema, fragment) do
+  defp resolve_registry_base_match(
+         data,
+         _ref_string,
+         path,
+         validation_context,
+         evaluated,
+         base_schema,
+         fragment
+       ) do
     local_ref = URIUtil.local_ref(fragment)
 
     if base_schema.source_id == validation_context.source_id do
       resolve_and_validate_jit(data, validation_context.raw, local_ref, path, validation_context, evaluated)
     else
       updated_context = merge_defs_into_context(validation_context, base_schema.defs)
-      validate_ref(data, local_ref, {path, evaluated, updated_context})
+
+      # Compile the pointer target against the matched resource base, but keep
+      # the current validation context so validate_entry/5 records the resource
+      # transition and preserves dynamic scope semantics.
+      resolve_and_validate_jit(
+        data,
+        base_schema.raw,
+        local_ref,
+        path,
+        updated_context,
+        evaluated,
+        base_schema.source_id
+      )
     end
   end
 
@@ -296,12 +316,20 @@ defmodule JSONSchex.Validator.Reference do
     }
   end
 
-  defp resolve_and_validate_jit(data, raw_root, pointer, current_path, validation_context, evaluated) do
+  defp resolve_and_validate_jit(
+         data,
+         raw_root,
+         pointer,
+         current_path,
+         validation_context,
+         evaluated,
+         compile_base_uri \\ nil
+       ) do
     case ExJSONPointer.resolve(raw_root, pointer) do
       {:ok, found_fragment} ->
         opts = [
           loader: validation_context.root_schema.loader,
-          base_uri: validation_context.source_id,
+          base_uri: compile_base_uri || validation_context.source_id,
           format_assertion: validation_context.root_schema.format_assertion,
           content_assertion: validation_context.root_schema.content_assertion
         ]

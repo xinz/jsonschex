@@ -216,4 +216,274 @@ defmodule JSONSchex.Test.RefResolveSelected do
     assert {:error, %Ref.Error{} = error} = Ref.resolve_selected(document, select: &select_all_refs/2)
     assert error.uri in ["#/c", "#/a"]
   end
+
+  test "selected external target preserves base for nested local unselected refs" do
+    root = %{
+      "paths" => %{
+        "/users/{id}" => %{
+          "get" => %{
+            "parameters" => [
+              %{"$ref" => "./common.yaml#/components/parameters/UserId"}
+            ]
+          }
+        }
+      }
+    }
+
+    common = %{
+      "components" => %{
+        "parameters" => %{
+          "UserId" => %{
+            "name" => "id",
+            "in" => "path",
+            "required" => true,
+            "schema" => %{"$ref" => "#/components/schemas/UserId"}
+          }
+        },
+        "schemas" => %{
+          "UserId" => %{"type" => "integer"}
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.yaml" -> {:ok, %{document: common, base_uri: "/api/common.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["paths", "/users/{id}", "get", "parameters", 0], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    schema = get_in(resolved, ["paths", "/users/{id}", "get", "parameters", Access.at(0), "schema"])
+
+    assert schema == %{"$ref" => "/api/common.yaml#/components/schemas/UserId"}
+
+    assert {:ok, bundled} =
+             JSONSchex.bundle_fragment(resolved,
+               entry: "/paths/~1users~1{id}/get/parameters/0/schema",
+               base_uri: "/api/openapi.yaml",
+               loader: loader
+             )
+
+    assert {:ok, compiled} = JSONSchex.compile(bundled)
+    assert JSONSchex.validate(compiled, 123) == :ok
+    assert {:error, _} = JSONSchex.validate(compiled, "not-an-integer")
+  end
+
+  test "selected external target preserves base for nested relative unselected refs" do
+    root = %{
+      "paths" => %{
+        "/profiles" => %{
+          "post" => %{
+            "requestBody" => %{"$ref" => "./common.yaml#/components/requestBodies/ProfileBody"}
+          }
+        }
+      }
+    }
+
+    common = %{
+      "components" => %{
+        "requestBodies" => %{
+          "ProfileBody" => %{
+            "required" => true,
+            "content" => %{
+              "application/json" => %{
+                "schema" => %{"$ref" => "./schemas/profile.yaml"}
+              }
+            }
+          }
+        }
+      }
+    }
+
+    profile = %{
+      "type" => "object",
+      "required" => ["name"],
+      "properties" => %{"name" => %{"type" => "string"}}
+    }
+
+    loader = fn
+      "/api/common.yaml" -> {:ok, %{document: common, base_uri: "/api/common.yaml"}}
+      "/api/schemas/profile.yaml" -> {:ok, %{document: profile, base_uri: "/api/schemas/profile.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["paths", "/profiles", "post", "requestBody"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    schema =
+      get_in(resolved, [
+        "paths",
+        "/profiles",
+        "post",
+        "requestBody",
+        "content",
+        "application/json",
+        "schema"
+      ])
+
+    assert schema == %{"$ref" => "/api/schemas/profile.yaml"}
+
+    assert {:ok, bundled} =
+             JSONSchex.bundle_fragment(resolved,
+               entry: "#/paths/~1profiles/post/requestBody/content/application~1json/schema",
+               base_uri: "/api/openapi.yaml",
+               loader: loader
+             )
+
+    assert {:ok, compiled} = JSONSchex.compile(bundled)
+    assert JSONSchex.validate(compiled, %{"name" => "Ada"}) == :ok
+    assert {:error, _} = JSONSchex.validate(compiled, %{})
+  end
+
+  test "unselected nested refs remain refs after selected external target is inlined" do
+    root = %{
+      "parameter" => %{"$ref" => "./common.yaml#/components/parameters/UserId"}
+    }
+
+    common = %{
+      "components" => %{
+        "parameters" => %{
+          "UserId" => %{
+            "name" => "id",
+            "in" => "path",
+            "schema" => %{"$ref" => "#/components/schemas/UserId"}
+          }
+        },
+        "schemas" => %{
+          "UserId" => %{"type" => "integer"}
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.yaml" -> {:ok, %{document: common, base_uri: "/api/common.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    schema = get_in(resolved, ["parameter", "schema"])
+
+    assert %{"$ref" => ref} = schema
+    assert ref == "/api/common.yaml#/components/schemas/UserId"
+    refute Map.has_key?(schema, "type")
+  end
+
+  test "nested unselected refs are rebased against loader wrapper base_uri" do
+    root = %{
+      "parameter" => %{"$ref" => "https://example.test/common#/components/parameters/UserId"}
+    }
+
+    common = %{
+      "components" => %{
+        "parameters" => %{
+          "UserId" => %{
+            "name" => "id",
+            "in" => "path",
+            "schema" => %{"$ref" => "./schemas/user-id.yaml"}
+          }
+        }
+      }
+    }
+
+    loader = fn
+      "https://example.test/common" ->
+        {:ok, %{document: common, base_uri: "file:///mirror/common.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    schema = get_in(resolved, ["parameter", "schema"])
+
+    assert schema == %{"$ref" => "file:///mirror/schemas/user-id.yaml"}
+  end
+
+  test "bundled external fragments compile nested relative refs against the external base" do
+    root = %{
+      "parameter" => %{"$ref" => "./components/common.yaml#/components/parameters/User"}
+    }
+
+    common = %{
+      "components" => %{
+        "parameters" => %{
+          "User" => %{
+            "schema" => %{"$ref" => "#/components/schemas/User"}
+          }
+        },
+        "schemas" => %{
+          "User" => %{
+            "type" => "object",
+            "properties" => %{
+              "id" => %{"$ref" => "./defs.yaml#/UserId"}
+            }
+          }
+        }
+      }
+    }
+
+    defs = %{"UserId" => %{"type" => "integer"}}
+
+    loader = fn
+      "/api/components/common.yaml" ->
+        {:ok, %{document: common, base_uri: "/api/components/common.yaml"}}
+
+      "/api/components/defs.yaml" ->
+        {:ok, %{document: defs, base_uri: "/api/components/defs.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    assert get_in(resolved, ["parameter", "schema"]) ==
+             %{"$ref" => "/api/components/common.yaml#/components/schemas/User"}
+
+    assert {:ok, bundled} =
+             JSONSchex.bundle_fragment(resolved,
+               entry: "#/parameter/schema",
+               base_uri: "/api/openapi.yaml",
+               loader: loader
+             )
+
+    assert {:ok, compiled} = JSONSchex.compile(bundled)
+    assert JSONSchex.validate(compiled, %{"id" => 123}) == :ok
+    assert {:error, [%{rule: :type, path: ["id"]}]} = JSONSchex.validate(compiled, %{"id" => "x"})
+
+    assert {:ok, compiled_fragment} = JSONSchex.compile_fragment(bundled, entry: "#/parameter/schema")
+    assert JSONSchex.validate(compiled_fragment, %{"id" => 123}) == :ok
+    assert {:error, [%{rule: :type, path: ["id"]}]} = JSONSchex.validate(compiled_fragment, %{"id" => "x"})
+  end
 end
