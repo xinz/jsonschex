@@ -94,9 +94,6 @@ defmodule JSONSchex.Validator.Reference do
 
       :halt ->
         resolve_and_validate_jit(data, validation_context.raw, ref_string, path, validation_context, evaluated)
-
-      {:error, _} = error ->
-        error
     end
   end
 

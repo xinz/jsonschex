@@ -36,7 +36,6 @@ defmodule JSONSchex.Compiler do
   @default_vocabs_list Dialect.supported_vocabularies()
 
   defp vocab_supported?(supported, uri) when is_list(supported), do: uri in supported
-  defp vocab_supported?(_, _), do: false
 
   @doc """
   Compiles a raw JSON Schema into an executable `Schema` struct.

@@ -24,10 +24,7 @@ defmodule JSONSchex.Formats.Hostname do
         false
       else
         try do
-          case :idna.to_ascii(String.to_charlist(data)) do
-            res when is_list(res) -> true
-            _ -> false
-          end
+          is_list(:idna.encode(String.to_charlist(data)))
         catch
           _, _ -> false
         end
@@ -90,12 +87,7 @@ defmodule JSONSchex.Formats.Hostname do
   if Code.ensure_loaded?(:idna) do
     defp validate_idn_label(label) do
       try do
-        # We use to_unicode to attempt decoding and validation of the A-label
-        case :idna.to_unicode(String.to_charlist(label)) do
-          {:error, _} -> false
-          res when is_list(res) -> true
-          _ -> false
-        end
+        is_list(:idna.decode(String.to_charlist(label)))
       catch
         _, _ -> false
       end

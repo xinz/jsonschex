@@ -182,9 +182,6 @@ defmodule JSONSchex.Schema do
           caller,
           "JSONSchex.Schema.compile_fragment!/2 failed: #{JSONSchex.format_error(error)}"
         )
-
-      {:error, error} ->
-        raise_compile_error!(caller, "JSONSchex.Schema.compile_fragment!/2 failed: #{inspect(error)}")
     end
   end
 

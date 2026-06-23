@@ -264,11 +264,12 @@ defmodule JSONSchex.Validator.Keywords do
 
   defp reduce_allOf([schema | rest], data, path, root, acc_keys, error_lists) do
     case Validator.validate_entry(schema, data, path, root, @empty_mapset) do
-      {:ok, %MapSet{map: m}} when map_size(m) == 0 ->
-        reduce_allOf(rest, data, path, root, acc_keys, error_lists)
-
       {:ok, new_keys} ->
-        reduce_allOf(rest, data, path, root, [MapSet.to_list(new_keys) | acc_keys], error_lists)
+        if MapSet.size(new_keys) == 0 do
+          reduce_allOf(rest, data, path, root, acc_keys, error_lists)
+        else
+          reduce_allOf(rest, data, path, root, [MapSet.to_list(new_keys) | acc_keys], error_lists)
+        end
 
       {:error, errs} ->
         reduce_allOf(rest, data, path, root, acc_keys, [errs | error_lists])
@@ -293,20 +294,21 @@ defmodule JSONSchex.Validator.Keywords do
 
   defp reduce_anyOf([schema | rest], data, path, root, evaluated, count, acc_keys, acc_errs) do
     case Validator.validate_entry(schema, data, path, root, evaluated) do
-      {:ok, %MapSet{map: m}} when map_size(m) == 0 ->
-        reduce_anyOf(rest, data, path, root, evaluated, count + 1, acc_keys, acc_errs)
-
       {:ok, keys} ->
-        reduce_anyOf(
-          rest,
-          data,
-          path,
-          root,
-          evaluated,
-          count + 1,
-          [MapSet.to_list(keys) | acc_keys],
-          acc_errs
-        )
+        if MapSet.size(keys) == 0 do
+          reduce_anyOf(rest, data, path, root, evaluated, count + 1, acc_keys, acc_errs)
+        else
+          reduce_anyOf(
+            rest,
+            data,
+            path,
+            root,
+            evaluated,
+            count + 1,
+            [MapSet.to_list(keys) | acc_keys],
+            acc_errs
+          )
+        end
 
       {:error, errs} ->
         new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
@@ -658,13 +660,14 @@ defmodule JSONSchex.Validator.Keywords do
   defp reduce_dependent_schemas([{prop, schema} | rest], data, path, root, errs, eval_keys) do
     if Map.has_key?(data, prop) do
       case Validator.validate_entry(schema, data, path, root) do
-        {:ok, %MapSet{map: m}} when map_size(m) == 0 ->
-          reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
-
         {:ok, new_keys} ->
-          reduce_dependent_schemas(rest, data, path, root, errs, [
-            MapSet.to_list(new_keys) | eval_keys
-          ])
+          if MapSet.size(new_keys) == 0 do
+            reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
+          else
+            reduce_dependent_schemas(rest, data, path, root, errs, [
+              MapSet.to_list(new_keys) | eval_keys
+            ])
+          end
 
         {:error, new_errs} ->
           reduce_dependent_schemas(rest, data, path, root, [new_errs | errs], eval_keys)
@@ -700,9 +703,6 @@ defmodule JSONSchex.Validator.Keywords do
     else
       {:error, {rule, context}} ->
         {:error, [build_error(path, rule, context, data)]}
-
-      {:error, context} ->
-        {:error, [build_error(path, :contentSchema, context, data)]}
     end
   end
 
@@ -795,5 +795,4 @@ defmodule JSONSchex.Validator.Keywords do
     String.ends_with?(media_type, "+json")
   end
 
-  defp json_media_type?(_), do: false
 end
