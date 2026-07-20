@@ -34,8 +34,6 @@ defmodule JSONSchex.Compiler.Predicates.MultipleOf do
   if Code.ensure_loaded?(Decimal) do
     alias Decimal, as: D
 
-    @precision_buffer 28
-
     @doc """
     Checks if `instance` is a multiple of `divisor`.
     Uses `Decimal` for high precision.
@@ -53,18 +51,41 @@ defmodule JSONSchex.Compiler.Predicates.MultipleOf do
     end
 
     defp check_remainder_valid?(instance, divisor) do
-      required_precision = calculate_needed_precision(instance, divisor)
-
-      D.Context.with(%D.Context{precision: required_precision}, fn ->
-        remainder = D.rem(instance, divisor)
-        D.eq?(remainder, 0)
-      end)
+      exact_multiple?(instance, divisor)
     end
 
-    defp calculate_needed_precision(%D{exp: exp_i}, %D{exp: exp_d}) do
-      estimated_digits = abs(exp_i - exp_d)
-      max(estimated_digits + @precision_buffer, 28)
+    defp exact_multiple?(%D{coef: coef_i, exp: exp_i}, %D{coef: coef_d, exp: exp_d}) do
+      case exp_i - exp_d do
+        shift when shift >= 0 ->
+          remaining_divisor = div(coef_d, Integer.gcd(coef_i, coef_d))
+          divides_power_of_ten?(remaining_divisor, shift)
+
+        shift ->
+          rem(coef_i, coef_d) == 0 and
+            divisible_by_power_of_ten?(div(coef_i, coef_d), -shift)
+      end
     end
+
+    defp divides_power_of_ten?(1, _shift), do: true
+
+    defp divides_power_of_ten?(divisor, shift) do
+      {rest, twos} = factor_out(divisor, 2, 0)
+      {rest, fives} = factor_out(rest, 5, 0)
+      rest == 1 and twos <= shift and fives <= shift
+    end
+
+    defp divisible_by_power_of_ten?(0, _shift), do: true
+    defp divisible_by_power_of_ten?(_coefficient, 0), do: true
+
+    defp divisible_by_power_of_ten?(coefficient, shift) do
+      rem(coefficient, 10) == 0 and
+        divisible_by_power_of_ten?(div(coefficient, 10), shift - 1)
+    end
+
+    defp factor_out(value, factor, count) when rem(value, factor) == 0,
+      do: factor_out(div(value, factor), factor, count + 1)
+
+    defp factor_out(value, _factor, count), do: {value, count}
 
     defp to_decimal(%D{} = val), do: val
     defp to_decimal(val) when is_integer(val), do: D.new(val)
