@@ -2,6 +2,16 @@ defmodule JSONSchex.Test.SuiteRunner do
 
   alias JSONSchex.JSON
 
+  @lone_surrogate_description "a local part with a lone UTF-16 surrogate is invalid"
+  @lone_surrogate_utf8 <<0xED, 0xA0, 0x80>>
+  @lone_surrogate_case_pattern ~r/,
+    \s*\{
+    \s*"description"\s*:\s*"a\ local\ part\ with\ a\ lone\ UTF-16\ surrogate\ is\ invalid"\s*,
+    \s*"data"\s*:\s*"\\ud800@example\.com"\s*,
+    \s*"valid"\s*:\s*false
+    \s*\}
+  /x
+
   # -------------------------------------------------------------------------
   # Mode 1: Run a Single File (New)
   # -------------------------------------------------------------------------
@@ -65,7 +75,7 @@ defmodule JSONSchex.Test.SuiteRunner do
 
   defp generate_tests_for_file(file) do
     # Parse JSON at compile time
-    definitions = File.read!(file) |> JSON.decode!()
+    definitions = decode_suite_file(file)
     filename_display = Path.basename(file, ".json")
     hardcode_tmp_ignore_cases = []
 
@@ -155,6 +165,40 @@ defmodule JSONSchex.Test.SuiteRunner do
         end
       end
     end
+  end
+
+  # JSON permits an escaped lone UTF-16 surrogate syntactically, but Elixir JSON
+  # decoders cannot materialize it as a Unicode string. For the exact upstream case
+  # added in JSON-Schema-Test-Suite#946, remove that one object before decoding the
+  # otherwise valid file, then append an equivalent test using an ill-formed UTF-8
+  # binary. Other files and values pass through the normal decoder unchanged.
+  defp decode_suite_file(file) do
+    contents = File.read!(file)
+
+    if Path.basename(file) == "idn-email.json" and Regex.match?(@lone_surrogate_case_pattern, contents) do
+      @lone_surrogate_case_pattern
+      |> Regex.replace(contents, "", global: false)
+      |> JSON.decode!()
+      |> append_lone_surrogate_case()
+    else
+      JSON.decode!(contents)
+    end
+  end
+
+  defp append_lone_surrogate_case(definitions) do
+    Enum.map(definitions, fn suite ->
+      if get_in(suite, ["schema", "format"]) == "idn-email" do
+        test_case = %{
+          "description" => @lone_surrogate_description,
+          "data" => @lone_surrogate_utf8 <> "@example.com",
+          "valid" => false
+        }
+
+        Map.update!(suite, "tests", &(&1 ++ [test_case]))
+      else
+        suite
+      end
+    end)
   end
 
   defmacro __using__(_opts) do

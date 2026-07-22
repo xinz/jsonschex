@@ -23,9 +23,13 @@ defmodule JSONSchex.Formats.Email do
   end
 
   def valid_idn?(data) when is_binary(data) do
-    case split_local_domain(data) do
-      {local, domain} -> validate_local_idn(local) and validate_domain_idn(domain)
-      :error -> false
+    if String.valid?(data) do
+      case split_local_domain(data) do
+        {local, domain} -> validate_local_idn(local) and validate_domain_idn(domain)
+        :error -> false
+      end
+    else
+      false
     end
   end
 
