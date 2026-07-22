@@ -2,6 +2,13 @@
 
 ## unreleased
 
+### Bug Fixes and Improvements
+
+  * Update `JSONSchex.bundle_fragment/2` to bundle only the schema graph reachable from the selected entrypoint, without loading unrelated refs from other components, examples, or extension data. Local pointers, anchors, nested `$id` resources, recursive graphs, and loader-provided base URIs remain supported; caller-owned `$defs` entries are preserved with collision-safe internal keys, while invalid `$defs` and ambiguous anchors return structured `invalid_defs` or `ambiguous_anchor` errors
+  * Change `JSONSchex.Ref.resolve_selected/2` so an unselected `$ref` map is preserved but no longer terminates traversal: its sibling values are walked, `:select` is invoked for descendant `$ref` nodes that earlier releases skipped, and every descendant ref left unselected is rebased through loader-provided `:base_uri` and nested `$id` boundaries without loading its target
+  * Some Dialyzer compile warnings fixed
+
+
 ## v0.8.1 (2026-06-15)
 
 ### Bug Fixes and Improvements

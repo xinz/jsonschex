@@ -20,7 +20,7 @@ defmodule JSONSchex.Test.RefResolveSelected do
            }
   end
 
-  test "unselected local ref is preserved and not traversed" do
+  test "unselected local ref is preserved while its sibling values are traversed" do
     document = %{
       "a" => %{
         "$ref" => "#/defs/A",
@@ -38,7 +38,42 @@ defmodule JSONSchex.Test.RefResolveSelected do
       _path, _node -> false
     end
 
+    assert {:ok, resolved} = Ref.resolve_selected(document, select: select)
+
+    assert resolved == %{
+             "a" => %{
+               "$ref" => "#/defs/A",
+               "nested" => %{"value" => 2}
+             },
+             "defs" => %{
+               "A" => %{"value" => 1},
+               "B" => %{"value" => 2}
+             }
+           }
+  end
+
+  test "selector is invoked for descendant refs beneath an unselected ref" do
+    parent = self()
+
+    document = %{
+      "schema" => %{
+        "$ref" => "#/defs/A",
+        "allOf" => [%{"$ref" => "#/defs/B"}]
+      },
+      "defs" => %{
+        "A" => %{"type" => "integer"},
+        "B" => %{"minimum" => 1}
+      }
+    }
+
+    select = fn path, %{"$ref" => _} ->
+      send(parent, {:selected_path, path})
+      false
+    end
+
     assert {:ok, ^document} = Ref.resolve_selected(document, select: select)
+    assert_received {:selected_path, ["schema"]}
+    assert_received {:selected_path, ["schema", "allOf", 0]}
   end
 
   test "external ref uses loader" do
@@ -400,7 +435,10 @@ defmodule JSONSchex.Test.RefResolveSelected do
           "UserId" => %{
             "name" => "id",
             "in" => "path",
-            "schema" => %{"$ref" => "./schemas/user-id.yaml"}
+            "schema" => %{
+              "$ref" => "./schemas/user-id.yaml",
+              "allOf" => [%{"$ref" => "./schemas/constraints.yaml"}]
+            }
           }
         }
       }
@@ -422,7 +460,255 @@ defmodule JSONSchex.Test.RefResolveSelected do
 
     schema = get_in(resolved, ["parameter", "schema"])
 
-    assert schema == %{"$ref" => "file:///mirror/schemas/user-id.yaml"}
+    assert schema == %{
+             "$ref" => "file:///mirror/schemas/user-id.yaml",
+             "allOf" => [%{"$ref" => "file:///mirror/schemas/constraints.yaml"}]
+           }
+  end
+
+  test "unselected refs beneath ref siblings are deeply rebased" do
+    root = %{
+      "parameter" => %{"$ref" => "./common.yaml#/parameter"}
+    }
+
+    common = %{
+      "parameter" => %{
+        "name" => "id",
+        "in" => "query",
+        "schema" => %{
+          "$ref" => "./schemas/base.yaml",
+          "allOf" => [
+            %{
+              "properties" => %{
+                "value" => %{"$ref" => "./schemas/constraints.yaml"}
+              }
+            }
+          ]
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.yaml" -> {:ok, %{document: common, base_uri: "/api/common.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    assert get_in(resolved, ["parameter", "schema"]) == %{
+             "$ref" => "/api/schemas/base.yaml",
+             "allOf" => [
+               %{
+                 "properties" => %{
+                   "value" => %{"$ref" => "/api/schemas/constraints.yaml"}
+                 }
+               }
+             ]
+           }
+  end
+
+  test "selected external fragments inherit ids along their pointer path" do
+    root = %{
+      "parameter" => %{"$ref" => "/api/common.json#/container/parameter"}
+    }
+
+    common = %{
+      "container" => %{
+        "$id" => "nested/container.json",
+        "parameter" => %{
+          "schema" => %{"$ref" => "child.json"}
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.json" ->
+        {:ok, %{document: common, base_uri: "/mirror/common.json"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/root.json",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    assert resolved == %{
+             "parameter" => %{
+               "schema" => %{"$ref" => "/mirror/nested/child.json"}
+             }
+           }
+  end
+
+  test "selected local refs do not apply their resource root id twice" do
+    root = %{
+      "parameter" => %{"$ref" => "/api/common.json#/container/parameter"}
+    }
+
+    common = %{
+      "container" => %{
+        "$id" => "nested/container.json",
+        "$defs" => %{
+          "V" => %{"schema" => %{"$ref" => "child.json"}}
+        },
+        "parameter" => %{
+          "inner" => %{"$ref" => "#/$defs/V"}
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.json" ->
+        {:ok, %{document: common, base_uri: "/mirror/common.json"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/root.json",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 ["parameter", "inner"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    assert resolved == %{
+             "parameter" => %{
+               "inner" => %{
+                 "schema" => %{"$ref" => "/mirror/nested/child.json"}
+               }
+             }
+           }
+  end
+
+  test "loaded canonical ids share the selected-ref cache" do
+    parent = self()
+
+    root = %{
+      "first" => %{"$ref" => "/api/a.json#/value"},
+      "second" => %{"$ref" => "/mirror/canonical.json#/value"}
+    }
+
+    external = %{
+      "$id" => "canonical.json",
+      "value" => %{"type" => "integer"}
+    }
+
+    loader = fn
+      "/api/a.json" = uri ->
+        send(parent, {:loaded, uri})
+        {:ok, %{document: external, base_uri: "/mirror/a.json"}}
+
+      uri ->
+        send(parent, {:unexpected_load, uri})
+        {:error, :unexpected_load}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/root.json",
+               loader: loader,
+               select: &select_all_refs/2
+             )
+
+    assert_received {:loaded, "/api/a.json"}
+    refute_received {:unexpected_load, _uri}
+    assert resolved["first"] == %{"type" => "integer"}
+    assert resolved["second"] == %{"type" => "integer"}
+  end
+
+  test "deep rebasing honors nested id resource boundaries" do
+    root = %{
+      "parameter" => %{"$ref" => "./common.yaml#/parameter"}
+    }
+
+    common = %{
+      "parameter" => %{
+        "name" => "id",
+        "schema" => %{
+          "$id" => "nested/schema.json",
+          "$ref" => "base.json",
+          "allOf" => [%{"$ref" => "constraints.json"}]
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.yaml" -> {:ok, %{document: common, base_uri: "/api/common.yaml"}}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    assert get_in(resolved, ["parameter", "schema"]) == %{
+             "$id" => "nested/schema.json",
+             "$ref" => "/api/nested/base.json",
+             "allOf" => [%{"$ref" => "/api/nested/constraints.json"}]
+           }
+  end
+
+  test "deeply rebased unselected refs are not loaded" do
+    parent = self()
+
+    root = %{
+      "parameter" => %{"$ref" => "./common.yaml#/parameter"}
+    }
+
+    common = %{
+      "parameter" => %{
+        "name" => "id",
+        "schema" => %{
+          "$ref" => "./schemas/base.yaml",
+          "allOf" => [%{"$ref" => "./schemas/constraints.yaml"}]
+        }
+      }
+    }
+
+    loader = fn
+      "/api/common.yaml" = uri ->
+        send(parent, {:loaded, uri})
+        {:ok, %{document: common, base_uri: uri}}
+
+      uri ->
+        send(parent, {:unexpected_load, uri})
+        {:error, :unexpected_load}
+    end
+
+    assert {:ok, resolved} =
+             Ref.resolve_selected(root,
+               base_uri: "/api/openapi.yaml",
+               loader: loader,
+               select: fn
+                 ["parameter"], %{"$ref" => _} -> true
+                 _path, _node -> false
+               end
+             )
+
+    assert_received {:loaded, "/api/common.yaml"}
+    refute_received {:unexpected_load, _uri}
+
+    assert get_in(resolved, ["parameter", "schema"]) == %{
+             "$ref" => "/api/schemas/base.yaml",
+             "allOf" => [%{"$ref" => "/api/schemas/constraints.yaml"}]
+           }
   end
 
   test "bundled external fragments compile nested relative refs against the external base" do

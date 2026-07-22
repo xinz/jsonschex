@@ -117,7 +117,7 @@ defmodule JSONSchex.Compiler do
                     {:ok, sub_vocabs} ->
                       sub_raw
                       |> Map.delete("$id")
-                      |> compile_schema_node(id, sub_vocabs, ctx)
+                      |> compile_schema_node(scope_resource_base(id), sub_vocabs, ctx)
                       |> case do
                         {:ok, compiled_sub} ->
                           compiled_sub = %{compiled_sub | raw: sub_raw}
@@ -149,6 +149,11 @@ defmodule JSONSchex.Compiler do
           {:ok, %{root_compiled | defs: defs, loader: loader}}
       end
     end
+  end
+
+  defp scope_resource_base(uri) when is_binary(uri) do
+    {base, _fragment} = URIUtil.split_fragment(uri)
+    base
   end
 
   defp scan_context(context_document, _base_uri, :schema), do: ScopeScanner.scan(context_document)
