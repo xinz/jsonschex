@@ -186,14 +186,20 @@ defmodule JSONSchex.URIUtil do
         uri
 
       _ ->
-        {base_path, _base_fragment} = split_fragment(base)
         {uri_path, uri_fragment} = split_fragment(uri)
 
         resolved_path =
           if String.starts_with?(uri_path, "/") do
             uri_path
           else
-            Path.expand(uri_path, Path.dirname(base_path))
+            {base_path, _base_fragment} = split_fragment(base)
+            expanded_path = Path.expand(uri_path, Path.dirname(base_path))
+
+            if String.ends_with?(uri_path, "/") do
+              expanded_path <> "/"
+            else
+              expanded_path
+            end
           end
 
         with_fragment(resolved_path, uri_fragment)

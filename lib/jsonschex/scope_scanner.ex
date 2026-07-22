@@ -23,7 +23,7 @@ defmodule JSONSchex.ScopeScanner do
 
   """
 
-  alias JSONSchex.URIUtil
+  alias JSONSchex.{SchemaTraversal, URIUtil}
 
   @doc """
   Scans a raw schema and returns a tuple `{registry, refs}` where:
@@ -72,9 +72,9 @@ defmodule JSONSchex.ScopeScanner do
         end
       end)
 
-    Enum.reduce(schema, {registry, refs}, fn {key, value}, acc ->
-      recurse_keyword(key, value, new_base_uri, acc)
-    end)
+    schema
+    |> SchemaTraversal.scope_subschemas()
+    |> Enum.reduce({registry, refs}, fn subschema, acc -> do_scan(subschema, new_base_uri, acc) end)
   end
 
   defp do_scan(_, _, acc), do: acc
@@ -130,17 +130,4 @@ defmodule JSONSchex.ScopeScanner do
 
   end
 
-  defp recurse_keyword(key, map, base, acc) when key in ["properties", "$defs", "definitions", "patternProperties", "dependentSchemas"] and is_map(map) do
-    Enum.reduce(map, acc, fn {_k, sub}, inner_acc -> do_scan(sub, base, inner_acc) end)
-  end
-
-  defp recurse_keyword(key, list, base, acc) when key in ["allOf", "anyOf", "oneOf", "prefixItems"] and is_list(list) do
-    Enum.reduce(list, acc, fn sub, inner_acc -> do_scan(sub, base, inner_acc) end)
-  end
-
-  defp recurse_keyword(key, sub, base, acc) when key in ["items", "additionalProperties", "if", "then", "else", "not", "contains", "propertyNames", "unevaluatedItems", "unevaluatedProperties"] and is_map(sub) do
-    do_scan(sub, base, acc)
-  end
-
-  defp recurse_keyword(_, _, _, acc), do: acc
 end

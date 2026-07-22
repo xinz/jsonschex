@@ -109,8 +109,30 @@ defmodule JSONSchex do
   Bundles a JSON Schema fragment from a containing document into a standalone raw schema.
 
   This uses the same entrypoint and reference-context options as `compile_fragment/2`,
-  mounts reachable external resources under `$defs`, and returns a raw JSON Schema
-  map or boolean that can be compiled later with `compile/2`.
+  follows only the schema graph reachable from the entrypoint, mounts reachable
+  external resources under `$defs`, and returns a raw JSON Schema map or boolean
+  that can be compiled later with `compile/2`. External refs in unrelated containing-
+  document subtrees, inactive definitions, examples, and extension data are not loaded.
+
+  ## Generated definitions
+
+  A map bundle may contain generated entries under `$defs` whose names start with
+  `jsonschex_`. These entries are required storage locations for containing-document
+  context, external resources, and reachable anchors. Their exact keys are internal,
+  may receive a numeric suffix to avoid a caller-owned definition, and are not a
+  stable API. Resources retain their reference identity through `$id` and anchors;
+  callers should compile the complete returned bundle and must not construct refs to
+  generated paths such as `#/$defs/jsonschex_external_1`.
+
+  Existing caller-owned `$defs` entries are preserved. If generated resources are
+  required, an existing `$defs` value must be a map; otherwise bundling returns an
+  `invalid_defs` error instead of replacing it.
+
+  When an anchor can only be discovered through opaque containing-document data,
+  a unique declaration is treated as the anchor target because JSONSchex has no
+  domain-specific knowledge of containers such as OpenAPI components or extensions.
+  Multiple distinct locations declaring the same anchor are reported as an
+  `ambiguous_anchor` error. The loader is not invoked for any ambiguous candidate.
 
   ## Examples
 
