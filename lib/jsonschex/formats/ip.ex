@@ -11,29 +11,17 @@ defmodule JSONSchex.Formats.IP do
   for maximum performance — no regex, no String.split, no String.to_integer.
   """
   @spec valid_ipv4?(binary()) :: boolean()
-  def valid_ipv4?(data) when is_binary(data) do
+  def valid_ipv4?(data) when is_binary(data), do: parse_ipv4(data, 4)
+  def valid_ipv4?(_), do: false
+
+  defp parse_ipv4(data, 1), do: match?({:ok, <<>>}, parse_octet_start(data))
+
+  defp parse_ipv4(data, remaining_octets) do
     case parse_octet_start(data) do
-      {:ok, <<?., rest1::binary>>} ->
-        case parse_octet_start(rest1) do
-          {:ok, <<?., rest2::binary>>} ->
-            case parse_octet_start(rest2) do
-              {:ok, <<?., rest3::binary>>} ->
-                match?({:ok, <<>>}, parse_octet_start(rest3))
-
-              _ ->
-                false
-            end
-
-          _ ->
-            false
-        end
-
-      _ ->
-        false
+      {:ok, <<?., rest::binary>>} -> parse_ipv4(rest, remaining_octets - 1)
+      _ -> false
     end
   end
-
-  def valid_ipv4?(_), do: false
 
   # Parse the start of an octet — handles leading-zero rejection.
   # Returns {:ok, rest} where rest is the remaining binary after the octet,
@@ -45,32 +33,26 @@ defmodule JSONSchex.Formats.IP do
   defp parse_octet_start(<<?0, d, _::binary>>) when d in ?0..?9, do: :error
   defp parse_octet_start(<<?0, rest::binary>>), do: {:ok, rest}
 
-  # 1-digit: 1..9
-  defp parse_octet_start(<<d1, rest::binary>>) when d1 in ?1..?9 do
-    case rest do
-      # 3-digit: check d1 d2 d3 <= 255
-      <<d2, d3, rest2::binary>> when d2 in ?0..?9 and d3 in ?0..?9 ->
-        value = (d1 - ?0) * 100 + (d2 - ?0) * 10 + (d3 - ?0)
+  # Four or more digits are never a valid octet.
+  defp parse_octet_start(<<d1, d2, d3, d4, _::binary>>)
+       when d1 in ?1..?9 and d2 in ?0..?9 and d3 in ?0..?9 and d4 in ?0..?9,
+       do: :error
 
-        if value <= 255 do
-          # Ensure the next char is not a digit (no 4+ digit octets)
-          case rest2 do
-            <<d, _::binary>> when d in ?0..?9 -> :error
-            _ -> {:ok, rest2}
-          end
-        else
-          :error
-        end
-
-      # 2-digit: 10..99 (always valid, d1 in 1..9 and d2 in 0..9)
-      <<d2, rest2::binary>> when d2 in ?0..?9 ->
-        {:ok, rest2}
-
-      # 1-digit: 1..9
-      _ ->
-        {:ok, rest}
+  # Three-digit octets must be no greater than 255.
+  defp parse_octet_start(<<d1, d2, d3, rest::binary>>)
+       when d1 in ?1..?9 and d2 in ?0..?9 and d3 in ?0..?9 do
+    if (d1 - ?0) * 100 + (d2 - ?0) * 10 + (d3 - ?0) <= 255 do
+      {:ok, rest}
+    else
+      :error
     end
   end
+
+  # One- and two-digit non-zero-prefixed octets are always in range.
+  defp parse_octet_start(<<d1, d2, rest::binary>>) when d1 in ?1..?9 and d2 in ?0..?9,
+    do: {:ok, rest}
+
+  defp parse_octet_start(<<d1, rest::binary>>) when d1 in ?1..?9, do: {:ok, rest}
 
   defp parse_octet_start(_), do: :error
 
