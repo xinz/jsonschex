@@ -7,6 +7,10 @@
   * Update `JSONSchex.bundle_fragment/2` to bundle only the schema graph reachable from the selected entrypoint, without loading unrelated refs from other components, examples, or extension data. Local pointers, anchors, nested `$id` resources, recursive graphs, and loader-provided base URIs remain supported; caller-owned `$defs` entries are preserved with collision-safe internal keys, while invalid `$defs` and ambiguous anchors return structured `invalid_defs` or `ambiguous_anchor` errors
   * Change `JSONSchex.Ref.resolve_selected/2` so an unselected `$ref` map is preserved but no longer terminates traversal: its sibling values are walked, `:select` is invoked for descendant `$ref` nodes that earlier releases skipped, and every descendant ref left unselected is rebased through loader-provided `:base_uri` and nested `$id` boundaries without loading its target
   * Some Dialyzer compile warnings fixed
+  * Update the official Draft 2020-12 optional format-suite coverage and align format validation:
+    * Adapt the `idn-email` lone UTF-16 surrogate case for Elixir JSON decoders, reject ill-formed UTF-8 input, and accept valid non-NFC domain labels by normalizing only the domain before IDNA hostname validation
+    * Reject signed years in the RFC 3339 `date` format, which requires exactly four unsigned year digits
+    * Strengthen `idn-hostname` validation: reject malformed or non-canonical A-labels, encoded hostnames longer than 253 characters, and Bidi domains with invalid label directionality; Unicode and Punycode forms are validated equivalently
 
 
 ## v0.8.1 (2026-06-15)

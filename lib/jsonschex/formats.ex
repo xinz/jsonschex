@@ -50,9 +50,16 @@ defmodule JSONSchex.Formats do
     JSONSchex.Formats.DateTime.valid?(data)
   end
 
-  defp valid?("date", data) do
+  # RFC 3339 `full-date` requires exactly four unsigned year digits. Elixir's
+  # `Date.from_iso8601/1` also accepts signed years, so validate the lexical form
+  # before delegating calendar and leap-year checks to `Date`.
+  defp valid?("date", <<y1, y2, y3, y4, ?-, m1, m2, ?-, d1, d2>> = data)
+       when y1 in ?0..?9 and y2 in ?0..?9 and y3 in ?0..?9 and y4 in ?0..?9 and
+              m1 in ?0..?9 and m2 in ?0..?9 and d1 in ?0..?9 and d2 in ?0..?9 do
     match?({:ok, _}, Date.from_iso8601(data))
   end
+
+  defp valid?("date", _data), do: false
 
   defp valid?("time", data) do
     JSONSchex.Formats.DateTime.valid_time?(data)

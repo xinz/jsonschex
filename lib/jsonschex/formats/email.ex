@@ -23,9 +23,13 @@ defmodule JSONSchex.Formats.Email do
   end
 
   def valid_idn?(data) when is_binary(data) do
-    case split_local_domain(data) do
-      {local, domain} -> validate_local_idn(local) and validate_domain_idn(domain)
-      :error -> false
+    if String.valid?(data) do
+      case split_local_domain(data) do
+        {local, domain} -> validate_local_idn(local) and validate_domain_idn(domain)
+        :error -> false
+      end
+    else
+      false
     end
   end
 
@@ -205,7 +209,11 @@ defmodule JSONSchex.Formats.Email do
       inner = String.slice(domain, 1..-2//1)
       validate_literal_domain(inner)
     else
-      JSONSchex.Formats.Hostname.valid_idn?(domain)
+      # The JSON Schema idn-email suite accepts a non-NFC domain label. IDNA
+      # validation itself requires NFC, so normalize only the domain before
+      # passing it to the hostname validator; the local part remains opaque.
+      normalized_domain = :unicode.characters_to_nfc_binary(domain)
+      JSONSchex.Formats.Hostname.valid_idn?(normalized_domain)
     end
   end
 end
