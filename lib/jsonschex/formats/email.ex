@@ -209,7 +209,11 @@ defmodule JSONSchex.Formats.Email do
       inner = String.slice(domain, 1..-2//1)
       validate_literal_domain(inner)
     else
-      JSONSchex.Formats.Hostname.valid_idn?(domain)
+      # The JSON Schema idn-email suite accepts a non-NFC domain label. IDNA
+      # validation itself requires NFC, so normalize only the domain before
+      # passing it to the hostname validator; the local part remains opaque.
+      normalized_domain = :unicode.characters_to_nfc_binary(domain)
+      JSONSchex.Formats.Hostname.valid_idn?(normalized_domain)
     end
   end
 end

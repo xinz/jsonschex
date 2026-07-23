@@ -9,4 +9,11 @@ defmodule JSONSchex.Formats.EmailTest do
     refute String.valid?(email)
     refute Email.valid_idn?(email)
   end
+
+  test "idn-email accepts a domain label that is not in Unicode NFC" do
+    domain = "cafe\u0301.com"
+
+    refute domain == :unicode.characters_to_nfc_binary(domain)
+    assert Email.valid_idn?("user@" <> domain)
+  end
 end
