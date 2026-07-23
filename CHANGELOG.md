@@ -2,6 +2,8 @@
 
 ## unreleased
 
+## v0.9.0 (2026-07-23)
+
 ### Bug Fixes and Improvements
 
   * Update `JSONSchex.bundle_fragment/2` to bundle only the schema graph reachable from the selected entrypoint, without loading unrelated refs from other components, examples, or extension data. Local pointers, anchors, nested `$id` resources, recursive graphs, and loader-provided base URIs remain supported; caller-owned `$defs` entries are preserved with collision-safe internal keys, while invalid `$defs` and ambiguous anchors return structured `invalid_defs` or `ambiguous_anchor` errors
