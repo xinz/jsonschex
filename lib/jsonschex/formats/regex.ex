@@ -11,25 +11,71 @@ defmodule JSONSchex.Formats.Regex do
   @regex_escapes ~c"^$\\.*+?()[]{}|/bBcdDfkmnpPrsStuvwWx0123456789-"
 
   def valid?(data) do
-    # Strict ECMA-262 validation:
-    # Validate that every escape sequence (odd backslashes followed by a char)
-    # uses a permitted character.
-    has_invalid_escape =
-      Regex.scan(~r/(?<!\\)(?:\\\\)*\\(.)/s, data)
-      |> Enum.any?(fn [_, <<c::utf8>>] ->
-        invalid_regex_escape?(c)
-      end)
-
-    if has_invalid_escape do
-      false
+    # PCRE accepts syntax that ECMA-262 forbids and rejects valid ECMA-262 constructs
+    # such as empty character classes and variable-width lookbehind. Compile a validation
+    # shadow instead of the original expression to retain PCRE's structural checks.
+    with {:ok, shadow} <- validation_shadow(data, :normal, []),
+         {:ok, _} <- Regex.compile(shadow) do
+      true
     else
-      case Regex.compile(data) do
-        {:ok, _} -> true
-        _ -> false
-      end
+      _ -> false
     end
   end
 
-  defp invalid_regex_escape?(char) when char not in @regex_escapes, do: true
-  defp invalid_regex_escape?(_), do: false
+  defp validation_shadow(<<>>, :normal, acc), do: {:ok, acc |> Enum.reverse() |> IO.iodata_to_binary()}
+  defp validation_shadow(<<>>, :class, _acc), do: :error
+
+  defp validation_shadow(<<?\\, rest::binary>>, context, acc) do
+    case rest do
+      <<char::utf8, rest::binary>> when char in @regex_escapes ->
+        validation_shadow(rest, context, [<<?\\, char::utf8>> | acc])
+
+      _ ->
+        :error
+    end
+  end
+
+  defp validation_shadow(<<?], rest::binary>>, :class, acc) do
+    validation_shadow(rest, :normal, ["]" | acc])
+  end
+
+  defp validation_shadow(<<char::utf8, rest::binary>>, :class, acc) do
+    validation_shadow(rest, :class, [<<char::utf8>> | acc])
+  end
+
+  # `[]` never matches, while `[^]` matches every character in ECMA-262.
+  defp validation_shadow(<<"[]", rest::binary>>, :normal, acc) do
+    validation_shadow(rest, :normal, ["[^\\s\\S]" | acc])
+  end
+
+  defp validation_shadow(<<"[^]", rest::binary>>, :normal, acc) do
+    validation_shadow(rest, :normal, ["[\\s\\S]" | acc])
+  end
+
+  # PCRE restricts lookbehind width; lookahead gives us an equivalent structural check.
+  defp validation_shadow(<<"(?<=", rest::binary>>, :normal, acc) do
+    validation_shadow(rest, :normal, ["(?=" | acc])
+  end
+
+  defp validation_shadow(<<"(?<!", rest::binary>>, :normal, acc) do
+    validation_shadow(rest, :normal, ["(?!" | acc])
+  end
+
+  defp validation_shadow(<<"(?", rest::binary>>, :normal, acc) do
+    case rest do
+      <<char::utf8, _::binary>> when char in [?: , ?=, ?!, ?<] ->
+        validation_shadow(rest, :normal, ["(?" | acc])
+
+      _ ->
+        :error
+    end
+  end
+
+  defp validation_shadow(<<?[, rest::binary>>, :normal, acc) do
+    validation_shadow(rest, :class, ["[" | acc])
+  end
+
+  defp validation_shadow(<<char::utf8, rest::binary>>, :normal, acc) do
+    validation_shadow(rest, :normal, [<<char::utf8>> | acc])
+  end
 end

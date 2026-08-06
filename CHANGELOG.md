@@ -2,6 +2,13 @@
 
 ## unreleased
 
+### Bug Fixes and Improvements
+
+  * Update Draft 2020-12 optional format validation to match the current official test suite:
+    * Validate `regex` strings against ECMA-262 syntax rather than PCRE extensions, including support for empty character classes and variable-width lookbehind
+    * Require complete input for `duration`, `uuid`, and `relative-json-pointer` formats; require RFC 3339 numeric timezone offsets to include minutes
+    * Enforce RFC 6570 URI-template prefix modifiers as non-zero values with at most four digits
+
 ## v0.9.0 (2026-07-23)
 
 ### Bug Fixes and Improvements

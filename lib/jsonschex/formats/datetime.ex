@@ -4,20 +4,25 @@ defmodule JSONSchex.Formats.DateTime do
   """
 
   def valid?(data) do
-    # RFC 3339 allows case-insensitive T and Z
-    normalized =
-      String.replace(data, ["t", "z"], fn <<char>> -> <<char-32>> end)
-
-    case DateTime.from_iso8601(normalized) do
-      {:ok, _, _} ->
-        true
-
-      {:error, :invalid_time} ->
-        maybe_valid_leap_seconds?(normalized)
-
+    with true <- valid_rfc3339_datetime?(data),
+         data <- replace_tz_letters(data),
+         {{:ok, _, _}, _data} <- {DateTime.from_iso8601(data), data} do
+      true
+    else
+      {{:error, :invalid_time}, data} ->
+        maybe_valid_leap_seconds?(data)
       _ ->
         false
     end
+  end
+
+  defp valid_rfc3339_datetime?(data) do
+    Regex.match?(~r/\A[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})\z/, data)
+  end
+
+  defp replace_tz_letters(data) do
+    # RFC 3339 allows case-insensitive T and Z
+    String.replace(data, ["t", "z"], fn <<char>> -> <<char-32>> end)
   end
 
   def valid_time?(data) do

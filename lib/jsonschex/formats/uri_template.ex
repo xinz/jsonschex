@@ -43,7 +43,7 @@ defmodule JSONSchex.Formats.URITemplate do
     # varchar = ALPHA / DIGIT / "_" / pct-encoded
     # see https://datatracker.ietf.org/doc/html/rfc6570#section-1.5
     Regex.match?(
-      ~r/^(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+(?:\.(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+)*(?:\*|:\d+)?$/,
+      ~r/\A(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+(?:\.(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+)*(?:\*|:[1-9][0-9]{0,3})?\z/,
       spec
     )
   end

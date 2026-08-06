@@ -71,8 +71,8 @@ defmodule JSONSchex.Formats do
     # Date ordering is constrained to Y -> M -> D, but D cannot appear unless M is present
     # when Y is also present. Time ordering is constrained to H -> M -> S, but S cannot
     # appear unless M is present when H is also present.
-    Regex.match?(~r/^P\d+W$/, data) or
-      Regex.match?(~r/^P(?:(?:\d+Y(?:\d+M(?:\d+D)?)?|\d+M(?:\d+D)?|\d+D)(?:T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S))?|T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S))$/, data)
+    Regex.match?(~r/\AP[0-9]+W\z/, data) or
+      Regex.match?(~r/\AP(?:(?:[0-9]+Y(?:[0-9]+M(?:[0-9]+D)?)?|[0-9]+M(?:[0-9]+D)?|[0-9]+D)(?:T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+S)?)?|[0-9]+M(?:[0-9]+S)?|[0-9]+S))?|T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+S)?)?|[0-9]+M(?:[0-9]+S)?|[0-9]+S))\z/, data)
   end
 
   defp valid?("email", data) do
@@ -124,7 +124,7 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("uuid", data) do
-    Regex.match?(~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, data)
+    Regex.match?(~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i, data)
   end
 
   defp valid?("json-pointer", data) do
@@ -132,7 +132,8 @@ defmodule JSONSchex.Formats do
   end
 
   defp valid?("relative-json-pointer", data) do
-    ExJSONPointer.valid_relative_json_pointer?(data)
+    Regex.match?(~r/\A(?:0|[1-9][0-9]*)(?:[+-](?:0|[1-9][0-9]*))?(?:\/(?:[^#].*)?|#)?\z/s, data) and
+      ExJSONPointer.valid_relative_json_pointer?(data)
   end
 
   defp valid?("regex", data) do
