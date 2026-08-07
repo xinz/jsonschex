@@ -10,13 +10,14 @@ JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schem
 - Implements JSON Schema Draft 2020-12 in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords.
 - Passes 100% of the [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) for Draft 2020-12.
 - Designed for performance and simplicity: compile a schema once into an executable `Schema` struct, then validate data repeatedly with no repeated parsing overhead.
+- Supports an Elixir/Plug OpenAPI v3 server implementation and code generator with JSON Schema validation, see [Oasis](https://hex.pm/packages/oasis).
 
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.7"}
+    {:jsonschex, "~> 0.9"}
   ]
 end
 ```

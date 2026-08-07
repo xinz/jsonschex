@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.2 (2026-08-07)
+
+### Bug Fixes and Improvements
+
+  * Fix arbitrary-precision `multipleOf` validation by checking Decimal coefficients and exponents exactly, avoiding context-dependent rounding, quotient-size errors, and validation crashes for large integers
+
 ## v0.9.1 (2026-08-06)
 
 ### Bug Fixes and Improvements
