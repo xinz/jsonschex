@@ -27,7 +27,7 @@ defmodule JSONSchex.Compiler.Predicates.MultipleOf do
       raise ArithmeticError,
         message:
           "Arithmetic error checking multipleOf(#{inspect(instance)}, #{inspect(divisor)}) with native arithmetic. " <>
-            "Please add {:decimal, \"~> 2.0\"} to your dependencies to handle arbitrary precision."
+            "Please add {:decimal, \"~> 3.0\"} to your dependencies to handle arbitrary precision."
     end
   end
 
