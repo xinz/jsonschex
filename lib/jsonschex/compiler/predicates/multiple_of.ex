@@ -43,47 +43,54 @@ defmodule JSONSchex.Compiler.Predicates.MultipleOf do
       d_instance = to_decimal(instance)
       d_divisor = to_decimal(divisor)
 
-      if D.gt?(d_divisor, 0) do
-        check_remainder_valid?(d_instance, d_divisor)
+      if finite_decimal?(d_instance) and finite_decimal?(d_divisor) and D.gt?(d_divisor, 0) do
+        exact_multiple?(d_instance, d_divisor)
       else
         false
       end
     end
 
-    defp check_remainder_valid?(instance, divisor) do
-      exact_multiple?(instance, divisor)
-    end
-
-    defp exact_multiple?(%D{coef: coef_i, exp: exp_i}, %D{coef: coef_d, exp: exp_d}) do
-      case exp_i - exp_d do
+    # A finite Decimal is `coefficient * 10 ^ exponent`. Checking that their
+    # quotient is an integer avoids Decimal context rounding and quotient limits.
+    defp exact_multiple?(%D{coef: coefficient_i, exp: exponent_i}, %D{coef: coefficient_d, exp: exponent_d}) do
+      case exponent_i - exponent_d do
         shift when shift >= 0 ->
-          remaining_divisor = div(coef_d, Integer.gcd(coef_i, coef_d))
+          remaining_divisor = div(coefficient_d, Integer.gcd(coefficient_i, coefficient_d))
           divides_power_of_ten?(remaining_divisor, shift)
 
         shift ->
-          rem(coef_i, coef_d) == 0 and
-            divisible_by_power_of_ten?(div(coef_i, coef_d), -shift)
+          rem(coefficient_i, coefficient_d) == 0 and
+            divisible_by_power_of_ten?(div(coefficient_i, coefficient_d), -shift)
       end
     end
+
+    defp finite_decimal?(%D{coef: coefficient, exp: exponent})
+         when is_integer(coefficient) and coefficient >= 0 and is_integer(exponent),
+         do: true
+
+    defp finite_decimal?(_), do: false
 
     defp divides_power_of_ten?(1, _shift), do: true
 
     defp divides_power_of_ten?(divisor, shift) do
-      {rest, twos} = factor_out(divisor, 2, 0)
-      {rest, fives} = factor_out(rest, 5, 0)
-      rest == 1 and twos <= shift and fives <= shift
+      {remaining, twos} = factor_out(divisor, 2, 0)
+      {remaining, fives} = factor_out(remaining, 5, 0)
+
+      remaining == 1 and twos <= shift and fives <= shift
     end
 
     defp divisible_by_power_of_ten?(0, _shift), do: true
     defp divisible_by_power_of_ten?(_coefficient, 0), do: true
 
-    defp divisible_by_power_of_ten?(coefficient, shift) do
-      rem(coefficient, 10) == 0 and
-        divisible_by_power_of_ten?(div(coefficient, 10), shift - 1)
+    defp divisible_by_power_of_ten?(coefficient, shift) when rem(coefficient, 10) == 0 do
+      divisible_by_power_of_ten?(div(coefficient, 10), shift - 1)
     end
 
-    defp factor_out(value, factor, count) when rem(value, factor) == 0,
-      do: factor_out(div(value, factor), factor, count + 1)
+    defp divisible_by_power_of_ten?(_coefficient, _shift), do: false
+
+    defp factor_out(value, factor, count) when rem(value, factor) == 0 do
+      factor_out(div(value, factor), factor, count + 1)
+    end
 
     defp factor_out(value, _factor, count), do: {value, count}
 

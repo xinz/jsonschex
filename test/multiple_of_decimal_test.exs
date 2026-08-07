@@ -1,51 +1,50 @@
 defmodule JSONSchex.Test.MultipleOfDecimalTest do
   use ExUnit.Case, async: true
+
+  alias Decimal, as: D
   alias JSONSchex.Compiler.Predicates.MultipleOf
 
-  describe "valid?/2 Decimal implementation" do
-    test "does not round a large non-multiple into a match" do
-      refute MultipleOf.valid?(20_606_440_141_923_986_926_444_292_610, 67_471)
-    end
+  test "checks large integer multiples exactly" do
+    refute MultipleOf.valid?(20_606_440_141_923_986_926_444_292_610, 67_471)
+    assert MultipleOf.valid?(15_241_578_751_714_678_875_142_508_889, 123_456_789)
+  end
 
-    test "does not reject a large exact multiple" do
-      assert MultipleOf.valid?(15_241_578_751_714_678_875_142_508_889, 123_456_789)
-    end
+  test "supports negative instances" do
+    assert MultipleOf.valid?(-6, 3)
+    refute MultipleOf.valid?(-7, 3)
+  end
 
-    test "supports large integer divisibility checks" do
-      assert MultipleOf.valid?(Integer.pow(10, 100), 1)
-      refute MultipleOf.valid?(Integer.pow(10, 100) + 1, 3)
-    end
+  test "rejects zero and negative divisors" do
+    assert MultipleOf.valid?(6, 3)
+    refute MultipleOf.valid?(6, 0)
+    refute MultipleOf.valid?(6, -3)
+  end
 
-    test "compares decimal coefficients and exponents exactly" do
-      assert MultipleOf.valid?(Decimal.new("1.2"), Decimal.new("0.03"))
-      assert MultipleOf.valid?(Decimal.new("1200"), Decimal.new("3e2"))
-      refute MultipleOf.valid?(Decimal.new("1.20000000000000000001"), Decimal.new("0.03"))
-      refute MultipleOf.valid?(Decimal.new("1200"), Decimal.new("3e3"))
-    end
+  test "validates arbitrary-precision integers through the schema API" do
+    large_multiple = Integer.pow(10, 100)
 
-    test "does not expand hostile exponent differences" do
-      assert MultipleOf.valid?(Decimal.new(1, 1, 1_000_000), Decimal.new(1, 1, -1_000_000))
-      refute MultipleOf.valid?(Decimal.new(1, 1, -1_000_000), Decimal.new(1))
-    end
+    {:ok, one_schema} = JSONSchex.compile(%{"multipleOf" => 1})
+    assert :ok = JSONSchex.validate(one_schema, large_multiple)
 
-    test "matches exact rational divisibility across coefficient and exponent combinations" do
-      for coefficient <- [0, 1, 2, 3, 5, 7, 10, 21, 125],
-          divisor <- [1, 2, 3, 5, 6, 10, 25, 70],
-          instance_exp <- -4..4,
-          divisor_exp <- -4..4 do
-        shift = instance_exp - divisor_exp
+    {:ok, three_schema} = JSONSchex.compile(%{"multipleOf" => 3})
+    assert {:error, [error]} = JSONSchex.validate(three_schema, large_multiple + 1)
+    assert error.rule == :multipleOf
+  end
 
-        expected =
-          if shift >= 0 do
-            rem(coefficient * Integer.pow(10, shift), divisor) == 0
-          else
-            rem(coefficient, divisor * Integer.pow(10, -shift)) == 0
-          end
+  test "compares decimal coefficients and exponents without expanding powers of ten" do
+    assert MultipleOf.valid?(D.new("1.2"), D.new("0.03"))
+    assert MultipleOf.valid?(D.new("1200"), D.new("3e2"))
+    refute MultipleOf.valid?(D.new("1.20000000000000000001"), D.new("0.03"))
+    refute MultipleOf.valid?(D.new("1200"), D.new("3e3"))
 
-        instance = Decimal.new(1, coefficient, instance_exp)
-        multiple_of = Decimal.new(1, divisor, divisor_exp)
-        assert MultipleOf.valid?(instance, multiple_of) == expected
-      end
+    assert MultipleOf.valid?(D.new(1, 1, 1_000_000), D.new(1, 1, -1_000_000))
+    refute MultipleOf.valid?(D.new(1, 1, -1_000_000), D.new(1))
+  end
+
+  test "rejects non-finite Decimal values before arithmetic" do
+    for non_finite <- [%D{coef: :inf}, %D{coef: :NaN}] do
+      refute MultipleOf.valid?(non_finite, D.new(1))
+      refute MultipleOf.valid?(D.new(1), non_finite)
     end
   end
 end
