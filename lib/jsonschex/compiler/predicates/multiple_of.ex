@@ -27,14 +27,12 @@ defmodule JSONSchex.Compiler.Predicates.MultipleOf do
       raise ArithmeticError,
         message:
           "Arithmetic error checking multipleOf(#{inspect(instance)}, #{inspect(divisor)}) with native arithmetic. " <>
-            "Please add {:decimal, \"~> 2.0\"} to your dependencies to handle arbitrary precision."
+            "Please add {:decimal, \"~> 3.0\"} to your dependencies to handle arbitrary precision."
     end
   end
 
   if Code.ensure_loaded?(Decimal) do
     alias Decimal, as: D
-
-    @precision_buffer 28
 
     @doc """
     Checks if `instance` is a multiple of `divisor`.
@@ -45,26 +43,56 @@ defmodule JSONSchex.Compiler.Predicates.MultipleOf do
       d_instance = to_decimal(instance)
       d_divisor = to_decimal(divisor)
 
-      if D.gt?(d_divisor, 0) do
-        check_remainder_valid?(d_instance, d_divisor)
+      if finite_decimal?(d_instance) and finite_decimal?(d_divisor) and D.gt?(d_divisor, 0) do
+        exact_multiple?(d_instance, d_divisor)
       else
         false
       end
     end
 
-    defp check_remainder_valid?(instance, divisor) do
-      required_precision = calculate_needed_precision(instance, divisor)
+    # A finite Decimal is `coefficient * 10 ^ exponent`. Checking that their
+    # quotient is an integer avoids Decimal context rounding and quotient limits.
+    defp exact_multiple?(%D{coef: coefficient_i, exp: exponent_i}, %D{coef: coefficient_d, exp: exponent_d}) do
+      case exponent_i - exponent_d do
+        shift when shift >= 0 ->
+          remaining_divisor = div(coefficient_d, Integer.gcd(coefficient_i, coefficient_d))
+          divides_power_of_ten?(remaining_divisor, shift)
 
-      D.Context.with(%D.Context{precision: required_precision}, fn ->
-        remainder = D.rem(instance, divisor)
-        D.eq?(remainder, 0)
-      end)
+        shift ->
+          rem(coefficient_i, coefficient_d) == 0 and
+            divisible_by_power_of_ten?(div(coefficient_i, coefficient_d), -shift)
+      end
     end
 
-    defp calculate_needed_precision(%D{exp: exp_i}, %D{exp: exp_d}) do
-      estimated_digits = abs(exp_i - exp_d)
-      max(estimated_digits + @precision_buffer, 28)
+    defp finite_decimal?(%D{coef: coefficient, exp: exponent})
+         when is_integer(coefficient) and coefficient >= 0 and is_integer(exponent),
+         do: true
+
+    defp finite_decimal?(_), do: false
+
+    defp divides_power_of_ten?(1, _shift), do: true
+
+    defp divides_power_of_ten?(divisor, shift) do
+      {remaining, twos} = factor_out(divisor, 2, 0)
+      {remaining, fives} = factor_out(remaining, 5, 0)
+
+      remaining == 1 and twos <= shift and fives <= shift
     end
+
+    defp divisible_by_power_of_ten?(0, _shift), do: true
+    defp divisible_by_power_of_ten?(_coefficient, 0), do: true
+
+    defp divisible_by_power_of_ten?(coefficient, shift) when rem(coefficient, 10) == 0 do
+      divisible_by_power_of_ten?(div(coefficient, 10), shift - 1)
+    end
+
+    defp divisible_by_power_of_ten?(_coefficient, _shift), do: false
+
+    defp factor_out(value, factor, count) when rem(value, factor) == 0 do
+      factor_out(div(value, factor), factor, count + 1)
+    end
+
+    defp factor_out(value, _factor, count), do: {value, count}
 
     defp to_decimal(%D{} = val), do: val
     defp to_decimal(val) when is_integer(val), do: D.new(val)
