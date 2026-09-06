@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.3 (2026-09-07)
+
+### Bug Fixes and Improvements
+
+  * Explicitly use `ex_json_pointer ~> 0.8`, which is a performance-improved version.
+
 ## v0.9.2 (2026-08-07)
 
 ### Bug Fixes and Improvements
