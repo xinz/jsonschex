@@ -25,6 +25,7 @@ defmodule JSONSchex.Compiler do
   alias JSONSchex.URIUtil
   alias JSONSchex.Compiler.Fragment
   alias JSONSchex.Compiler.Fragment.Bundle
+  alias JSONSchex.Compiler.Cache
 
   import JSONSchex.Types,
     only: [
@@ -100,8 +101,10 @@ defmodule JSONSchex.Compiler do
     with :ok <- Dialect.validate_required_vocabularies(raw_schema),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
-      root_compiled = %{root_compiled | raw: context_document}
       {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode)
+      scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
+      local_defs = root_compiled.defs
+      root_compiled = %{root_compiled | raw: context_document}
 
       full_defs =
         Enum.reduce_while(global_scopes, root_compiled.defs, fn {id, sub_raw}, acc_defs ->
@@ -115,9 +118,7 @@ defmodule JSONSchex.Compiler do
                 :ok ->
                   case resolve_dialect(sub_raw, loader, root_vocabs) do
                     {:ok, sub_vocabs} ->
-                      sub_raw
-                      |> Map.delete("$id")
-                      |> compile_schema_node(scope_resource_base(id), sub_vocabs, ctx)
+                      compile_scope(sub_raw, id, sub_vocabs, root_vocabs, ctx, scope_cache)
                       |> case do
                         {:ok, compiled_sub} ->
                           compiled_sub = %{compiled_sub | raw: sub_raw}
@@ -139,7 +140,7 @@ defmodule JSONSchex.Compiler do
         end)
 
       resolved_runtime_defs =
-        resolve_refs(context_document, MapSet.to_list(explicit_refs), root_vocabs, ctx, init_base)
+        resolve_refs(context_document, MapSet.to_list(explicit_refs), root_vocabs, ctx, init_base, local_defs)
 
       case merge_defs(full_defs, resolved_runtime_defs) do
         {:error, _} = error ->
@@ -148,6 +149,16 @@ defmodule JSONSchex.Compiler do
         defs ->
           {:ok, %{root_compiled | defs: defs, loader: loader}}
       end
+    end
+  end
+
+  defp compile_scope(raw, id, vocabs, root_vocabs, ctx, scope_cache) do
+    base = scope_resource_base(id)
+    reusable = if vocabs === root_vocabs, do: Cache.fetch_scope(scope_cache, id, raw, base), else: nil
+
+    case reusable do
+      {:ok, compiled} -> {:ok, compiled}
+      nil -> compile_schema_node(Map.delete(raw, "$id"), base, vocabs, ctx)
     end
   end
 
@@ -193,11 +204,11 @@ defmodule JSONSchex.Compiler do
     {:ok, current_vocabs}
   end
 
-  defp resolve_refs(raw_schema, refs, vocabs, ctx, base_uri) do
+  defp resolve_refs(raw_schema, refs, vocabs, ctx, base_uri, local_defs) do
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
       case result do
         {:ok, fragment} ->
-          case compile_schema_node(fragment, base_uri, vocabs, ctx) do
+          case compile_ref_target(fragment, ref, base_uri, vocabs, ctx, local_defs) do
             {:ok, compiled_sub} ->
               compiled_sub = %{compiled_sub | raw: fragment}
 
@@ -212,6 +223,24 @@ defmodule JSONSchex.Compiler do
       end
     end)
   end
+
+  # Only initial local definitions share this vocabulary and invocation context.
+  # Resolve the pointer first: escaped keys or containing-document definitions
+  # may select a different target than the local registry's spelling suggests.
+  defp compile_ref_target(fragment, ref, base_uri, vocabs, ctx, local_defs) when is_map(fragment) do
+    base = resolve_uri(base_uri, Map.get(fragment, "$id"))
+
+    case Map.get(local_defs, ref) do
+      %Schema{source_id: ^base, raw: raw} = compiled when raw === fragment ->
+        {:ok, compiled}
+
+      _ ->
+        compile_schema_node(fragment, base_uri, vocabs, ctx)
+    end
+  end
+
+  defp compile_ref_target(fragment, _ref, base_uri, vocabs, ctx, _local_defs),
+    do: compile_schema_node(fragment, base_uri, vocabs, ctx)
 
   defp compile_schema_node(true, _id, _vocabs, ctx) do
     {:ok,
