@@ -1,5 +1,5 @@
-# Run from the repository root: mix run bench/compiler_reuse.exs
-# Pin a baseline without changing files: mix run bench/compiler_reuse.exs --baseline HEAD
+# Run from the repository root: mix run bench/compiler_cache.exs
+# Pin a baseline without changing files: mix run bench/compiler_cache.exs --baseline HEAD
 # No benchmark dependencies; input construction, source loading and GC are not timed.
 root = Path.expand("..", __DIR__)
 compiler_path = Path.join(root, "lib/jsonschex/compiler.ex")
