@@ -61,12 +61,15 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
          bundle <- put_context_document(bundle, document, entry_resource, base_uri),
          {:ok, {external_resources, reachable_anchors, base_aliases}} <-
            collect_external_resources(document, entry_schema, entry_base, entry_resources, base_uri, opts) do
-      bundle = rewrite_external_refs(bundle, entry_base, base_aliases)
+      # Resolution retains every alias; rewriting only needs actual redirects.
+      # An empty map lets identity-only bundles skip all deep rewrite passes.
+      rewrite_aliases = Map.reject(base_aliases, fn {base, target} -> base == target end)
+      bundle = rewrite_external_refs(bundle, entry_base, rewrite_aliases)
 
       bundle =
         bundle
-        |> put_external_resources(external_resources, base_aliases)
-        |> put_reachable_anchors(reachable_anchors, base_aliases)
+        |> put_external_resources(external_resources, rewrite_aliases)
+        |> put_reachable_anchors(reachable_anchors, rewrite_aliases)
 
       {:ok, bundle}
     end
@@ -177,10 +180,6 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
 
   defp index_schema_tree(state, _schema, _current_base), do: state
 
-
-
-
-
   # Anchors have no URI that can be loaded, so a containing non-schema document
   # needs a discovery fallback. These candidates never register `$id` resources
   # or dynamic scope and are consulted only after authoritative schema metadata.
@@ -216,15 +215,13 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
   defp put_fallback_anchor(state, base_uri, anchor, schema, path) do
     anchor_uri = URIUtil.resolve(base_uri, "#" <> anchor)
     candidate_path = Enum.reverse(path)
-    candidate = {schema, base_uri, candidate_path}
+    candidate = {schema, base_uri}
 
+    # A location with both anchor keywords is one candidate; equal schemas at
+    # different locations remain distinct. Keys hash paths, never schema trees.
     candidates =
-      Map.update(state.fallback_anchors, anchor_uri, [candidate], fn existing ->
-        if Enum.any?(existing, fn {_schema, _base, path} -> path == candidate_path end) do
-          existing
-        else
-          existing ++ [candidate]
-        end
+      Map.update(state.fallback_anchors, anchor_uri, %{candidate_path => candidate}, fn existing ->
+        Map.put_new(existing, candidate_path, candidate)
       end)
 
     %{state | fallback_anchors: candidates}
@@ -254,21 +251,12 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
     base
   end
 
+  # Entry and reference targets may come from arbitrary document locations, so
+  # index their metadata before walking. Structural children are already covered
+  # by this pass, including their inactive definitions and nested resource ids.
   defp walk_reachable(schema, current_base, dynamic_scope, state) when is_map(schema) do
     state = index_schema_tree(state, schema, current_base)
-    new_base = resolve_base_from_id(schema, current_base)
-    dynamic_scope = put_dynamic_scope(dynamic_scope, resource_key(new_base))
-
-    with {:ok, state} <- follow_schema_refs(schema, new_base, dynamic_scope, state) do
-      schema
-      |> SchemaTraversal.active_subschemas()
-      |> Enum.reduce_while({:ok, state}, fn subschema, {:ok, acc} ->
-        case walk_reachable(subschema, new_base, dynamic_scope, acc) do
-          {:ok, next} -> {:cont, {:ok, next}}
-          {:error, error} -> {:halt, {:error, error}}
-        end
-      end)
-    end
+    walk_indexed_reachable(schema, current_base, dynamic_scope, state)
   end
 
   defp walk_reachable(list, current_base, dynamic_scope, state) when is_list(list) do
@@ -281,6 +269,24 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
   end
 
   defp walk_reachable(_value, _current_base, _dynamic_scope, state), do: {:ok, state}
+
+  defp walk_indexed_reachable(schema, current_base, dynamic_scope, state) when is_map(schema) do
+    new_base = resolve_base_from_id(schema, current_base)
+    dynamic_scope = put_dynamic_scope(dynamic_scope, resource_key(new_base))
+
+    with {:ok, state} <- follow_schema_refs(schema, new_base, dynamic_scope, state) do
+      schema
+      |> SchemaTraversal.active_subschemas()
+      |> Enum.reduce_while({:ok, state}, fn subschema, {:ok, acc} ->
+        case walk_indexed_reachable(subschema, new_base, dynamic_scope, acc) do
+          {:ok, next} -> {:cont, {:ok, next}}
+          {:error, error} -> {:halt, {:error, error}}
+        end
+      end)
+    end
+  end
+
+  defp walk_indexed_reachable(_value, _current_base, _dynamic_scope, state), do: {:ok, state}
 
   defp put_dynamic_scope({stack, members} = dynamic_scope, base) do
     if Map.has_key?(members, base) do
@@ -451,10 +457,16 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
   end
 
   defp find_fallback_anchor(anchor_uri, state) do
-    case Map.get(state.fallback_anchors, anchor_uri, []) do
-      [{target, inherited_base, _path}] -> {:ok, target, inherited_base}
-      [] -> nil
-      candidates -> {:ambiguous_anchor, anchor_uri, length(candidates)}
+    case Map.get(state.fallback_anchors, anchor_uri, %{}) do
+      candidates when map_size(candidates) == 0 ->
+        nil
+
+      candidates when map_size(candidates) == 1 ->
+        [{target, inherited_base}] = Map.values(candidates)
+        {:ok, target, inherited_base}
+
+      candidates ->
+        {:ambiguous_anchor, anchor_uri, map_size(candidates)}
     end
   end
 
