@@ -331,7 +331,20 @@ defmodule JSONSchex.Compiler do
     end
   end
 
+  defp compile_keywords_list(%{"patternProperties" => _, "additionalProperties" => _} = keywords_map, base, vocabs, ctx) do
+    # Regexes are shared only by these sibling object keywords and only for
+    # this node. Enter this path after $defs compilation; the existing gate
+    # still controls whether either keyword prepares a regex.
+    compile_keywords_with_regex_cache(keywords_map, base, vocabs, ctx)
+  end
   defp compile_keywords_list(keywords_map, base, vocabs, ctx) do
+    # Retain the original keyword reducer for all other schemas, including
+    # patternProperties-only schemas, so the local optimization adds no
+    # per-keyword wrapper overhead to the common path.
+    compile_keywords_without_regex_cache(keywords_map, base, vocabs, ctx)
+  end
+
+  defp compile_keywords_without_regex_cache(keywords_map, base, vocabs, ctx) do
     Enum.reduce_while(keywords_map, {:ok, []}, fn {k, v}, {:ok, acc} ->
       if keyword_allowed?(k, vocabs, ctx) do
         case compile_keyword({k, v}, keywords_map, base, vocabs, ctx) do
@@ -343,6 +356,57 @@ defmodule JSONSchex.Compiler do
         {:cont, {:ok, acc}}
       end
     end)
+  end
+
+  defp compile_keywords_with_regex_cache(keywords_map, base, vocabs, ctx) do
+    Enum.reduce_while(keywords_map, {:ok, [], %{}}, fn {k, v}, {:ok, acc, cache} ->
+      if keyword_allowed?(k, vocabs, ctx) do
+        case compile_keyword_with_regex_cache({k, v}, keywords_map, base, vocabs, ctx, cache) do
+          {:ok, nil, updated_cache} -> {:cont, {:ok, acc, updated_cache}}
+          {:ok, rule, updated_cache} -> {:cont, {:ok, [rule | acc], updated_cache}}
+          {:error, error} -> {:halt, {:error, error}}
+        end
+      else
+        {:cont, {:ok, acc, cache}}
+      end
+    end)
+    |> case do
+      {:ok, rules, _cache} -> {:ok, rules}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp compile_keyword_with_regex_cache(
+         {"patternProperties", patterns},
+         _full_schema,
+         base,
+         vocabs,
+         ctx,
+         regex_cache
+       )
+       when is_map(regex_cache) do
+    with {:ok, compiled_patterns, updated_cache} <-
+           compile_pattern_properties(patterns, base, vocabs, ctx, regex_cache) do
+      {:ok, build_pattern_properties_rule(compiled_patterns), updated_cache}
+    end
+  end
+
+  defp compile_keyword_with_regex_cache(
+         {"additionalProperties", sub_schema},
+         full_schema,
+         base,
+         vocabs,
+         ctx,
+         regex_cache
+       )
+       when is_map(regex_cache) do
+    compile_additional_properties(sub_schema, full_schema, base, vocabs, ctx, regex_cache)
+  end
+
+  defp compile_keyword_with_regex_cache(keyword, full_schema, base, vocabs, ctx, regex_cache) do
+    with {:ok, rule} <- compile_keyword(keyword, full_schema, base, vocabs, ctx) do
+      {:ok, rule, regex_cache}
+    end
   end
 
   defp compile_unevaluted(_, nil, _base, _vocabs, _ctx), do: {:ok, nil}
@@ -650,30 +714,13 @@ defmodule JSONSchex.Compiler do
             {:halt, {:error, %{error | path: path ++ [pattern]}}}
 
           {:error, {regex_term, _}} ->
-            {:halt,
-             {:error,
-              %Error{
-                rule: :invalid_regex,
-                path: ["patternProperties", pattern],
-                context: %ErrorContext{
-                  contrast: "invalid_regex",
-                  input: pattern,
-                  error_detail: regex_term
-                }
-              }}}
+            {:halt, {:error, invalid_pattern_properties_regex_error(pattern, regex_term)}}
         end
       end)
 
     case result do
-      {:ok, compiled_patterns} ->
-        {:ok,
-         %Rule{
-           name: :patternProperties,
-           params: compiled_patterns
-         }}
-
-      error ->
-        error
+      {:ok, compiled_patterns} -> {:ok, build_pattern_properties_rule(compiled_patterns)}
+      error -> error
     end
   end
 
@@ -681,23 +728,13 @@ defmodule JSONSchex.Compiler do
     raw_patterns = Map.keys(Map.get(full_schema, "patternProperties", %{}))
 
     regex_compilation =
-      Enum.reduce_while(raw_patterns, {:ok, []}, fn p, {:ok, acc} ->
-        case JSONSchex.Compiler.ECMARegex.compile(p) do
-          {:ok, r} ->
-            {:cont, {:ok, [r | acc]}}
+      Enum.reduce_while(raw_patterns, {:ok, []}, fn pattern, {:ok, acc} ->
+        case JSONSchex.Compiler.ECMARegex.compile(pattern) do
+          {:ok, regex} ->
+            {:cont, {:ok, [regex | acc]}}
 
           {:error, {regex_term, _}} ->
-            {:halt,
-             {:error,
-              %Error{
-                rule: :invalid_regex,
-                path: ["patternProperties", p],
-                context: %ErrorContext{
-                  contrast: "invalid_regex",
-                  input: p,
-                  error_detail: regex_term
-                }
-              }}}
+            {:halt, {:error, invalid_pattern_properties_regex_error(pattern, regex_term)}}
         end
       end)
 
@@ -889,6 +926,95 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"else", _}, _, _base, _vocabs, _ctx), do: {:ok, nil}
 
   defp compile_keyword(_, _, _base, _vocabs, _ctx), do: {:ok, nil}
+
+  defp compile_pattern_properties(patterns, _base, _vocabs, _ctx, regex_cache)
+       when map_size(patterns) == 0,
+       do: {:ok, nil, regex_cache}
+
+  defp compile_pattern_properties(patterns, base, vocabs, ctx, regex_cache) do
+    Enum.reduce_while(patterns, {:ok, [], regex_cache}, fn {pattern, sub},
+                                                            {:ok, acc, cache} ->
+      case fetch_or_compile_pattern(pattern, cache) do
+        {:ok, regex, updated_cache} ->
+          case compile_schema_node(sub, base, vocabs, ctx) do
+            {:ok, compiled_sub} ->
+              {:cont, {:ok, [{regex, compiled_sub} | acc], updated_cache}}
+
+            {:error, %Error{} = error} ->
+              path = error.path || []
+              {:halt, {:error, %{error | path: path ++ [pattern]}}}
+          end
+
+        {:error, {regex_term, _}} ->
+          {:halt, {:error, invalid_pattern_properties_regex_error(pattern, regex_term)}}
+      end
+    end)
+  end
+
+  defp build_pattern_properties_rule(nil), do: nil
+
+  defp build_pattern_properties_rule(compiled_patterns) do
+    %Rule{name: :patternProperties, params: compiled_patterns}
+  end
+
+  defp compile_additional_properties(sub_schema, full_schema, base, vocabs, ctx, regex_cache) do
+    with {:ok, compiled_patterns, updated_cache} <-
+           compile_additional_pattern_regexes(full_schema, regex_cache),
+         {:ok, compiled_sub} <- compile_schema_node(sub_schema, base, vocabs, ctx) do
+      known_props_set = Map.keys(Map.get(full_schema, "properties", %{})) |> MapSet.new()
+      always_valid? = match?(%Schema{rules: []}, compiled_sub)
+
+      {:ok,
+       %Rule{
+         name: :additionalProperties,
+         params: %{
+           schema: compiled_sub,
+           known_props: known_props_set,
+           patterns: compiled_patterns,
+           always_valid?: always_valid?
+         }
+       }, updated_cache}
+    end
+  end
+
+  defp compile_additional_pattern_regexes(full_schema, regex_cache) do
+    raw_patterns = Map.keys(Map.get(full_schema, "patternProperties", %{}))
+
+    Enum.reduce_while(raw_patterns, {:ok, [], regex_cache}, fn pattern, {:ok, acc, cache} ->
+      case fetch_or_compile_pattern(pattern, cache) do
+        {:ok, regex, updated_cache} ->
+          {:cont, {:ok, [regex | acc], updated_cache}}
+
+        {:error, {regex_term, _}} ->
+          {:halt, {:error, invalid_pattern_properties_regex_error(pattern, regex_term)}}
+      end
+    end)
+  end
+
+  defp fetch_or_compile_pattern(pattern, regex_cache) do
+    case Map.fetch(regex_cache, pattern) do
+      {:ok, regex} ->
+        {:ok, regex, regex_cache}
+
+      :error ->
+        case JSONSchex.Compiler.ECMARegex.compile(pattern) do
+          {:ok, regex} -> {:ok, regex, Map.put(regex_cache, pattern, regex)}
+          {:error, _} = error -> error
+        end
+    end
+  end
+
+  defp invalid_pattern_properties_regex_error(pattern, regex_term) do
+    %Error{
+      rule: :invalid_regex,
+      path: ["patternProperties", pattern],
+      context: %ErrorContext{
+        contrast: "invalid_regex",
+        input: pattern,
+        error_detail: regex_term
+      }
+    }
+  end
 
   defp compile_optional_schema(nil, _base, _vocabs, _ctx), do: {:ok, nil}
 
