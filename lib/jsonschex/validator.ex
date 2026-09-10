@@ -23,6 +23,9 @@ defmodule JSONSchex.Validator do
 
   @empty_mapset MapSet.new()
 
+  @typep validation_error_list ::
+           [Error.t() | {list(), atom(), map()} | validation_error_list()]
+
   @doc """
   Validates data against a compiled schema.
 
@@ -53,20 +56,43 @@ defmodule JSONSchex.Validator do
         :ok
 
       {:error, errors} ->
-        flat_errors = List.flatten(errors)
-
-        formatted_errors =
-          Enum.map(flat_errors, fn
-            {path, rule, context} when is_map(context) ->
-              %Error{path: path, rule: rule, context: context, value: data}
-
-            %Error{} = e ->
-              e
-          end)
-
-        {:error, formatted_errors}
+        {:error, flatten_and_format_errors(errors, data)}
     end
   end
+
+  defp flatten_and_format_errors(errors, data) do
+    if flat_error_list?(errors) do
+      errors
+    else
+      flatten_and_format_errors(errors, data, [])
+    end
+  end
+
+  # Keyword reducers commonly return an already-flat list of Error structs. A
+  # linear shape check avoids rebuilding that list at the public boundary.
+  defp flat_error_list?([]), do: true
+  defp flat_error_list?([%Error{} | rest]), do: flat_error_list?(rest)
+  defp flat_error_list?(_errors), do: false
+
+  defp flatten_and_format_errors([], _data, formatted_tail), do: formatted_tail
+
+  # Process the remaining siblings first so prepending the current leaf retains
+  # the depth-first, left-to-right order produced by List.flatten/1.
+  defp flatten_and_format_errors([error | rest], data, formatted_tail) do
+    formatted_tail = flatten_and_format_errors(rest, data, formatted_tail)
+    flatten_and_format_error(error, data, formatted_tail)
+  end
+
+  defp flatten_and_format_error(errors, data, formatted_tail) when is_list(errors),
+    do: flatten_and_format_errors(errors, data, formatted_tail)
+
+  defp flatten_and_format_error({path, rule, context}, data, formatted_tail)
+       when is_map(context) do
+    [%Error{path: path, rule: rule, context: context, value: data} | formatted_tail]
+  end
+
+  defp flatten_and_format_error(%Error{} = error, _data, formatted_tail),
+    do: [error | formatted_tail]
 
   @doc """
   Recursive validation engine called by the rule dispatcher.
@@ -81,7 +107,7 @@ defmodule JSONSchex.Validator do
       {:ok, MapSet.new()}
   """
   @spec validate_entry(Schema.t(), term(), list(), ValidationContext.t(), term()) ::
-          {:ok, MapSet.t()} | {:error, list(Error.t()) | String.t()}
+          {:ok, MapSet.t()} | {:error, validation_error_list()}
   def validate_entry(schema, data, path, context, initial_evaluted \\ @empty_mapset)
 
   def validate_entry(%Schema{rules: [], source_id: nil}, _data, _path, _context, evaluated) do

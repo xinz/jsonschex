@@ -8,6 +8,7 @@
   * Compile each `patternProperties` regex once when the same schema also uses `additionalProperties`, with a bounded per-schema cache that preserves vocabulary gates, error behavior, and validation semantics.
   * Reuse runtime pattern-match classification between sibling `patternProperties` and `additionalProperties` rules within one validation invocation, reducing repeated regex matching for wide objects while preserving rule order, annotations, and diagnostics.
   * Adaptively merge evaluated keys from parent-dominated `anyOf` branches with balanced `MapSet` unions, avoiding repeated conversion of shared incoming evaluated keys while preserving full branch traversal, evaluated-key inputs, diagnostics, and legacy list-key behavior.
+  * Avoid rebuilding already-flat validation error lists at the public validation boundary, and fuse nested error flattening with legacy error formatting while preserving diagnostic order, values, and internal error grouping.
 
 ## v0.9.3 (2026-09-07)
 
