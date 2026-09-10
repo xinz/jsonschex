@@ -8,6 +8,10 @@ defmodule JSONSchex.Compiler.Predicates do
 
   alias JSONSchex.Types.ErrorContext
 
+  # A fixed compromise: it avoids the short non-ASCII regression from the
+  # unrolled counter while keeping charlist allocation bounded.
+  @charlist_byte_cutoff 256
+
   @doc """
   Checks if data matches the specified JSON Schema type(s).
   """
@@ -162,8 +166,9 @@ defmodule JSONSchex.Compiler.Predicates do
   end
   defp unique_item_hash(item), do: :erlang.phash2(item)
 
-  # Keep the standard conversion for short strings
-  defp codepoint_length(binary) when byte_size(binary) <= 64 do
+  # Keep the standard conversion for small and medium strings. The cutoff is
+  # measured across UTF-8 widths; ASCII alone would favor the unrolled path sooner.
+  defp codepoint_length(binary) when byte_size(binary) <= @charlist_byte_cutoff do
     binary |> String.to_charlist() |> length()
   rescue
     UnicodeConversionError -> :error

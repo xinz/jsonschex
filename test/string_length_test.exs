@@ -155,8 +155,8 @@ defmodule JSONSchex.Test.StringLengthTest do
     end
   end
 
-  test "exact codepoint lengths span the short byte threshold and longer mixed widths" do
-    for size <- [63, 64, 65, 127, 128, 129, 1023, 1024, 1025],
+  test "exact codepoint lengths span the 256-byte cutoff and longer mixed widths" do
+    for size <- [63, 64, 65, 127, 128, 129, 255, 256, 257, 1023, 1024, 1025],
         unit <- ["a", "é", "€", "😀", "aé€😀", "😀€éa"] do
       repetitions = div(size, byte_size(unit))
       padding = String.duplicate("a", rem(size, byte_size(unit)))
@@ -184,12 +184,12 @@ defmodule JSONSchex.Test.StringLengthTest do
     end
   end
 
-  test "restricted and truncated sequences retain validation across the byte threshold" do
+  test "restricted and truncated sequences retain validation across the 256-byte cutoff" do
     continuations = [0x7F, 0x80, 0xBF, 0xC0]
 
     # Build prefixes once; changing their codepoint widths also changes the
     # remainder seen by the long counter's four-codepoint loop.
-    prefixes = for size <- 59..64, unit <- ["a", "é", "€", "😀", "aé€😀"] do
+    prefixes = for size <- 251..256, unit <- ["a", "é", "€", "😀", "aé€😀"] do
       prefix = String.duplicate(unit, div(size, byte_size(unit))) <>
         String.duplicate("a", rem(size, byte_size(unit)))
       {size, prefix}
@@ -210,7 +210,7 @@ defmodule JSONSchex.Test.StringLengthTest do
       end
 
       for bytes <- tails ++ truncated, {size, prefix} <- prefixes,
-          size + byte_size(bytes) in [63, 64, 65] do
+          size + byte_size(bytes) in [255, 256, 257] do
         assert_utf8_length_oracle(prefix <> bytes)
       end
     end

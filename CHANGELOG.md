@@ -4,7 +4,7 @@
 
 ### Bug Fixes and Improvements
 
-  * Count Unicode code points for `minLength` and `maxLength` without allocating a charlist for inputs larger than 64 bytes; retain standard conversion for smaller inputs. Malformed UTF-8 now returns a validation error with `error_detail: "invalid_utf8"` instead of raising `UnicodeConversionError`.
+  * Count Unicode code points for `minLength` and `maxLength` without allocating a charlist for inputs larger than 256 bytes; retain standard conversion for inputs up to 256 bytes. Malformed UTF-8 now returns a validation error with `error_detail: "invalid_utf8"` instead of raising `UnicodeConversionError`.
 
 ## v0.9.3 (2026-09-07)
 
