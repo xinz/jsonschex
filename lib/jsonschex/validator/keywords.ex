@@ -427,6 +427,268 @@ defmodule JSONSchex.Validator.Keywords do
 
   def validate_pattern_properties(_, _, _, _), do: :ok
 
+  @doc false
+  def validate_pattern_properties(
+        data,
+        compiled_patterns,
+        path,
+        root,
+        %{source: source} = cache
+      )
+      when is_map(data) and source in [nil, :pattern_properties] do
+    cache = if source == nil, do: %{cache | source: :pattern_properties}, else: cache
+
+    reduce_patterns_with_match_cache(
+      compiled_patterns,
+      Map.to_list(data),
+      path,
+      root,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_pattern_properties(
+        data,
+        compiled_patterns,
+        path,
+        root,
+        %{source: :additional_properties} = cache
+      )
+      when is_map(data) do
+    reduce_patterns_after_additional(
+      compiled_patterns,
+      Map.to_list(data),
+      path,
+      root,
+      0,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_pattern_properties(data, compiled_patterns, path, root, cache) do
+    {validate_pattern_properties(data, compiled_patterns, path, root), cache}
+  end
+
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, [], [], cache),
+    do: {:ok, cache}
+
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, [], eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, errs, _eval_keys, cache),
+    do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_patterns_with_match_cache(
+         [{regex, schema} | rest_patterns],
+         data_list,
+         path,
+         root,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    {errs, eval_keys, cache} =
+      reduce_pattern_data_with_match_cache(data_list, regex, schema, path, root, errs, eval_keys, cache)
+
+    reduce_patterns_with_match_cache(rest_patterns, data_list, path, root, errs, eval_keys, cache)
+  end
+
+  defp reduce_pattern_data_with_match_cache([], _regex, _schema, _path, _root, errs, eval_keys, cache),
+    do: {errs, eval_keys, cache}
+
+  defp reduce_pattern_data_with_match_cache(
+         [{key, val} | rest],
+         regex,
+         schema,
+         path,
+         root,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    if Regex.match?(regex, key) do
+      cache = mark_pattern_match(cache, key)
+
+      case Validator.validate_entry(schema, val, [key | path], root) do
+        {:error, new_errs} ->
+          reduce_pattern_data_with_match_cache(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            [new_errs | errs],
+            eval_keys,
+            cache
+          )
+
+        {:ok, _} ->
+          reduce_pattern_data_with_match_cache(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            errs,
+            [key | eval_keys],
+            cache
+          )
+      end
+    else
+      reduce_pattern_data_with_match_cache(
+        rest,
+        regex,
+        schema,
+        path,
+        root,
+        errs,
+        eval_keys,
+        cache
+      )
+    end
+  end
+
+  # additionalProperties ran first and already checked each non-property key up
+  # to its first match. Preserve pattern-major validation while skipping only
+  # those regex calls whose result is already known.
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, [], [], cache),
+    do: {:ok, cache}
+
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, [], eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, errs, _eval_keys, cache),
+    do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_patterns_after_additional(
+         [{regex, schema} | rest_patterns],
+         data_list,
+         path,
+         root,
+         index,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    {errs, eval_keys} =
+      reduce_pattern_data_after_additional(
+        data_list,
+        regex,
+        schema,
+        path,
+        root,
+        index,
+        errs,
+        eval_keys,
+        cache
+      )
+
+    reduce_patterns_after_additional(
+      rest_patterns,
+      data_list,
+      path,
+      root,
+      index + 1,
+      errs,
+      eval_keys,
+      cache
+    )
+  end
+
+  defp reduce_pattern_data_after_additional(
+         [],
+         _regex,
+         _schema,
+         _path,
+         _root,
+         _index,
+         errs,
+         eval_keys,
+         _cache
+       ),
+       do: {errs, eval_keys}
+
+  defp reduce_pattern_data_after_additional(
+         [{key, val} | rest],
+         regex,
+         schema,
+         path,
+         root,
+         index,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    if pattern_matches_after_additional?(cache, key, index, regex) do
+      case Validator.validate_entry(schema, val, [key | path], root) do
+        {:error, new_errs} ->
+          reduce_pattern_data_after_additional(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            index,
+            [new_errs | errs],
+            eval_keys,
+            cache
+          )
+
+        {:ok, _} ->
+          reduce_pattern_data_after_additional(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            index,
+            errs,
+            [key | eval_keys],
+            cache
+          )
+      end
+    else
+      reduce_pattern_data_after_additional(
+        rest,
+        regex,
+        schema,
+        path,
+        root,
+        index,
+        errs,
+        eval_keys,
+        cache
+      )
+    end
+  end
+
+  defp pattern_matches_after_additional?(%{matches: matches}, key, index, regex) do
+    case Map.fetch(matches, key) do
+      {:ok, :no_match} ->
+        false
+
+      {:ok, {:first_match, ^index}} ->
+        true
+
+      {:ok, {:first_match, first_index}} when index < first_index ->
+        false
+
+      _ ->
+        Regex.match?(regex, key)
+    end
+  end
+
+  defp mark_pattern_match(%{matches: matches} = cache, key) do
+    case matches do
+      %{^key => _match} -> cache
+      _ -> %{cache | matches: Map.put(matches, key, :matched)}
+    end
+  end
+
   defp reduce_patterns([], _data_list, _path, _root, [], []), do: :ok
 
   defp reduce_patterns([], _data_list, _path, _root, [], eval_keys),
@@ -468,6 +730,253 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   def validate_additional_properties(_, _, _, _, _, _), do: :ok
+
+  @doc false
+  def validate_additional_properties_with_match_cache(
+        data,
+        schema,
+        known_props_set,
+        patterns,
+        path,
+        root,
+        %{source: source} = cache
+      )
+      when is_map(data) and source in [nil, :additional_properties] do
+    cache = if source == nil, do: %{cache | source: :additional_properties}, else: cache
+
+    reduce_additional_with_match_cache(
+      Map.to_list(data),
+      schema,
+      known_props_set,
+      patterns,
+      path,
+      root,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_additional_properties_with_match_cache(
+        data,
+        schema,
+        known_props_set,
+        _patterns,
+        path,
+        root,
+        %{source: :pattern_properties} = cache
+      )
+      when is_map(data) do
+    reduce_additional_after_pattern(
+      Map.to_list(data),
+      schema,
+      known_props_set,
+      path,
+      root,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_additional_properties_with_match_cache(
+        data,
+        schema,
+        known_props_set,
+        patterns,
+        path,
+        root,
+        cache
+      ) do
+    {validate_additional_properties(data, schema, known_props_set, patterns, path, root), cache}
+  end
+
+  defp reduce_additional_with_match_cache(
+         [],
+         _schema,
+         _known,
+         _patterns,
+         _path,
+         _root,
+         [],
+         [],
+         cache
+       ),
+       do: {:ok, cache}
+
+  defp reduce_additional_with_match_cache(
+         [],
+         _schema,
+         _known,
+         _patterns,
+         _path,
+         _root,
+         [],
+         eval_keys,
+         cache
+       ),
+       do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_additional_with_match_cache(
+         [],
+         _schema,
+         _known,
+         _patterns,
+         _path,
+         _root,
+         errs,
+         _eval_keys,
+         cache
+       ),
+       do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_additional_with_match_cache(
+         [{key, val} | rest],
+         schema,
+         known,
+         patterns,
+         path,
+         root,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    if MapSet.member?(known, key) do
+      reduce_additional_with_match_cache(
+        rest,
+        schema,
+        known,
+        patterns,
+        path,
+        root,
+        errs,
+        eval_keys,
+        cache
+      )
+    else
+      {classification, cache} = classify_additional_pattern(cache, key, patterns)
+
+      case classification do
+        :no_match ->
+          case Validator.validate_entry(schema, val, [key | path], root) do
+            {:error, new_errs} ->
+              reduce_additional_with_match_cache(
+                rest,
+                schema,
+                known,
+                patterns,
+                path,
+                root,
+                [new_errs | errs],
+                eval_keys,
+                cache
+              )
+
+            {:ok, _} ->
+              reduce_additional_with_match_cache(
+                rest,
+                schema,
+                known,
+                patterns,
+                path,
+                root,
+                errs,
+                [key | eval_keys],
+                cache
+              )
+          end
+
+        {:first_match, _index} ->
+          reduce_additional_with_match_cache(
+            rest,
+            schema,
+            known,
+            patterns,
+            path,
+            root,
+            errs,
+            eval_keys,
+            cache
+          )
+      end
+    end
+  end
+
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, [], [], cache),
+    do: {:ok, cache}
+
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, [], eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, errs, _eval_keys, cache),
+    do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_additional_after_pattern(
+         [{key, val} | rest],
+         schema,
+         known,
+         path,
+         root,
+         errs,
+         eval_keys,
+         %{matches: matches} = cache
+       ) do
+    cond do
+      MapSet.member?(known, key) ->
+        reduce_additional_after_pattern(rest, schema, known, path, root, errs, eval_keys, cache)
+
+      Map.has_key?(matches, key) ->
+        reduce_additional_after_pattern(rest, schema, known, path, root, errs, eval_keys, cache)
+
+      true ->
+        case Validator.validate_entry(schema, val, [key | path], root) do
+          {:error, new_errs} ->
+            reduce_additional_after_pattern(
+              rest,
+              schema,
+              known,
+              path,
+              root,
+              [new_errs | errs],
+              eval_keys,
+              cache
+            )
+
+          {:ok, _} ->
+            reduce_additional_after_pattern(
+              rest,
+              schema,
+              known,
+              path,
+              root,
+              errs,
+              [key | eval_keys],
+              cache
+            )
+        end
+    end
+  end
+
+  defp classify_additional_pattern(%{matches: matches} = cache, key, patterns) do
+    case Map.fetch(matches, key) do
+      {:ok, classification} ->
+        {classification, cache}
+
+      :error ->
+        classification = first_matching_pattern(patterns, key, 0)
+        {classification, %{cache | matches: Map.put(matches, key, classification)}}
+    end
+  end
+
+  defp first_matching_pattern([], _key, _index), do: :no_match
+
+  defp first_matching_pattern([regex | rest], key, index) do
+    if Regex.match?(regex, key) do
+      {:first_match, index}
+    else
+      first_matching_pattern(rest, key, index + 1)
+    end
+  end
 
   defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], []), do: :ok
 
@@ -523,6 +1032,90 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   def collect_additional_keys(_, _, _), do: :ok
+
+  @doc false
+  def collect_additional_keys_with_match_cache(
+        data,
+        known_props_set,
+        patterns,
+        %{source: source} = cache
+      )
+      when is_map(data) and source in [nil, :additional_properties] do
+    cache = if source == nil, do: %{cache | source: :additional_properties}, else: cache
+
+    reduce_collect_additional_with_match_cache(
+      Map.to_list(data),
+      known_props_set,
+      patterns,
+      [],
+      cache
+    )
+  end
+
+  def collect_additional_keys_with_match_cache(
+        data,
+        known_props_set,
+        _patterns,
+        %{source: :pattern_properties} = cache
+      )
+      when is_map(data) do
+    reduce_collect_additional_after_pattern(Map.to_list(data), known_props_set, [], cache)
+  end
+
+  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache) do
+    {collect_additional_keys(data, known_props_set, patterns), cache}
+  end
+
+  defp reduce_collect_additional_with_match_cache([], _known, _patterns, [], cache),
+    do: {:ok, cache}
+
+  defp reduce_collect_additional_with_match_cache([], _known, _patterns, eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_collect_additional_with_match_cache(
+         [{key, _val} | rest],
+         known,
+         patterns,
+         eval_keys,
+         cache
+       ) do
+    if MapSet.member?(known, key) do
+      reduce_collect_additional_with_match_cache(rest, known, patterns, eval_keys, cache)
+    else
+      {classification, cache} = classify_additional_pattern(cache, key, patterns)
+
+      case classification do
+        :no_match ->
+          reduce_collect_additional_with_match_cache(rest, known, patterns, [key | eval_keys], cache)
+
+        {:first_match, _index} ->
+          reduce_collect_additional_with_match_cache(rest, known, patterns, eval_keys, cache)
+      end
+    end
+  end
+
+  defp reduce_collect_additional_after_pattern([], _known, [], cache), do: {:ok, cache}
+
+  defp reduce_collect_additional_after_pattern([], _known, eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_collect_additional_after_pattern(
+         [{key, _val} | rest],
+         known,
+         eval_keys,
+         %{matches: matches} = cache
+       ) do
+    cond do
+      MapSet.member?(known, key) ->
+        reduce_collect_additional_after_pattern(rest, known, eval_keys, cache)
+
+      Map.has_key?(matches, key) ->
+        reduce_collect_additional_after_pattern(rest, known, eval_keys, cache)
+
+      true ->
+        reduce_collect_additional_after_pattern(rest, known, [key | eval_keys], cache)
+    end
+  end
 
   defp reduce_collect_additional([], _known, _patterns, []), do: :ok
 
