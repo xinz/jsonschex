@@ -59,6 +59,11 @@ defmodule JSONSchex.ErrorFormatter do
     "Value #{input} is greater than or equal to exclusive maximum #{max}"
   end
 
+  defp format_message(%Error{rule: rule, context: %{error_detail: "invalid_utf8"}})
+       when rule in [:minLength, :maxLength] do
+    "Cannot check #{rule}: string is not valid UTF-8"
+  end
+
   defp format_message(%Error{rule: :minLength, context: %{contrast: min, input: len}}) do
     "String length #{len} is less than minimum #{min}"
   end

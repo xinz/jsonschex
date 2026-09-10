@@ -74,17 +74,21 @@ defmodule JSONSchex.Compiler.Predicates do
     if data == const, do: :ok, else: {:error, %ErrorContext{contrast: const, input: data}}
   end
 
-  @doc "Checks `minLength`."
+  @doc "Checks `minLength`, returning an error for malformed UTF-8."
   def check_min_length(data, min) when is_binary(data) do
-    len = codepoint_length(data)
-    if len >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: len}}
+    case codepoint_length(data) do
+      :error -> {:error, %ErrorContext{contrast: min, input: data, error_detail: "invalid_utf8"}}
+      len -> if len >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: len}}
+    end
   end
   def check_min_length(_, _), do: :ok
 
-  @doc "Checks `maxLength`."
+  @doc "Checks `maxLength`, returning an error for malformed UTF-8."
   def check_max_length(data, max) when is_binary(data) do
-    len = codepoint_length(data)
-    if len <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: len}}
+    case codepoint_length(data) do
+      :error -> {:error, %ErrorContext{contrast: max, input: data, error_detail: "invalid_utf8"}}
+      len -> if len <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: len}}
+    end
   end
   def check_max_length(_, _), do: :ok
 
@@ -158,9 +162,25 @@ defmodule JSONSchex.Compiler.Predicates do
   end
   defp unique_item_hash(item), do: :erlang.phash2(item)
 
-  defp codepoint_length(binary) do
+  # Keep the standard conversion for short strings
+  defp codepoint_length(binary) when byte_size(binary) <= 64 do
     binary |> String.to_charlist() |> length()
+  rescue
+    UnicodeConversionError -> :error
   end
+  defp codepoint_length(binary), do: count_codepoints(binary, 0)
+
+  # Count Unicode code points, not graphemes, without allocating a charlist.
+  # Scan to the end or an encoding error: diagnostics need the exact length of
+  # valid input, and permissive bounds must not silently accept malformed UTF-8.
+  # A small unroll reduces loop overhead for mixed-width UTF-8; the next clause
+  # handles the remaining one to three code points without padding or slicing.
+  defp count_codepoints(<<_::utf8, _::utf8, _::utf8, _::utf8, rest::binary>>, count),
+    do: count_codepoints(rest, count + 4)
+  defp count_codepoints(<<_codepoint::utf8, rest::binary>>, count),
+    do: count_codepoints(rest, count + 1)
+  defp count_codepoints(<<>>, count), do: count
+  defp count_codepoints(_invalid, _count), do: :error
 
   defp infer_type(v) when is_binary(v), do: "string"
   defp infer_type(v) when is_integer(v), do: "integer"
