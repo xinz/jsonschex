@@ -57,6 +57,9 @@ jobs = Enum.flat_map(inputs, fn {label, data, count, valid, invalid} ->
     {"#{label} predicate min pass", fn ->
       :ok = JSONSchex.Compiler.Predicates.check_min_length(data, count)
     end},
+    {"#{label} predicate max pass", fn ->
+      :ok = JSONSchex.Compiler.Predicates.check_max_length(data, count)
+    end},
     {"#{label} validate both pass", fn ->
       :ok = JSONSchex.validate(valid, data)
     end},
