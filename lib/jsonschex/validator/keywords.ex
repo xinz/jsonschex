@@ -280,7 +280,11 @@ defmodule JSONSchex.Validator.Keywords do
   Validates data against schemas in an `anyOf` array.
   """
   def validate_anyOf(data, schemas, path, root, evaluated) do
-    reduce_anyOf(schemas, data, path, root, evaluated, 0, [], [])
+    if any_of_direct_merge_candidate?(schemas, evaluated) do
+      reduce_anyOf_with_shared_evaluated_keys(schemas, data, path, root, evaluated, 0, 0, [], [])
+    else
+      reduce_anyOf(schemas, data, path, root, evaluated, 0, [], [])
+    end
   end
 
   defp reduce_anyOf([], _data, _path, _root, _evaluated, count, merged_keys, _error_lists)
@@ -313,6 +317,128 @@ defmodule JSONSchex.Validator.Keywords do
       {:error, errs} ->
         new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
         reduce_anyOf(rest, data, path, root, evaluated, count, acc_keys, new_errs)
+    end
+  end
+
+  # The specialized reducer is reachable only for a sufficiently large incoming
+  # evaluated-key set and at least four branches. It preserves the input supplied
+  # to every child and selects direct merging only after all branches run.
+  defp any_of_direct_merge_candidate?([_, _, _, _ | _], evaluated),
+    do: MapSet.size(evaluated) >= 8
+
+  defp any_of_direct_merge_candidate?(_schemas, _evaluated), do: false
+
+  defp reduce_anyOf_with_shared_evaluated_keys(
+         [],
+         _data,
+         _path,
+         _root,
+         evaluated,
+         count,
+         total_evaluated_key_count,
+         evaluated_key_sets,
+         _error_lists
+       )
+       when count > 0 do
+    {:ok,
+     merge_any_of_evaluated_key_sets(
+       evaluated_key_sets,
+       evaluated,
+       count,
+       total_evaluated_key_count
+     )}
+  end
+
+  defp reduce_anyOf_with_shared_evaluated_keys(
+         [],
+         _data,
+         _path,
+         _root,
+         _evaluated,
+         0,
+         _total_evaluated_key_count,
+         _evaluated_key_sets,
+         error_lists
+       ) do
+    {:error, List.flatten(Enum.reverse(error_lists))}
+  end
+
+  defp reduce_anyOf_with_shared_evaluated_keys(
+         [schema | rest],
+         data,
+         path,
+         root,
+         evaluated,
+         count,
+         total_evaluated_key_count,
+         evaluated_key_sets,
+         acc_errs
+       ) do
+    case Validator.validate_entry(schema, data, path, root, evaluated) do
+      {:ok, keys} ->
+        key_count = MapSet.size(keys)
+
+        if key_count == 0 do
+          reduce_anyOf_with_shared_evaluated_keys(
+            rest,
+            data,
+            path,
+            root,
+            evaluated,
+            count + 1,
+            total_evaluated_key_count,
+            evaluated_key_sets,
+            acc_errs
+          )
+        else
+          new_count = count + 1
+          new_total_evaluated_key_count = total_evaluated_key_count + key_count
+          new_evaluated_key_sets = [keys | evaluated_key_sets]
+
+          if any_of_incoming_evaluated_keys_dominate_successful_prefix?(
+               evaluated,
+               new_count,
+               new_total_evaluated_key_count
+             ) do
+            reduce_anyOf_with_shared_evaluated_keys(
+              rest,
+              data,
+              path,
+              root,
+              evaluated,
+              new_count,
+              new_total_evaluated_key_count,
+              new_evaluated_key_sets,
+              acc_errs
+            )
+          else
+            reduce_anyOf(
+              rest,
+              data,
+              path,
+              root,
+              evaluated,
+              new_count,
+              evaluated_key_sets_to_lists(new_evaluated_key_sets),
+              acc_errs
+            )
+          end
+        end
+
+      {:error, errs} ->
+        new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
+
+        reduce_anyOf_with_shared_evaluated_keys(
+          rest,
+          data,
+          path,
+          root,
+          evaluated,
+          count,
+          total_evaluated_key_count,
+          evaluated_key_sets,
+          new_errs
+        )
     end
   end
 
@@ -1268,6 +1394,89 @@ defmodule JSONSchex.Validator.Keywords do
     else
       reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
     end
+  end
+
+  # Retain the existing flatten-and-rebuild semantics when direct union would
+  # otherwise change historical recursive handling of list-valued Elixir keys.
+  defp merge_evaluated_key_sets([]), do: @empty_mapset
+
+  defp merge_evaluated_key_sets(evaluated_key_sets) do
+    evaluated_key_sets
+    |> Enum.map(&MapSet.to_list/1)
+    |> List.flatten()
+    |> MapSet.new()
+  end
+
+  # Every successful anyOf child receives the same incoming evaluated keys.
+  # Direct pairwise union helps only when that known shared portion dominates.
+  # The fallback deliberately retains the historical recursive-flatten behavior.
+  defp merge_any_of_evaluated_key_sets(
+         evaluated_key_sets,
+         evaluated,
+         count,
+         total_evaluated_key_count
+       ) do
+    if any_of_shared_evaluated_keys_dominate?(evaluated, count, total_evaluated_key_count) do
+      merged_evaluated_keys = balanced_union_evaluated_key_sets(evaluated_key_sets)
+
+      if list_free_evaluated_key_set?(merged_evaluated_keys) do
+        merged_evaluated_keys
+      else
+        merge_evaluated_key_sets(evaluated_key_sets)
+      end
+    else
+      merge_evaluated_key_sets(evaluated_key_sets)
+    end
+  end
+
+  # The benchmark-derived gate requires known shared evaluated keys to make up
+  # at least two thirds of successful child evaluated-key memberships before
+  # unioning them.
+  defp any_of_shared_evaluated_keys_dominate?(evaluated, count, total_evaluated_key_count) do
+    count >= 4 and
+      any_of_incoming_evaluated_keys_dominate_successful_prefix?(
+        evaluated,
+        count,
+        total_evaluated_key_count
+      )
+  end
+
+  # Once the processed successful-branch prefix is not dominated by incoming
+  # evaluated keys, resume the original reducer rather than retaining raw
+  # MapSets in hopes that a later branch restores the average. That conservative
+  # choice keeps the fallback near its original allocation profile.
+  defp any_of_incoming_evaluated_keys_dominate_successful_prefix?(
+         evaluated,
+         count,
+         total_evaluated_key_count
+       ) do
+    shared_evaluated_key_count = MapSet.size(evaluated) * count
+    3 * shared_evaluated_key_count >= 2 * total_evaluated_key_count
+  end
+
+  defp evaluated_key_sets_to_lists(evaluated_key_sets),
+    do: Enum.map(evaluated_key_sets, &MapSet.to_list/1)
+
+  defp list_free_evaluated_key_set?(evaluated_keys) do
+    Enum.all?(evaluated_keys, &(not is_list(&1)))
+  end
+
+  defp balanced_union_evaluated_key_sets([]), do: @empty_mapset
+  defp balanced_union_evaluated_key_sets([evaluated_keys]), do: evaluated_keys
+
+  defp balanced_union_evaluated_key_sets(evaluated_key_sets) do
+    evaluated_key_sets
+    |> union_evaluated_key_pairs([])
+    |> balanced_union_evaluated_key_sets()
+  end
+
+  defp union_evaluated_key_pairs([], acc), do: Enum.reverse(acc)
+
+  defp union_evaluated_key_pairs([evaluated_keys], acc),
+    do: Enum.reverse([evaluated_keys | acc])
+
+  defp union_evaluated_key_pairs([left, right | rest], acc) do
+    union_evaluated_key_pairs(rest, [MapSet.union(left, right) | acc])
   end
 
   @doc """

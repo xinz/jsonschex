@@ -7,6 +7,7 @@
   * Count Unicode code points for `minLength` and `maxLength` without allocating a charlist for inputs larger than 256 bytes; retain standard conversion for inputs up to 256 bytes. Malformed UTF-8 now returns a validation error with `error_detail: "invalid_utf8"` instead of raising `UnicodeConversionError`.
   * Compile each `patternProperties` regex once when the same schema also uses `additionalProperties`, with a bounded per-schema cache that preserves vocabulary gates, error behavior, and validation semantics.
   * Reuse runtime pattern-match classification between sibling `patternProperties` and `additionalProperties` rules within one validation invocation, reducing repeated regex matching for wide objects while preserving rule order, annotations, and diagnostics.
+  * Adaptively merge evaluated keys from parent-dominated `anyOf` branches with balanced `MapSet` unions, avoiding repeated conversion of shared incoming evaluated keys while preserving full branch traversal, evaluated-key inputs, diagnostics, and legacy list-key behavior.
 
 ## v0.9.3 (2026-09-07)
 
