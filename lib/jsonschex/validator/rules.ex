@@ -116,11 +116,9 @@ defmodule JSONSchex.Validator.Rules do
 
   def apply(%Rule{name: :required, params: required}, data, {path, _, _}) do
     if is_map(data) do
-      if Enum.all?(required, &Map.has_key?(data, &1)) do
-        :ok
-      else
-        missing = Enum.reject(required, &Map.has_key?(data, &1))
-        {:error, [%Error{path: path, rule: :required, context: %ErrorContext{contrast: missing}}]}
+      case Enum.reject(required, &Map.has_key?(data, &1)) do
+        [] -> :ok
+        missing -> {:error, [%Error{path: path, rule: :required, context: %ErrorContext{contrast: missing}}]}
       end
     else
       :ok
