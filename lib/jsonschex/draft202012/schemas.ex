@@ -15,7 +15,6 @@ defmodule JSONSchex.Draft202012.Schemas do
   """
 
   alias JSONSchex.Compiler
-  alias JSONSchex.ScopeScanner
   alias JSONSchex.Draft202012.Dialect
 
   @compiled_defs_cache_key {__MODULE__, :draft2020_12_compiled_defs}
@@ -363,9 +362,8 @@ defmodule JSONSchex.Draft202012.Schemas do
 
   The returned map includes:
   - each built-in resource under its canonical absolute URI
-  - all compiled defs discovered within each resource
-  - all `$anchor` and `$dynamicAnchor` absolute entries discovered by scanning
-    the raw built-in resources
+  - all compiled defs, `$anchor`, and `$dynamicAnchor` entries discovered while
+    compiling each resource
 
   This allows built-in schemas to behave like a normal compiled defs registry
   during `$ref` and `$dynamicRef` resolution.
@@ -403,18 +401,10 @@ defmodule JSONSchex.Draft202012.Schemas do
       {:ok, raw_schema} = fetch(family_uri)
 
       {:ok, compiled_schema} = Compiler.compile(raw_schema, base_uri: family_uri)
-      {scanned_defs, _refs} = ScopeScanner.scan(raw_schema)
 
       acc
       |> Map.put(family_uri, compiled_schema)
       |> Map.merge(compiled_schema.defs || %{})
-      |> merge_scanned_anchor_entries(scanned_defs, compiled_schema)
-    end)
-  end
-
-  defp merge_scanned_anchor_entries(defs, scanned_defs, compiled_schema) do
-    Enum.reduce(scanned_defs, defs, fn {scanned_uri, _raw_schema}, acc ->
-      Map.put_new(acc, scanned_uri, compiled_schema)
     end)
   end
 end

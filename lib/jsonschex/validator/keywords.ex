@@ -280,7 +280,11 @@ defmodule JSONSchex.Validator.Keywords do
   Validates data against schemas in an `anyOf` array.
   """
   def validate_anyOf(data, schemas, path, root, evaluated) do
-    reduce_anyOf(schemas, data, path, root, evaluated, 0, [], [])
+    if any_of_direct_merge_candidate?(schemas, evaluated) do
+      reduce_anyOf_with_shared_evaluated_keys(schemas, data, path, root, evaluated, 0, 0, [], [])
+    else
+      reduce_anyOf(schemas, data, path, root, evaluated, 0, [], [])
+    end
   end
 
   defp reduce_anyOf([], _data, _path, _root, _evaluated, count, merged_keys, _error_lists)
@@ -313,6 +317,128 @@ defmodule JSONSchex.Validator.Keywords do
       {:error, errs} ->
         new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
         reduce_anyOf(rest, data, path, root, evaluated, count, acc_keys, new_errs)
+    end
+  end
+
+  # The specialized reducer is reachable only for a sufficiently large incoming
+  # evaluated-key set and at least four branches. It preserves the input supplied
+  # to every child and selects direct merging only after all branches run.
+  defp any_of_direct_merge_candidate?([_, _, _, _ | _], evaluated),
+    do: MapSet.size(evaluated) >= 8
+
+  defp any_of_direct_merge_candidate?(_schemas, _evaluated), do: false
+
+  defp reduce_anyOf_with_shared_evaluated_keys(
+         [],
+         _data,
+         _path,
+         _root,
+         evaluated,
+         count,
+         total_evaluated_key_count,
+         evaluated_key_sets,
+         _error_lists
+       )
+       when count > 0 do
+    {:ok,
+     merge_any_of_evaluated_key_sets(
+       evaluated_key_sets,
+       evaluated,
+       count,
+       total_evaluated_key_count
+     )}
+  end
+
+  defp reduce_anyOf_with_shared_evaluated_keys(
+         [],
+         _data,
+         _path,
+         _root,
+         _evaluated,
+         0,
+         _total_evaluated_key_count,
+         _evaluated_key_sets,
+         error_lists
+       ) do
+    {:error, List.flatten(Enum.reverse(error_lists))}
+  end
+
+  defp reduce_anyOf_with_shared_evaluated_keys(
+         [schema | rest],
+         data,
+         path,
+         root,
+         evaluated,
+         count,
+         total_evaluated_key_count,
+         evaluated_key_sets,
+         acc_errs
+       ) do
+    case Validator.validate_entry(schema, data, path, root, evaluated) do
+      {:ok, keys} ->
+        key_count = MapSet.size(keys)
+
+        if key_count == 0 do
+          reduce_anyOf_with_shared_evaluated_keys(
+            rest,
+            data,
+            path,
+            root,
+            evaluated,
+            count + 1,
+            total_evaluated_key_count,
+            evaluated_key_sets,
+            acc_errs
+          )
+        else
+          new_count = count + 1
+          new_total_evaluated_key_count = total_evaluated_key_count + key_count
+          new_evaluated_key_sets = [keys | evaluated_key_sets]
+
+          if any_of_incoming_evaluated_keys_dominate_successful_prefix?(
+               evaluated,
+               new_count,
+               new_total_evaluated_key_count
+             ) do
+            reduce_anyOf_with_shared_evaluated_keys(
+              rest,
+              data,
+              path,
+              root,
+              evaluated,
+              new_count,
+              new_total_evaluated_key_count,
+              new_evaluated_key_sets,
+              acc_errs
+            )
+          else
+            reduce_anyOf(
+              rest,
+              data,
+              path,
+              root,
+              evaluated,
+              new_count,
+              evaluated_key_sets_to_lists(new_evaluated_key_sets),
+              acc_errs
+            )
+          end
+        end
+
+      {:error, errs} ->
+        new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
+
+        reduce_anyOf_with_shared_evaluated_keys(
+          rest,
+          data,
+          path,
+          root,
+          evaluated,
+          count,
+          total_evaluated_key_count,
+          evaluated_key_sets,
+          new_errs
+        )
     end
   end
 
@@ -427,6 +553,268 @@ defmodule JSONSchex.Validator.Keywords do
 
   def validate_pattern_properties(_, _, _, _), do: :ok
 
+  @doc false
+  def validate_pattern_properties(
+        data,
+        compiled_patterns,
+        path,
+        root,
+        %{source: source} = cache
+      )
+      when is_map(data) and source in [nil, :pattern_properties] do
+    cache = if source == nil, do: %{cache | source: :pattern_properties}, else: cache
+
+    reduce_patterns_with_match_cache(
+      compiled_patterns,
+      Map.to_list(data),
+      path,
+      root,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_pattern_properties(
+        data,
+        compiled_patterns,
+        path,
+        root,
+        %{source: :additional_properties} = cache
+      )
+      when is_map(data) do
+    reduce_patterns_after_additional(
+      compiled_patterns,
+      Map.to_list(data),
+      path,
+      root,
+      0,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_pattern_properties(data, compiled_patterns, path, root, cache) do
+    {validate_pattern_properties(data, compiled_patterns, path, root), cache}
+  end
+
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, [], [], cache),
+    do: {:ok, cache}
+
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, [], eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, errs, _eval_keys, cache),
+    do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_patterns_with_match_cache(
+         [{regex, schema} | rest_patterns],
+         data_list,
+         path,
+         root,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    {errs, eval_keys, cache} =
+      reduce_pattern_data_with_match_cache(data_list, regex, schema, path, root, errs, eval_keys, cache)
+
+    reduce_patterns_with_match_cache(rest_patterns, data_list, path, root, errs, eval_keys, cache)
+  end
+
+  defp reduce_pattern_data_with_match_cache([], _regex, _schema, _path, _root, errs, eval_keys, cache),
+    do: {errs, eval_keys, cache}
+
+  defp reduce_pattern_data_with_match_cache(
+         [{key, val} | rest],
+         regex,
+         schema,
+         path,
+         root,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    if Regex.match?(regex, key) do
+      cache = mark_pattern_match(cache, key)
+
+      case Validator.validate_entry(schema, val, [key | path], root) do
+        {:error, new_errs} ->
+          reduce_pattern_data_with_match_cache(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            [new_errs | errs],
+            eval_keys,
+            cache
+          )
+
+        {:ok, _} ->
+          reduce_pattern_data_with_match_cache(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            errs,
+            [key | eval_keys],
+            cache
+          )
+      end
+    else
+      reduce_pattern_data_with_match_cache(
+        rest,
+        regex,
+        schema,
+        path,
+        root,
+        errs,
+        eval_keys,
+        cache
+      )
+    end
+  end
+
+  # additionalProperties ran first and already checked each non-property key up
+  # to its first match. Preserve pattern-major validation while skipping only
+  # those regex calls whose result is already known.
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, [], [], cache),
+    do: {:ok, cache}
+
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, [], eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, errs, _eval_keys, cache),
+    do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_patterns_after_additional(
+         [{regex, schema} | rest_patterns],
+         data_list,
+         path,
+         root,
+         index,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    {errs, eval_keys} =
+      reduce_pattern_data_after_additional(
+        data_list,
+        regex,
+        schema,
+        path,
+        root,
+        index,
+        errs,
+        eval_keys,
+        cache
+      )
+
+    reduce_patterns_after_additional(
+      rest_patterns,
+      data_list,
+      path,
+      root,
+      index + 1,
+      errs,
+      eval_keys,
+      cache
+    )
+  end
+
+  defp reduce_pattern_data_after_additional(
+         [],
+         _regex,
+         _schema,
+         _path,
+         _root,
+         _index,
+         errs,
+         eval_keys,
+         _cache
+       ),
+       do: {errs, eval_keys}
+
+  defp reduce_pattern_data_after_additional(
+         [{key, val} | rest],
+         regex,
+         schema,
+         path,
+         root,
+         index,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    if pattern_matches_after_additional?(cache, key, index, regex) do
+      case Validator.validate_entry(schema, val, [key | path], root) do
+        {:error, new_errs} ->
+          reduce_pattern_data_after_additional(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            index,
+            [new_errs | errs],
+            eval_keys,
+            cache
+          )
+
+        {:ok, _} ->
+          reduce_pattern_data_after_additional(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            index,
+            errs,
+            [key | eval_keys],
+            cache
+          )
+      end
+    else
+      reduce_pattern_data_after_additional(
+        rest,
+        regex,
+        schema,
+        path,
+        root,
+        index,
+        errs,
+        eval_keys,
+        cache
+      )
+    end
+  end
+
+  defp pattern_matches_after_additional?(%{matches: matches}, key, index, regex) do
+    case Map.fetch(matches, key) do
+      {:ok, :no_match} ->
+        false
+
+      {:ok, {:first_match, ^index}} ->
+        true
+
+      {:ok, {:first_match, first_index}} when index < first_index ->
+        false
+
+      _ ->
+        Regex.match?(regex, key)
+    end
+  end
+
+  defp mark_pattern_match(%{matches: matches} = cache, key) do
+    case matches do
+      %{^key => _match} -> cache
+      _ -> %{cache | matches: Map.put(matches, key, :matched)}
+    end
+  end
+
   defp reduce_patterns([], _data_list, _path, _root, [], []), do: :ok
 
   defp reduce_patterns([], _data_list, _path, _root, [], eval_keys),
@@ -468,6 +856,253 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   def validate_additional_properties(_, _, _, _, _, _), do: :ok
+
+  @doc false
+  def validate_additional_properties_with_match_cache(
+        data,
+        schema,
+        known_props_set,
+        patterns,
+        path,
+        root,
+        %{source: source} = cache
+      )
+      when is_map(data) and source in [nil, :additional_properties] do
+    cache = if source == nil, do: %{cache | source: :additional_properties}, else: cache
+
+    reduce_additional_with_match_cache(
+      Map.to_list(data),
+      schema,
+      known_props_set,
+      patterns,
+      path,
+      root,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_additional_properties_with_match_cache(
+        data,
+        schema,
+        known_props_set,
+        _patterns,
+        path,
+        root,
+        %{source: :pattern_properties} = cache
+      )
+      when is_map(data) do
+    reduce_additional_after_pattern(
+      Map.to_list(data),
+      schema,
+      known_props_set,
+      path,
+      root,
+      [],
+      [],
+      cache
+    )
+  end
+
+  def validate_additional_properties_with_match_cache(
+        data,
+        schema,
+        known_props_set,
+        patterns,
+        path,
+        root,
+        cache
+      ) do
+    {validate_additional_properties(data, schema, known_props_set, patterns, path, root), cache}
+  end
+
+  defp reduce_additional_with_match_cache(
+         [],
+         _schema,
+         _known,
+         _patterns,
+         _path,
+         _root,
+         [],
+         [],
+         cache
+       ),
+       do: {:ok, cache}
+
+  defp reduce_additional_with_match_cache(
+         [],
+         _schema,
+         _known,
+         _patterns,
+         _path,
+         _root,
+         [],
+         eval_keys,
+         cache
+       ),
+       do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_additional_with_match_cache(
+         [],
+         _schema,
+         _known,
+         _patterns,
+         _path,
+         _root,
+         errs,
+         _eval_keys,
+         cache
+       ),
+       do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_additional_with_match_cache(
+         [{key, val} | rest],
+         schema,
+         known,
+         patterns,
+         path,
+         root,
+         errs,
+         eval_keys,
+         cache
+       ) do
+    if MapSet.member?(known, key) do
+      reduce_additional_with_match_cache(
+        rest,
+        schema,
+        known,
+        patterns,
+        path,
+        root,
+        errs,
+        eval_keys,
+        cache
+      )
+    else
+      {classification, cache} = classify_additional_pattern(cache, key, patterns)
+
+      case classification do
+        :no_match ->
+          case Validator.validate_entry(schema, val, [key | path], root) do
+            {:error, new_errs} ->
+              reduce_additional_with_match_cache(
+                rest,
+                schema,
+                known,
+                patterns,
+                path,
+                root,
+                [new_errs | errs],
+                eval_keys,
+                cache
+              )
+
+            {:ok, _} ->
+              reduce_additional_with_match_cache(
+                rest,
+                schema,
+                known,
+                patterns,
+                path,
+                root,
+                errs,
+                [key | eval_keys],
+                cache
+              )
+          end
+
+        {:first_match, _index} ->
+          reduce_additional_with_match_cache(
+            rest,
+            schema,
+            known,
+            patterns,
+            path,
+            root,
+            errs,
+            eval_keys,
+            cache
+          )
+      end
+    end
+  end
+
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, [], [], cache),
+    do: {:ok, cache}
+
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, [], eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, errs, _eval_keys, cache),
+    do: {{:error, List.flatten(errs)}, cache}
+
+  defp reduce_additional_after_pattern(
+         [{key, val} | rest],
+         schema,
+         known,
+         path,
+         root,
+         errs,
+         eval_keys,
+         %{matches: matches} = cache
+       ) do
+    cond do
+      MapSet.member?(known, key) ->
+        reduce_additional_after_pattern(rest, schema, known, path, root, errs, eval_keys, cache)
+
+      Map.has_key?(matches, key) ->
+        reduce_additional_after_pattern(rest, schema, known, path, root, errs, eval_keys, cache)
+
+      true ->
+        case Validator.validate_entry(schema, val, [key | path], root) do
+          {:error, new_errs} ->
+            reduce_additional_after_pattern(
+              rest,
+              schema,
+              known,
+              path,
+              root,
+              [new_errs | errs],
+              eval_keys,
+              cache
+            )
+
+          {:ok, _} ->
+            reduce_additional_after_pattern(
+              rest,
+              schema,
+              known,
+              path,
+              root,
+              errs,
+              [key | eval_keys],
+              cache
+            )
+        end
+    end
+  end
+
+  defp classify_additional_pattern(%{matches: matches} = cache, key, patterns) do
+    case Map.fetch(matches, key) do
+      {:ok, classification} ->
+        {classification, cache}
+
+      :error ->
+        classification = first_matching_pattern(patterns, key, 0)
+        {classification, %{cache | matches: Map.put(matches, key, classification)}}
+    end
+  end
+
+  defp first_matching_pattern([], _key, _index), do: :no_match
+
+  defp first_matching_pattern([regex | rest], key, index) do
+    if Regex.match?(regex, key) do
+      {:first_match, index}
+    else
+      first_matching_pattern(rest, key, index + 1)
+    end
+  end
 
   defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], []), do: :ok
 
@@ -523,6 +1158,90 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   def collect_additional_keys(_, _, _), do: :ok
+
+  @doc false
+  def collect_additional_keys_with_match_cache(
+        data,
+        known_props_set,
+        patterns,
+        %{source: source} = cache
+      )
+      when is_map(data) and source in [nil, :additional_properties] do
+    cache = if source == nil, do: %{cache | source: :additional_properties}, else: cache
+
+    reduce_collect_additional_with_match_cache(
+      Map.to_list(data),
+      known_props_set,
+      patterns,
+      [],
+      cache
+    )
+  end
+
+  def collect_additional_keys_with_match_cache(
+        data,
+        known_props_set,
+        _patterns,
+        %{source: :pattern_properties} = cache
+      )
+      when is_map(data) do
+    reduce_collect_additional_after_pattern(Map.to_list(data), known_props_set, [], cache)
+  end
+
+  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache) do
+    {collect_additional_keys(data, known_props_set, patterns), cache}
+  end
+
+  defp reduce_collect_additional_with_match_cache([], _known, _patterns, [], cache),
+    do: {:ok, cache}
+
+  defp reduce_collect_additional_with_match_cache([], _known, _patterns, eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_collect_additional_with_match_cache(
+         [{key, _val} | rest],
+         known,
+         patterns,
+         eval_keys,
+         cache
+       ) do
+    if MapSet.member?(known, key) do
+      reduce_collect_additional_with_match_cache(rest, known, patterns, eval_keys, cache)
+    else
+      {classification, cache} = classify_additional_pattern(cache, key, patterns)
+
+      case classification do
+        :no_match ->
+          reduce_collect_additional_with_match_cache(rest, known, patterns, [key | eval_keys], cache)
+
+        {:first_match, _index} ->
+          reduce_collect_additional_with_match_cache(rest, known, patterns, eval_keys, cache)
+      end
+    end
+  end
+
+  defp reduce_collect_additional_after_pattern([], _known, [], cache), do: {:ok, cache}
+
+  defp reduce_collect_additional_after_pattern([], _known, eval_keys, cache),
+    do: {{:ok, MapSet.new(eval_keys)}, cache}
+
+  defp reduce_collect_additional_after_pattern(
+         [{key, _val} | rest],
+         known,
+         eval_keys,
+         %{matches: matches} = cache
+       ) do
+    cond do
+      MapSet.member?(known, key) ->
+        reduce_collect_additional_after_pattern(rest, known, eval_keys, cache)
+
+      Map.has_key?(matches, key) ->
+        reduce_collect_additional_after_pattern(rest, known, eval_keys, cache)
+
+      true ->
+        reduce_collect_additional_after_pattern(rest, known, [key | eval_keys], cache)
+    end
+  end
 
   defp reduce_collect_additional([], _known, _patterns, []), do: :ok
 
@@ -675,6 +1394,89 @@ defmodule JSONSchex.Validator.Keywords do
     else
       reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
     end
+  end
+
+  # Retain the existing flatten-and-rebuild semantics when direct union would
+  # otherwise change historical recursive handling of list-valued Elixir keys.
+  defp merge_evaluated_key_sets([]), do: @empty_mapset
+
+  defp merge_evaluated_key_sets(evaluated_key_sets) do
+    evaluated_key_sets
+    |> Enum.map(&MapSet.to_list/1)
+    |> List.flatten()
+    |> MapSet.new()
+  end
+
+  # Every successful anyOf child receives the same incoming evaluated keys.
+  # Direct pairwise union helps only when that known shared portion dominates.
+  # The fallback deliberately retains the historical recursive-flatten behavior.
+  defp merge_any_of_evaluated_key_sets(
+         evaluated_key_sets,
+         evaluated,
+         count,
+         total_evaluated_key_count
+       ) do
+    if any_of_shared_evaluated_keys_dominate?(evaluated, count, total_evaluated_key_count) do
+      merged_evaluated_keys = balanced_union_evaluated_key_sets(evaluated_key_sets)
+
+      if list_free_evaluated_key_set?(merged_evaluated_keys) do
+        merged_evaluated_keys
+      else
+        merge_evaluated_key_sets(evaluated_key_sets)
+      end
+    else
+      merge_evaluated_key_sets(evaluated_key_sets)
+    end
+  end
+
+  # The benchmark-derived gate requires known shared evaluated keys to make up
+  # at least two thirds of successful child evaluated-key memberships before
+  # unioning them.
+  defp any_of_shared_evaluated_keys_dominate?(evaluated, count, total_evaluated_key_count) do
+    count >= 4 and
+      any_of_incoming_evaluated_keys_dominate_successful_prefix?(
+        evaluated,
+        count,
+        total_evaluated_key_count
+      )
+  end
+
+  # Once the processed successful-branch prefix is not dominated by incoming
+  # evaluated keys, resume the original reducer rather than retaining raw
+  # MapSets in hopes that a later branch restores the average. That conservative
+  # choice keeps the fallback near its original allocation profile.
+  defp any_of_incoming_evaluated_keys_dominate_successful_prefix?(
+         evaluated,
+         count,
+         total_evaluated_key_count
+       ) do
+    shared_evaluated_key_count = MapSet.size(evaluated) * count
+    3 * shared_evaluated_key_count >= 2 * total_evaluated_key_count
+  end
+
+  defp evaluated_key_sets_to_lists(evaluated_key_sets),
+    do: Enum.map(evaluated_key_sets, &MapSet.to_list/1)
+
+  defp list_free_evaluated_key_set?(evaluated_keys) do
+    Enum.all?(evaluated_keys, &(not is_list(&1)))
+  end
+
+  defp balanced_union_evaluated_key_sets([]), do: @empty_mapset
+  defp balanced_union_evaluated_key_sets([evaluated_keys]), do: evaluated_keys
+
+  defp balanced_union_evaluated_key_sets(evaluated_key_sets) do
+    evaluated_key_sets
+    |> union_evaluated_key_pairs([])
+    |> balanced_union_evaluated_key_sets()
+  end
+
+  defp union_evaluated_key_pairs([], acc), do: Enum.reverse(acc)
+
+  defp union_evaluated_key_pairs([evaluated_keys], acc),
+    do: Enum.reverse([evaluated_keys | acc])
+
+  defp union_evaluated_key_pairs([left, right | rest], acc) do
+    union_evaluated_key_pairs(rest, [MapSet.union(left, right) | acc])
   end
 
   @doc """

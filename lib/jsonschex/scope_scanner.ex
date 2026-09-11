@@ -72,9 +72,9 @@ defmodule JSONSchex.ScopeScanner do
         end
       end)
 
-    schema
-    |> SchemaTraversal.scope_subschemas()
-    |> Enum.reduce({registry, refs}, fn subschema, acc -> do_scan(subschema, new_base_uri, acc) end)
+    SchemaTraversal.reduce_scope_subschemas(schema, {registry, refs}, fn subschema, acc ->
+      do_scan(subschema, new_base_uri, acc)
+    end)
   end
 
   defp do_scan(_, _, acc), do: acc

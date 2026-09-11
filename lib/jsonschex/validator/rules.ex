@@ -116,11 +116,9 @@ defmodule JSONSchex.Validator.Rules do
 
   def apply(%Rule{name: :required, params: required}, data, {path, _, _}) do
     if is_map(data) do
-      if Enum.all?(required, &Map.has_key?(data, &1)) do
-        :ok
-      else
-        missing = Enum.reject(required, &Map.has_key?(data, &1))
-        {:error, [%Error{path: path, rule: :required, context: %ErrorContext{contrast: missing}}]}
+      case Enum.reject(required, &Map.has_key?(data, &1)) do
+        [] -> :ok
+        missing -> {:error, [%Error{path: path, rule: :required, context: %ErrorContext{contrast: missing}}]}
       end
     else
       :ok
@@ -325,6 +323,57 @@ defmodule JSONSchex.Validator.Rules do
   def apply(%Rule{name: name}, _data, _ctx) do
     raise ArgumentError, "unsupported compiled rule: #{inspect(name)}"
   end
+
+  @doc false
+  @spec apply(Rule.t(), term(), validation_context(), map()) :: {result(), map()}
+  def apply(
+        %Rule{name: :patternProperties, params: compiled_patterns},
+        data,
+        {path, _evaluated, root},
+        cache
+      ) do
+    Keywords.validate_pattern_properties(
+      data,
+      compiled_patterns,
+      path,
+      root,
+      cache
+    )
+  end
+
+  def apply(
+        %Rule{
+          name: :additionalProperties,
+          params: %{known_props: known_props, patterns: patterns, always_valid?: true}
+        },
+        data,
+        _ctx,
+        cache
+      ) do
+    Keywords.collect_additional_keys_with_match_cache(data, known_props, patterns, cache)
+  end
+
+  def apply(
+        %Rule{
+          name: :additionalProperties,
+          params: %{schema: compiled_sub, known_props: known_props, patterns: patterns}
+        },
+        data,
+        {path, _evaluated, root},
+        cache
+      ) do
+    Keywords.validate_additional_properties_with_match_cache(
+      data,
+      compiled_sub,
+      known_props,
+      patterns,
+      path,
+      root,
+      cache
+    )
+  end
+
+  def apply(rule, data, ctx, cache), do: {__MODULE__.apply(rule, data, ctx), cache}
 
   defp merge_dependency_results(:ok, :ok), do: :ok
   defp merge_dependency_results(:ok, {:ok, evaluated}), do: {:ok, evaluated}
