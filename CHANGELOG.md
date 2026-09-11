@@ -10,6 +10,7 @@
   * Adaptively merge evaluated keys from parent-dominated `anyOf` branches with balanced `MapSet` unions, avoiding repeated conversion of shared incoming evaluated keys while preserving full branch traversal, evaluated-key inputs, diagnostics, and legacy list-key behavior.
   * Avoid rebuilding already-flat validation error lists at the public validation boundary, and fuse nested error flattening with legacy error formatting while preserving diagnostic order, values, and internal error grouping.
   * Remove redundant input-key presence checks when validating `required`, while preserving declaration order, duplicate entries, non-object behavior, and diagnostic shape.
+  * Avoid rescanning built-in Draft 2020-12 resources after compilation, and reduce scope-scanner traversal intermediates while preserving resource identities, anchor targets, and traversal precedence.
 
 ## v0.9.3 (2026-09-07)
 
