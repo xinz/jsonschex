@@ -130,21 +130,50 @@ defmodule JSONSchex.Validator do
     end
   end
 
+  # Restrict cache eligibility at function-clause dispatch so ordinary two-rule
+  # schemas do not pay for a runtime pattern-keyword classification call. Exact
+  # heads keep the ordinary fallback free from a compound guard evaluation.
   def validate_entry(
-        %Schema{rules: [rule1, rule2] = rules, source_id: nil},
+        %Schema{
+          rules: [
+            %Rule{name: :patternProperties} = first_rule,
+            %Rule{name: :additionalProperties} = second_rule
+          ] = rules,
+          source_id: nil
+        },
+        data,
+        path,
+        context,
+        evaluated
+      ) do
+    validate_two_pattern_rules(rules, first_rule, second_rule, data, path, context, evaluated)
+  end
+
+  def validate_entry(
+        %Schema{
+          rules: [
+            %Rule{name: :additionalProperties} = first_rule,
+            %Rule{name: :patternProperties} = second_rule
+          ] = rules,
+          source_id: nil
+        },
+        data,
+        path,
+        context,
+        evaluated
+      ) do
+    validate_two_pattern_rules(rules, first_rule, second_rule, data, path, context, evaluated)
+  end
+
+  def validate_entry(
+        %Schema{rules: [rule1, rule2], source_id: nil},
         data,
         path,
         context,
         evaluated
       ) do
     ctx = {path, evaluated, context}
-
-    case two_rule_pattern_match_cache(rule1, rule2, data) do
-      nil ->
-        run_two_rules(rule1, rule2, data, path, context, evaluated, ctx)
-      cache ->
-        run_rules_with_pattern_cache(rules, data, path, context, evaluated, ctx, [], cache)
-    end
+    run_two_rules(rule1, rule2, data, path, context, evaluated, ctx)
   end
 
   def validate_entry(
@@ -174,6 +203,18 @@ defmodule JSONSchex.Validator do
 
   defp to_error_entry(err_ctx, path, rule_name, data) when is_map(err_ctx),
     do: [%Error{path: path, rule: rule_name, context: err_ctx, value: data}]
+
+  defp validate_two_pattern_rules(rules, first_rule, second_rule, data, path, context, evaluated) do
+    ctx = {path, evaluated, context}
+
+    case pattern_match_cache(rules, data) do
+      nil ->
+        run_two_rules(first_rule, second_rule, data, path, context, evaluated, ctx)
+
+      cache ->
+        run_rules_with_pattern_cache(rules, data, path, context, evaluated, ctx, [], cache)
+    end
+  end
 
   # Keep the specialized two-rule execution path for ordinary schemas. Only a
   # direct pair of sibling object keywords enters the cache-aware runner.
@@ -337,18 +378,6 @@ defmodule JSONSchex.Validator do
 
   defp pattern_match_cache_complete?(_rule, _cache), do: false
 
-  defp two_rule_pattern_match_cache(
-         %Rule{name: first_name} = first_rule,
-         %Rule{name: second_name} = second_rule,
-         data
-       )
-       when first_name in [:patternProperties, :additionalProperties] and
-              second_name in [:patternProperties, :additionalProperties] and
-              first_name != second_name do
-    pattern_match_cache([first_rule, second_rule], data)
-  end
-
-  defp two_rule_pattern_match_cache(_first_rule, _second_rule, _data), do: nil
 
   # A cache map cannot repay its setup work when the two sibling rules would
   # repeat exactly one match check. All larger candidate workloads stay eligible.
