@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.10.0 (2026-09-14)
+
 ### Bug Fixes and Improvements
 
   * Improve fragment-bundling performance by avoiding repeated descendant metadata indexing, accumulating fallback-anchor candidates without repeated list scans, and skipping deep reference-rewrite passes when external-reference aliases are identities. (#9)
