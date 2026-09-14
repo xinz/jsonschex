@@ -3,7 +3,7 @@
 # Covers all major keyword categories with both valid and invalid data.
 # Run from the `bench` directory: mix run libs_comparison.exs
 #
-# To run a specific section only, set BENCH env var:
+# To measure a specific section only, set BENCH env var:
 #   BENCH=all   mix run libs_comparison.exs   # run everything (default)
 #   BENCH=simple mix run libs_comparison.exs   # simple type + constraints
 #   BENCH=nested mix run libs_comparison.exs   # nested object
@@ -21,6 +21,7 @@
 #   BENCH=property_names mix run libs_comparison.exs # propertyNames
 #   BENCH=format mix run libs_comparison.exs   # format keyword (email, date, uri-reference, ipv4, iri-reference)
 #   BENCH=dependencies mix run libs_comparison.exs # dependencies
+#   BENCH=scale mix run libs_comparison.exs # usage-scale workloads derived from focused optimizations
 
 {:ok, _} = Application.ensure_all_started(:jsv)
 {:ok, _} = Application.ensure_all_started(:jsonschex)
@@ -954,7 +955,127 @@ run_bench.("dependencies_invalid", %{
   "JsonXema" => fn -> {:error, _} = JsonXema.validate(xema_deps, deps_invalid) end
 })
 
+# =============================================================================
+# 14. Usage-Scale Workloads
+#     User-facing validation cases derived from focused JSONSchex optimizations.
+#     Compilation and expected-result checks remain outside Benchee timing.
+# =============================================================================
 
+# --- Long Unicode string length ---
+
+scale_unicode_schema = %{
+  "type" => "string",
+  "minLength" => 10_000,
+  "maxLength" => 10_000
+}
+
+{jsv_scale_unicode, jx_scale_unicode, xema_scale_unicode} =
+  compile_both.(scale_unicode_schema, [])
+
+scale_unicode_data = String.duplicate("😀", 10_000)
+
+{:ok, _} = JSV.validate(scale_unicode_data, jsv_scale_unicode)
+:ok = JSONSchex.validate(jx_scale_unicode, scale_unicode_data)
+:ok = JsonXema.validate(xema_scale_unicode, scale_unicode_data)
+
+run_bench.("scale_unicode_length_valid_10000", %{
+  "JSV" => fn -> JSV.validate(scale_unicode_data, jsv_scale_unicode) end,
+  "JSONSchex" => fn -> JSONSchex.validate(jx_scale_unicode, scale_unicode_data) end,
+  "JsonXema" => fn -> JsonXema.validate(xema_scale_unicode, scale_unicode_data) end
+})
+
+# --- Mixed patternProperties and additionalProperties ---
+
+scale_pattern_schema = %{
+  "type" => "object",
+  "patternProperties" =>
+    Map.new(1..16, fn index ->
+      {"^metric-#{index}$", %{"type" => "number"}}
+    end),
+  "additionalProperties" => true
+}
+
+{jsv_scale_pattern, jx_scale_pattern, xema_scale_pattern} =
+  compile_both.(scale_pattern_schema, [])
+
+scale_pattern_data =
+  Map.merge(
+    Map.new(1..16, fn index -> {"metric-#{index}", index * 1.0} end),
+    Map.new(1..16, fn index -> {"label-#{index}", "value-#{index}"} end)
+  )
+
+{:ok, _} = JSV.validate(scale_pattern_data, jsv_scale_pattern)
+:ok = JSONSchex.validate(jx_scale_pattern, scale_pattern_data)
+:ok = JsonXema.validate(xema_scale_pattern, scale_pattern_data)
+
+run_bench.("scale_pattern_additional_mixed_valid_patterns_16_keys_32", %{
+  "JSV" => fn -> JSV.validate(scale_pattern_data, jsv_scale_pattern) end,
+  "JSONSchex" => fn -> JSONSchex.validate(jx_scale_pattern, scale_pattern_data) end,
+  "JsonXema" => fn -> JsonXema.validate(xema_scale_pattern, scale_pattern_data) end
+})
+
+# --- Wide required list with a late missing property ---
+
+scale_required_keys = Enum.map(1..128, &"property-#{&1}")
+scale_required_schema = %{"type" => "object", "required" => scale_required_keys}
+
+{jsv_scale_required, jx_scale_required, xema_scale_required} =
+  compile_both.(scale_required_schema, [])
+
+scale_required_data =
+  scale_required_keys
+  |> Map.new(&{&1, nil})
+  |> Map.delete(List.last(scale_required_keys))
+
+{:error, _} = JSV.validate(scale_required_data, jsv_scale_required)
+{:error, _} = JSONSchex.validate(jx_scale_required, scale_required_data)
+{:error, _} = JsonXema.validate(xema_scale_required, scale_required_data)
+
+run_bench.("scale_required_one_missing_of_128", %{
+  "JSV" => fn -> JSV.validate(scale_required_data, jsv_scale_required) end,
+  "JSONSchex" => fn -> JSONSchex.validate(jx_scale_required, scale_required_data) end,
+  "JsonXema" => fn -> JsonXema.validate(xema_scale_required, scale_required_data) end
+})
+
+# --- anyOf evaluated-property annotations ---
+
+scale_anyof_parent_keys = Enum.map(1..16, &"parent-#{&1}")
+scale_anyof_branch_keys = Enum.map(1..16, &"branch-#{&1}")
+
+scale_anyof_schema = %{
+  "type" => "object",
+  "properties" => Map.new(scale_anyof_parent_keys, &{&1, true}),
+  "anyOf" =>
+    Enum.map(scale_anyof_branch_keys, fn key ->
+      %{"properties" => %{key => true}}
+    end),
+  "unevaluatedProperties" => false
+}
+
+{jsv_scale_anyof, jx_scale_anyof, _xema_scale_anyof} =
+  compile_both.(scale_anyof_schema, xema_supported: false)
+
+# Keep this unsupported-capability check executable. If a future locked
+# JsonXema version rejects the unexpected key, it can rejoin the measured jobs.
+xema_scale_anyof_capability_probe = JsonXema.new(scale_anyof_schema)
+
+scale_anyof_data =
+  Map.new(scale_anyof_parent_keys ++ scale_anyof_branch_keys, &{&1, true})
+
+# The invalid control proves that both measured libraries enforce the annotation
+# boundary. JsonXema is omitted because it currently accepts the unexpected key.
+scale_anyof_unexpected_data = Map.put(scale_anyof_data, "unexpected", true)
+
+{:ok, _} = JSV.validate(scale_anyof_data, jsv_scale_anyof)
+:ok = JSONSchex.validate(jx_scale_anyof, scale_anyof_data)
+{:error, _} = JSV.validate(scale_anyof_unexpected_data, jsv_scale_anyof)
+{:error, _} = JSONSchex.validate(jx_scale_anyof, scale_anyof_unexpected_data)
+:ok = JsonXema.validate(xema_scale_anyof_capability_probe, scale_anyof_unexpected_data)
+
+run_bench.("scale_anyof_unevaluated_valid_branches_16_keys_32", %{
+  "JSV" => fn -> JSV.validate(scale_anyof_data, jsv_scale_anyof) end,
+  "JSONSchex" => fn -> JSONSchex.validate(jx_scale_anyof, scale_anyof_data) end
+})
 
 IO.puts("\n" <> String.duplicate("=", 60))
 IO.puts("  All benchmarks complete!")
