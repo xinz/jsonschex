@@ -4,13 +4,18 @@
 
 ### Bug Fixes and Improvements
 
-  * Count Unicode code points for `minLength` and `maxLength` without allocating a charlist for inputs larger than 256 bytes; retain standard conversion for inputs up to 256 bytes. Malformed UTF-8 now returns a validation error with `error_detail: "invalid_utf8"` instead of raising `UnicodeConversionError`.
-  * Compile each `patternProperties` regex once when the same schema also uses `additionalProperties`, with a bounded per-schema cache that preserves vocabulary gates, error behavior, and validation semantics.
-  * Reuse runtime pattern-match classification between sibling `patternProperties` and `additionalProperties` rules within one validation invocation, while restricting cache-aware two-rule dispatch to those exact sibling pairs so ordinary two-rule schemas retain their direct fast path.
-  * Adaptively merge evaluated keys from parent-dominated `anyOf` branches with balanced `MapSet` unions, avoiding repeated conversion of shared incoming evaluated keys while preserving full branch traversal, evaluated-key inputs, diagnostics, and legacy list-key behavior.
-  * Avoid rebuilding already-flat validation error lists at the public validation boundary, and fuse nested error flattening with legacy error formatting while preserving diagnostic order, values, and internal error grouping.
-  * Remove redundant input-key presence checks when validating `required`, while preserving declaration order, duplicate entries, non-object behavior, and diagnostic shape.
-  * Avoid rescanning built-in Draft 2020-12 resources after compilation, and reduce scope-scanner traversal intermediates while preserving resource identities, anchor targets, and traversal precedence.
+  * Improve fragment-bundling performance by avoiding repeated descendant metadata indexing, accumulating fallback-anchor candidates without repeated list scans, and skipping deep reference-rewrite passes when external-reference aliases are identities. (#9)
+  * Reuse already-compiled schema nodes when their compilation context matches, reducing repeated compilation while preserving resource scope, rule order, and context-sensitive behavior. (#10)
+  * Reduce repeated validation work and allocations. (#11)
+    * Count Unicode code points for `minLength` and `maxLength` without allocating a charlist for inputs larger than 256 bytes, while retaining the standard conversion for shorter inputs. Malformed UTF-8 now produces a validation error with `error_detail: "invalid_utf8"` instead of raising `UnicodeConversionError`.
+    * Compile each `patternProperties` regex once when the same schema also uses `additionalProperties`, with a bounded per-schema cache that preserves vocabulary gates, error behavior, and validation semantics.
+    * Reuse runtime pattern-match classification between sibling `patternProperties` and `additionalProperties` rules within one validation invocation, reducing repeated regex matching for wide objects while preserving rule order, annotations, and diagnostics.
+    * Adaptively merge evaluated keys from parent-dominated `anyOf` branches with balanced `MapSet` unions, avoiding repeated conversion of shared incoming evaluated keys while preserving full branch traversal, evaluated-key inputs, diagnostics, and legacy list-key behavior.
+    * Avoid rebuilding already-flat validation error lists at the public validation boundary, and fuse nested error flattening with legacy error formatting while preserving diagnostic order, values, and internal error grouping.
+    * Remove redundant input-key presence checks when validating `required`, while preserving declaration order, duplicate entries, non-object behavior, and diagnostic shape.
+    * Avoid rescanning built-in Draft 2020-12 resources after compilation, and reduce scope-scanner traversal intermediates while preserving resource identities, anchor targets, and traversal precedence.
+  * Optimize two-rule validation dispatch by reserving the pattern-match-cache path for exact sibling `patternProperties` and `additionalProperties` pairs; other two-rule schemas retain their direct fast path. (#12)
+  * Add a Git-baseline JSONSchex before/after benchmark suite covering broad validation cases and focused bundle, compile, scan, and validation workloads. (#13)
 
 ## v0.9.3 (2026-09-07)
 
