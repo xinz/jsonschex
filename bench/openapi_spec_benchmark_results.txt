@@ -22,18 +22,18 @@ Calculating statistics...
 Formatting results...
 
 Name                        ips        average  deviation         median         99th %
-JSONSchex compile        707.60        1.41 ms    ±10.22%        1.37 ms        1.75 ms
-JSV compile              521.77        1.92 ms     ±5.34%        1.89 ms        2.18 ms
+JSONSchex compile        616.04        1.62 ms    ±16.74%        1.65 ms        2.12 ms
+JSV compile              454.93        2.20 ms     ±9.61%        2.24 ms        2.62 ms
 
 Comparison:
-JSONSchex compile        707.60
-JSV compile              521.77 - 1.36x slower +0.50 ms
+JSONSchex compile        616.04
+JSV compile              454.93 - 1.35x slower +0.57 ms
 
 Memory usage statistics:
 
 Name                 Memory usage
-JSONSchex compile         1.38 MB
-JSV compile               2.32 MB - 1.68x memory usage +0.95 MB
+JSONSchex compile         1.35 MB
+JSV compile               2.36 MB - 1.75x memory usage +1.01 MB
 
 **All measurements for memory usage were the same**
 Operating System: macOS
@@ -60,17 +60,17 @@ Calculating statistics...
 Formatting results...
 
 Name                         ips        average  deviation         median         99th %
-JSONSchex validate       56.81 K       17.60 μs    ±19.74%       16.92 μs       32.79 μs
-JSV validate              9.64 K      103.69 μs    ±92.36%       46.67 μs         321 μs
+JSONSchex validate       47.32 K       21.13 μs   ±151.68%       19.04 μs       36.83 μs
+JSV validate             11.00 K       90.92 μs   ±295.64%       39.71 μs      387.17 μs
 
 Comparison:
-JSONSchex validate       56.81 K
-JSV validate              9.64 K - 5.89x slower +86.09 μs
+JSONSchex validate       47.32 K
+JSV validate             11.00 K - 4.30x slower +69.78 μs
 
 Memory usage statistics:
 
 Name                  Memory usage
-JSONSchex validate        16.23 KB
-JSV validate              98.22 KB - 6.05x memory usage +81.99 KB
+JSONSchex validate        17.18 KB
+JSV validate              72.86 KB - 4.24x memory usage +55.68 KB
 
 **All measurements for memory usage were the same**
