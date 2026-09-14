@@ -51,5 +51,4 @@ mix run jsonschex_before_after.exs --baseline <revision>
 
 Set `VERSION_BENCH_OUTPUT` to write raw per-case statistics as TSV. The output includes each case's origin, operation, and optimization focus, together with revision/source fingerprints, dirty state, measurement durations, filter, and runtime versions needed to audit the run.
 
-
-See [`jsonschex_before_after_overview.md`](./jsonschex_before_after_overview.md) for the current methodology and results.
+See this [PR](https://github.com/xinz/jsonschex/pull/13) for the current methodology and results.
