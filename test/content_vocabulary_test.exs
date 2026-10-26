@@ -134,6 +134,23 @@ defmodule JSONSchex.Test.ContentVocabulary do
       ~s(Failed to decode as 'application/json': {:invalid_byte, 1, 110}, input: "{not valid json")
   end
 
+  test "content assertions work without contentSchema when enabled" do
+    schema = %{
+      "contentMediaType" => "application/json",
+      "contentEncoding" => "base64"
+    }
+
+    {:ok, compiled} = JSONSchex.compile(schema, content_assertion: true)
+
+    assert :ok == JSONSchex.validate(compiled, Base.encode64(~S({"id":1})))
+
+    assert {:error, [encoding_error]} = JSONSchex.validate(compiled, "%")
+    assert encoding_error.rule == :contentEncoding
+
+    assert {:error, [media_error]} = JSONSchex.validate(compiled, Base.encode64("{:}"))
+    assert media_error.rule == :contentMediaType
+  end
+
   test "content keywords do not bypass base type validation" do
     schema = %{
       "type" => "string",

@@ -4,10 +4,11 @@ This guide describes how JSONSchex runs the official JSON Schema Test Suites, wh
 
 ## Overview
 
-JSONSchex includes the JSON Schema Test Suite fixtures and runs Draft 2020-12 tests by default, all tests passing.
+JSONSchex includes the JSON Schema Test Suite fixtures and runs Draft 7 and Draft 2020-12 tests by default.
 
-Default suite path:
+Default suite paths:
 
+- `test/fixtures/JSON-Schema-Test-Suite/tests/draft7`
 - `test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12`
 
 ## Default exclusions
@@ -16,7 +17,11 @@ The following test sets are excluded by default:
 
 - `optional/cross-draft`
 
-These exclusions are configured in the test runner and are intended to avoid cross-draft scenarios that are outside the scope of Draft 2020-12.
+These exclusions are configured in the test runner and avoid cross-draft scenarios that do not belong to either draft's suite.
+
+## Draft 7 status
+
+The Draft 7 fixture suite passes `draft: "draft7"` so fixtures without `$schema` are compiled as Draft 7; fixtures declaring the canonical Draft 7 `$schema` also select it automatically. Without a recognized `$schema` or `:draft`, ordinary compilation defaults to Draft 2020-12. See the [Draft 7 failure report](draft7_test_failures.md) for the initial failures, fixes, and validation steps. The runner enables assertion options for optional format and content fixtures; `optional/cross-draft` remains excluded.
 
 ## How official test suites are run
 
@@ -30,9 +35,10 @@ You can run the full test suite with:
 mix test
 ```
 
-The main suite runner is invoked in:
+The suite runner is invoked in separate test files:
 
-- `test/official_jsts_test.exs`
+- `test/official_jsts_test.exs` for Draft 2020-12
+- `test/official_jsts_draft7_test.exs` for Draft 7
 
 ## Running tests
 
@@ -42,12 +48,13 @@ The main suite runner is invoked in:
 mix test
 ```
 
-This executes the entire test suite, including all Draft 2020-12 tests (except exclusions).
+This executes the entire test suite, including Draft 7 and Draft 2020-12 (except exclusions).
 
-### Run a specific test file
+### Run one draft's suite
 
 ```bash
 mix test test/official_jsts_test.exs
+mix test test/official_jsts_draft7_test.exs
 ```
 
 ### Run with verbose output

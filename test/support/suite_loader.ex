@@ -12,7 +12,8 @@ defmodule JSONSchex.Test.SuiteLoader do
   def load(uri) do
     cond do
       # Official Meta-Schemas -> Route to priv/schemas
-      String.starts_with?(uri, "https://json-schema.org/") ->
+      String.starts_with?(uri, "https://json-schema.org/") or
+          String.starts_with?(uri, "http://json-schema.org/draft-07/") ->
         load_meta_schema(uri)
 
       String.starts_with?(uri, "http://localhost:1234/") ->
@@ -33,17 +34,10 @@ defmodule JSONSchex.Test.SuiteLoader do
   end
 
   defp load_meta_schema(uri) do
-    # Map: https://json-schema.org/draft/2020-12/schema
-    # To:  priv/schemas/draft/2020-12/schema.json
-
-    relative_path = String.replace(uri, "https://json-schema.org/", "")
-
-    # If it ends in a directory-like name (no extension), assume .json
-    # or specifically handle the root "schema" resource.
-    path_with_ext = relative_path <> ".json"
-
-    full_path = Path.join(@priv_schemas, path_with_ext)
-    read_json(full_path)
+    # The official Draft 7 URI uses http and a trailing #; the fragment is not a file path.
+    %{path: path} = URI.parse(uri)
+    relative_path = String.trim_leading(path, "/")
+    read_json(Path.join(@priv_schemas, relative_path <> ".json"))
   end
 
   defp load_remotes(uri) do

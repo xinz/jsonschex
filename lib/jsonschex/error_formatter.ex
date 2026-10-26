@@ -34,6 +34,14 @@ defmodule JSONSchex.ErrorFormatter do
     if path == "/", do: msg, else: "At #{path}: #{msg}"
   end
 
+  defp format_message(%Error{rule: :draft_conflict, value: uri, context: %{contrast: declared, input: requested}}) do
+    "$schema #{inspect(uri)} selects #{inspect(declared)}, but :draft is #{inspect(requested)}"
+  end
+
+  defp format_message(%Error{rule: :invalid_draft, value: draft}) do
+    "Invalid :draft #{inspect(draft)}; expected \"draft7\" or \"draft2020_12\""
+  end
+
   defp format_message(%Error{rule: :type, context: %{contrast: expected, input: input}})
        when is_list(expected) do
     "Expected one of types [#{Enum.join(expected, ", ")}], got #{input}"

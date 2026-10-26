@@ -33,7 +33,8 @@ defmodule JSONSchex.MixProject do
         "guide/dialect_and_vocabulary.md",
         "guide/feature_matrix.md",
         "guide/content_and_format.md",
-        "guide/test_suite.md"
+        "guide/test_suite.md",
+        "guide/draft7_test_failures.md"
       ],
       groups_for_extras: [
         Guides: [
@@ -41,7 +42,8 @@ defmodule JSONSchex.MixProject do
           "guide/dialect_and_vocabulary.md",
           "guide/feature_matrix.md",
           "guide/content_and_format.md",
-          "guide/test_suite.md"
+          "guide/test_suite.md",
+          "guide/draft7_test_failures.md"
         ]
       ],
       groups_for_modules: [
@@ -88,6 +90,10 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Draft202012.Vocabulary,
           JSONSchex.Draft202012.Schemas,
           JSONSchex.Draft202012.Dialect,
+        ],
+        Draft7: [
+          JSONSchex.Draft7.Dialect,
+          JSONSchex.Draft7.Schemas
         ]
       ],
       nest_modules_by_prefix: [
@@ -95,7 +101,8 @@ defmodule JSONSchex.MixProject do
         JSONSchex.Compiler,
         JSONSchex.Validator,
         JSONSchex.Formats,
-        JSONSchex.Draft202012
+        JSONSchex.Draft202012,
+        JSONSchex.Draft7
       ]
     ]
   end

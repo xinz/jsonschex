@@ -42,7 +42,8 @@ When `content_assertion` is enabled:
 - `contentMediaType` supports:
   - `application/json`
   - Any media type ending in `+json`
-- The decoded content is validated against `contentSchema`.
+- Encoding and media type are asserted even when `contentSchema` is absent.
+- When `contentSchema` is present, the decoded and parsed content is also validated against it.
 
 ### Error reporting
 

@@ -69,6 +69,12 @@ defmodule JSONSchex.Compiler.Cache do
        when name in [:contentSchema, :additionalProperties, :items, :contains,
                      :unevaluatedProperties, :unevaluatedItems], do: index_schema(schema, index)
 
+  defp index_rule(%Rule{name: :tupleItems, params: %{schemas: schemas, additional: additional}}, index) do
+    schemas
+    |> Enum.reduce(index, &index_schema/2)
+    |> then(&index_schema(additional, &1))
+  end
+
   defp index_rule(%Rule{name: :if, params: branches}, index) do
     Enum.reduce([:if, :then, :else], index, fn branch, acc ->
       index_schema(Map.get(branches, branch), acc)

@@ -1,6 +1,6 @@
 defmodule JSONSchex do
   @moduledoc """
-  JSON Schema Draft 2020-12 validator for Elixir.
+  JSON Schema Draft 2020-12 and Draft 7 validator for Elixir.
 
   Compile a schema once, then validate data against it repeatedly:
 
@@ -47,6 +47,7 @@ defmodule JSONSchex do
   - `:base_uri` — Starting base URI for resolving relative references
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
+  - `:draft` — `"draft7"` or `"draft2020_12"` (strings, not atoms). Recognized root `$schema` URIs select the draft automatically; a conflicting option returns `{:error, %JSONSchex.Types.Error{rule: :draft_conflict}}`. Without either, Draft 2020-12 is the default. Custom `$schema` URIs do not select a draft.
 
   See the [Loader guide](guide/loader.md) and
   [Content and Format guide](guide/content_and_format.md) for details.
@@ -79,6 +80,7 @@ defmodule JSONSchex do
   - `:loader` — optional loader for external resources. It may return `{:ok, schema}` or `{:ok, %{document: schema, base_uri: base_uri}}`; wrapper metadata uses atom keys only.
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
+  - `:draft` — `"draft7"` or `"draft2020_12"` (strings, not atoms). A recognized `$schema` at the containing document's root selects the draft unless it conflicts with this option. Otherwise Draft 2020-12 is the default.
 
   Use a document-local entry such as `"#/components/schemas/User"` when the
   containing document's base is supplied separately with `:base_uri` or when no

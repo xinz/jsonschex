@@ -21,7 +21,9 @@ defmodule JSONSchex.Compiler do
   """
   alias JSONSchex.Types.{Schema, Rule, Error, ErrorContext}
   alias JSONSchex.ScopeScanner
+  alias JSONSchex.ResourceContext
   alias JSONSchex.Draft202012.{Vocabulary, Dialect}
+  alias JSONSchex.Draft7.Dialect, as: Draft7Dialect
   alias JSONSchex.URIUtil
   alias JSONSchex.Compiler.Fragment
   alias JSONSchex.Compiler.Fragment.Bundle
@@ -43,7 +45,7 @@ defmodule JSONSchex.Compiler do
 
   See `JSONSchex.compile/2` for options and usage.
   """
-  @spec compile(map() | boolean()) :: {:ok, Schema.t()} | {:error, String.t()}
+  @spec compile(map() | boolean()) :: {:ok, Schema.t()} | {:error, Error.t()}
   def compile(raw_schema, opts \\ [])
 
   def compile(raw_schema, opts) when is_map(raw_schema) do
@@ -51,14 +53,14 @@ defmodule JSONSchex.Compiler do
   end
 
   def compile(value, opts) when is_boolean(value) do
-    format_assertion = Keyword.get(opts, :format_assertion, false)
-    content_assertion = Keyword.get(opts, :content_assertion, false)
-
-    compile_schema_node(value, nil, @default_vocabs_list, %{
-      loader: nil,
-      format_assertion: format_assertion,
-      content_assertion: content_assertion
-    })
+    with {:ok, draft} <- select_draft(value, opts) do
+      compile_schema_node(value, nil, @default_vocabs_list, %{
+        loader: nil,
+        format_assertion: Keyword.get(opts, :format_assertion, false),
+        content_assertion: Keyword.get(opts, :content_assertion, false),
+        draft: draft
+      })
+    end
   end
 
   @doc """
@@ -92,14 +94,23 @@ defmodule JSONSchex.Compiler do
     format_assertion = Keyword.get(opts, :format_assertion, false)
     content_assertion = Keyword.get(opts, :content_assertion, false)
 
-    ctx = %{
-      loader: loader,
-      format_assertion: format_assertion,
-      content_assertion: content_assertion
-    }
+    with {:ok, draft} <- select_draft(context_document, opts) do
+      ctx = %{
+        loader: loader,
+        format_assertion: format_assertion,
+        content_assertion: content_assertion,
+        draft: draft
+      }
 
-    with :ok <- Dialect.validate_required_vocabularies(raw_schema),
-         {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list),
+      compile_root_with_draft(raw_schema, context_document, init_base, scope_mode, ctx)
+    end
+  end
+
+  defp compile_root_with_draft(raw_schema, context_document, init_base, scope_mode, ctx) do
+    loader = ctx.loader
+
+    with :ok <- validate_required_vocabularies(raw_schema, ctx.draft),
+         {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list, ctx.draft),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
       {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode)
       scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
@@ -114,9 +125,9 @@ defmodule JSONSchex.Compiler do
             if id == root_compiled.source_id do
               {:cont, Map.put(acc_defs, id, root_compiled)}
             else
-              case Dialect.validate_required_vocabularies(sub_raw) do
+              case validate_required_vocabularies(sub_raw, ctx.draft) do
                 :ok ->
-                  case resolve_dialect(sub_raw, loader, root_vocabs) do
+                  case resolve_dialect(sub_raw, loader, root_vocabs, ctx.draft) do
                     {:ok, sub_vocabs} ->
                       compile_scope(sub_raw, id, sub_vocabs, root_vocabs, ctx, scope_cache)
                       |> case do
@@ -152,6 +163,36 @@ defmodule JSONSchex.Compiler do
     end
   end
 
+  defp select_draft(schema, opts) do
+    declared =
+      cond do
+        Draft7Dialect.builtin_schema?(schema) -> "draft7"
+        Dialect.builtin_schema?(schema) -> "draft2020_12"
+        true -> nil
+      end
+
+    case Keyword.fetch(opts, :draft) do
+      :error ->
+        {:ok, declared || "draft2020_12"}
+
+      {:ok, requested} when requested in ["draft7", "draft2020_12"] ->
+        if declared != nil && declared != requested do
+          {:error,
+           %Error{
+             rule: :draft_conflict,
+             path: ["$schema"],
+             value: Map.fetch!(schema, "$schema"),
+             context: %ErrorContext{contrast: declared, input: requested}
+           }}
+        else
+          {:ok, requested}
+        end
+
+      {:ok, requested} ->
+        {:error, %Error{rule: :invalid_draft, path: [], value: requested}}
+    end
+  end
+
   defp compile_scope(raw, id, vocabs, root_vocabs, ctx, scope_cache) do
     base = scope_resource_base(id)
     reusable = if vocabs === root_vocabs, do: Cache.fetch_scope(scope_cache, id, raw, base), else: nil
@@ -173,7 +214,19 @@ defmodule JSONSchex.Compiler do
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
 
-  defp resolve_dialect(schema, loader, current_vocabs) do
+  defp validate_required_vocabularies(_schema, "draft7"), do: :ok
+  defp validate_required_vocabularies(schema, "draft2020_12"),
+    do: Dialect.validate_required_vocabularies(schema)
+
+  defp resolve_dialect(schema, loader, current_vocabs, "draft7") do
+    if Draft7Dialect.builtin_schema?(schema) do
+      {:ok, []}
+    else
+      resolve_draft7_dialect_fallback(schema, loader, current_vocabs)
+    end
+  end
+
+  defp resolve_dialect(schema, loader, current_vocabs, "draft2020_12") do
     case Dialect.resolve_builtin(schema) do
       {:ok, vocabs} ->
         {:ok, vocabs}
@@ -182,6 +235,20 @@ defmodule JSONSchex.Compiler do
         resolve_dialect_fallback(schema, loader, current_vocabs)
     end
   end
+
+  defp resolve_draft7_dialect_fallback(%{"$schema" => uri}, loader, current_vocabs)
+       when is_function(loader) and is_binary(uri) do
+    case loader.(uri) do
+      {:error, reason} ->
+        {:error,
+         %Error{context: %ErrorContext{contrast: "load_remote", input: uri, error_detail: reason}}}
+
+      _ ->
+        {:ok, current_vocabs}
+    end
+  end
+
+  defp resolve_draft7_dialect_fallback(_, _, current_vocabs), do: {:ok, current_vocabs}
 
   defp resolve_dialect_fallback(%{"$schema" => uri}, loader, current_vocabs)
        when is_function(loader) and is_binary(uri) do
@@ -208,7 +275,17 @@ defmodule JSONSchex.Compiler do
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
       case result do
         {:ok, fragment} ->
-          case compile_ref_target(fragment, ref, base_uri, vocabs, ctx, local_defs) do
+          parent_base =
+            if ctx.draft == "draft7" do
+              case ResourceContext.resolve(raw_schema, base_uri, URIUtil.fragment(ref)) do
+                {:ok, %{inherited_base: inherited_base}} -> inherited_base
+                :error -> base_uri
+              end
+            else
+              base_uri
+            end
+
+          case compile_ref_target(fragment, ref, parent_base, vocabs, ctx, local_defs) do
             {:ok, compiled_sub} ->
               compiled_sub = %{compiled_sub | raw: fragment}
 
@@ -248,7 +325,8 @@ defmodule JSONSchex.Compiler do
        rules: [],
        defs: %{},
        format_assertion: ctx.format_assertion,
-       content_assertion: ctx.content_assertion
+       content_assertion: ctx.content_assertion,
+       draft: ctx.draft
      }}
   end
 
@@ -263,20 +341,28 @@ defmodule JSONSchex.Compiler do
        rules: [rule],
        defs: %{},
        format_assertion: ctx.format_assertion,
-       content_assertion: ctx.content_assertion
+       content_assertion: ctx.content_assertion,
+       draft: ctx.draft
      }}
   end
 
   defp compile_schema_node(schema, parent_base, vocabs, ctx) when is_map(schema) do
-    raw_id = Map.get(schema, "$id")
-    base = resolve_uri(parent_base, raw_id)
+    # In Draft 7, a $ref object ignores all sibling keywords, including $id.
+    # In Draft 2020-12 allows $ref to have sibling keywords.
+    effective_schema =
+      if ctx.draft == "draft7" and Map.has_key?(schema, "$ref") do
+        Map.take(schema, ["$ref"])
+      else
+        schema
+      end
 
-    with {:ok, compiled_defs} <- compile_local_defs(schema, base, vocabs, ctx),
-         {:ok, standard_rules} <- compile_standard_keywords(schema, base, vocabs, ctx) do
-      # Draft 2020-12 allows $ref to have sibling keywords
+    base = resolve_uri(parent_base, Map.get(effective_schema, "$id"))
+
+    with {:ok, compiled_defs} <- compile_local_defs(effective_schema, base, vocabs, ctx),
+         {:ok, standard_rules} <- compile_standard_keywords(effective_schema, base, vocabs, ctx) do
       rules =
-        if Map.has_key?(schema, "$ref") do
-          [compile_ref(schema["$ref"], base) | standard_rules]
+        if Map.has_key?(effective_schema, "$ref") do
+          [compile_ref(effective_schema["$ref"], base) | standard_rules]
         else
           standard_rules
         end
@@ -289,7 +375,8 @@ defmodule JSONSchex.Compiler do
          raw: schema,
          loader: ctx.loader,
          format_assertion: ctx.format_assertion,
-         content_assertion: ctx.content_assertion
+         content_assertion: ctx.content_assertion,
+         draft: ctx.draft
        }}
     end
   end
@@ -439,6 +526,10 @@ defmodule JSONSchex.Compiler do
     end
   end
 
+  defp keyword_allowed?(keyword, _vocabs, %{draft: "draft7"}) do
+    Draft7Dialect.keyword?(keyword)
+  end
+
   defp keyword_allowed?("format", vocabs, ctx) do
     ctx.format_assertion == true or
       vocab_supported?(vocabs, Vocabulary.format_annotation()) or
@@ -475,12 +566,31 @@ defmodule JSONSchex.Compiler do
     }
   end
 
-  defp compile_keyword({"contentMediaType", _media_type}, _, _base, _vocabs, _ctx) do
-    {:ok, nil}
+  defp content_assertion_rule(full_schema) do
+    %Rule{
+      name: :contentAssertion,
+      params: %{
+        media_type: Map.get(full_schema, "contentMediaType"),
+        encoding: Map.get(full_schema, "contentEncoding")
+      }
+    }
   end
 
-  defp compile_keyword({"contentEncoding", _encoding}, _, _base, _vocabs, _ctx) do
-    {:ok, nil}
+  defp compile_keyword({"contentMediaType", _media_type}, full_schema, _base, _vocabs, ctx) do
+    if ctx.content_assertion and not Map.has_key?(full_schema, "contentSchema") do
+      {:ok, content_assertion_rule(full_schema)}
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp compile_keyword({"contentEncoding", _encoding}, full_schema, _base, _vocabs, ctx) do
+    if ctx.content_assertion and not Map.has_key?(full_schema, "contentSchema") and
+         not Map.has_key?(full_schema, "contentMediaType") do
+      {:ok, content_assertion_rule(full_schema)}
+    else
+      {:ok, nil}
+    end
   end
 
   defp compile_keyword({"contentSchema", schema}, full_schema, base, vocabs, ctx) do
@@ -509,7 +619,8 @@ defmodule JSONSchex.Compiler do
   end
 
   defp compile_keyword({"format", format}, _, _base, vocabs, ctx) do
-    if ctx.format_assertion == true or vocab_supported?(vocabs, Vocabulary.format_assertion()) do
+    if ctx.format_assertion == true or
+         (ctx.draft == "draft2020_12" and vocab_supported?(vocabs, Vocabulary.format_assertion())) do
       {:ok,
        %Rule{
          name: :format,
@@ -840,6 +951,22 @@ defmodule JSONSchex.Compiler do
 
       {:error, error} ->
         {:error, %{error | path: ["prefixItems"] ++ error.path}}
+    end
+  end
+
+  defp compile_keyword({"items", sub_schemas}, full_schema, base, vocabs, %{draft: "draft7"} = ctx)
+       when is_list(sub_schemas) do
+    with {:ok, compiled_schemas} <- map_compile_list(sub_schemas, base, vocabs, ctx),
+         {:ok, compiled_additional} <-
+           compile_schema_node(Map.get(full_schema, "additionalItems", true), base, vocabs, ctx) do
+      {:ok,
+       %Rule{
+         name: :tupleItems,
+         params: %{schemas: compiled_schemas, additional: compiled_additional}
+       }}
+    else
+      {:error, %Error{} = error} ->
+        {:error, %{error | path: ["items"] ++ (error.path || [])}}
     end
   end
 

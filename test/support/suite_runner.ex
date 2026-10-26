@@ -25,6 +25,7 @@ defmodule JSONSchex.Test.SuiteRunner do
 
     ignore_files = Keyword.get(ignore_list, :ignore_files, [])
     ignore_directories = Keyword.get(ignore_list, :ignore_directories, [])
+    draft = Keyword.get(ignore_list, :draft)
 
     # 2. File Discovery & Filtering
     files =
@@ -51,7 +52,7 @@ defmodule JSONSchex.Test.SuiteRunner do
     test_nodes =
       for file <- files do
         # REUSE: Call the shared generator
-        generate_tests_for_file(file)
+        generate_tests_for_file(file, draft)
       end
       |> List.flatten()
       |> Enum.reject(&is_nil/1)
@@ -63,7 +64,7 @@ defmodule JSONSchex.Test.SuiteRunner do
   # Shared Logic (Private)
   # -------------------------------------------------------------------------
 
-  defp generate_tests_for_file(file) do
+  defp generate_tests_for_file(file, draft \\ nil) do
     # Parse JSON at compile time
     definitions = decode_suite_file(file)
     filename_display = Path.basename(file, ".json")
@@ -71,6 +72,9 @@ defmodule JSONSchex.Test.SuiteRunner do
 
     add_format_assertion =
       if String.contains?(file, "optional/format"), do: true, else: false
+
+    add_content_assertion =
+      if String.contains?(file, "optional/content"), do: true, else: false
 
     # A single file may contain multiple "suites" (describe blocks)
     for {suite, _index} <- Enum.with_index(definitions) do
@@ -125,9 +129,16 @@ defmodule JSONSchex.Test.SuiteRunner do
               @tag :jsts
               test unquote("Case: #{description}") do
                 opts = [loader: &JSONSchex.Test.SuiteLoader.load/1]
+                opts = if unquote(draft), do: [{:draft, unquote(draft)} | opts], else: opts
                 opts =
                   if unquote(add_format_assertion) do
                     opts ++ [format_assertion: true]
+                  else
+                    opts
+                  end
+                opts =
+                  if unquote(add_content_assertion) do
+                    opts ++ [content_assertion: true]
                   else
                     opts
                   end

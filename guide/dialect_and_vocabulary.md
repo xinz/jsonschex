@@ -4,19 +4,20 @@ This guide explains how JSONSchex interprets `$schema` and `$vocabulary`, and ho
 
 ## Overview
 
-- `$schema` identifies the JSON Schema dialect in use (e.g., Draft 2020-12).
-- `$vocabulary` lists the vocabularies enabled by the meta-schema.
-- JSONSchex uses these signals to determine which keywords are allowed and how to interpret them.
+- A recognized root `$schema` URI selects Draft 7 or Draft 2020-12 automatically. A custom or absent `$schema` defaults to Draft 2020-12.
+- `:draft` can explicitly select `"draft7"` or `"draft2020_12"` (string values, not atoms); when it conflicts with a recognized root `$schema`, compilation fails instead of silently choosing either one.
+- `$vocabulary` applies to Draft 2020-12 meta-schemas. Draft 7 predates `$vocabulary` and uses its own keyword set.
 
 ## Dialect resolution
 
-JSONSchex resolves dialect in this order:
+For Draft 2020-12 (the default when no recognized root `$schema` or `:draft` is supplied):
 
-1. If the root schema declares the canonical Draft 2020-12 meta-schema URI (`https://json-schema.org/draft/2020-12/schema`), JSONSchex treats it as a built-in dialect and does not invoke the configured loader for that URI.
-2. For the built-in Draft 2020-12 dialect, JSONSchex uses the standard Draft 2020-12 active vocabulary defaults, while still honoring an explicit root-level `$vocabulary` declaration when present.
-3. If the root schema contains another `$schema` URI and a `:loader` is provided, JSONSchex attempts to load that meta-schema remotely.
-4. If a custom meta-schema loads successfully, JSONSchex reads `$vocabulary` from it to build the enabled vocabulary set.
-5. If no loader is available or the meta-schema cannot be loaded, JSONSchex proceeds with the implementation default capability set.
+1. The canonical meta-schema URI (`https://json-schema.org/draft/2020-12/schema`) is built in, so no loader is needed.
+2. The built-in dialect uses Draft 2020-12 active vocabulary defaults and honors an explicit root-level `$vocabulary` declaration.
+3. Other `$schema` URIs are loaded through `:loader` when one is supplied; a loaded meta-schema's `$vocabulary` selects the active vocabularies.
+4. Without a loader, JSONSchex falls back to its Draft 2020-12 capability set.
+
+For Draft 7, declare `"$schema" => "http://json-schema.org/draft-07/schema#"` (the form without `#` also works), or pass `draft: "draft7"` to `JSONSchex.compile/2` or `JSONSchex.Schema.compile!/2` when there is no recognized `$schema`. The Draft 7 meta-schema is embedded as an Elixir map, so built-in references require neither a loader nor runtime file access. Unknown Draft 7 keywords are ignored rather than interpreted as Draft 2020-12 keywords. A caller-supplied loader is still needed for other remote schemas. For `compile_fragment/2`, draft detection uses the containing document's root `$schema`, not a nested fragment's declaration. Referenced external schemas declaring a different recognized draft are not automatically switched; compilation reports a conflict, and cross-draft resolution remains outside this policy.
 
 ## $vocabulary Semantics
 
@@ -82,7 +83,8 @@ iex> JSONSchex.Vocabulary.defaults()
 
 - Missing required vocabulary: compilation fails with an unsupported vocabulary error.
 - Optional vocabulary unsupported: compilation continues, but those keywords are ignored.
-- Canonical Draft 2020-12 `$schema`: handled internally without a remote meta-schema fetch.
+- Canonical Draft 2020-12 or Draft 7 `$schema`: selects that draft without a remote meta-schema fetch.
+- Recognized `$schema` conflicting with `:draft`: compilation returns a `:draft_conflict` error (or raises `CompileError` for `Schema.compile!/2`).
 - Explicit root `$vocabulary`: honored even when the schema uses the built-in Draft 2020-12 dialect.
 - No loader available for a custom `$schema`: the meta-schema is not resolved remotely, so JSONSchex falls back to its implementation defaults.
 

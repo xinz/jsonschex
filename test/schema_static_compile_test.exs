@@ -37,6 +37,17 @@ defmodule JSONSchex.Test.SchemaStaticCompile.LoaderModule do
   def schema, do: @compiled
 end
 
+defmodule JSONSchex.Test.SchemaStaticCompile.Draft7Module do
+  require JSONSchex.Schema
+
+  @compiled JSONSchex.Schema.compile!(
+              %{"items" => [%{"type" => "integer"}], "additionalItems" => false},
+              draft: "draft7"
+            )
+
+  def schema, do: @compiled
+end
+
 defmodule JSONSchex.Test.SchemaStaticCompile do
   use ExUnit.Case
 
@@ -71,6 +82,42 @@ defmodule JSONSchex.Test.SchemaStaticCompile do
     assert :ok == JSONSchex.validate(schema, "user@example.com")
     assert {:error, [error]} = JSONSchex.validate(schema, "not-an-email")
     assert error.rule == :format
+  end
+
+  test "compile!/2 embeds the explicit Draft 7 option" do
+    schema = JSONSchex.Test.SchemaStaticCompile.Draft7Module.schema()
+
+    assert schema.draft == "draft7"
+    assert :ok == JSONSchex.validate(schema, [1])
+    assert {:error, [_]} = JSONSchex.validate(schema, [1, 2])
+  end
+
+  test "compile!/2 infers Draft 7 from the root $schema" do
+    require JSONSchex.Schema
+
+    schema = JSONSchex.Schema.compile!(
+      %{"$schema" => "http://json-schema.org/draft-07/schema#", "items" => [true], "additionalItems" => false}
+    )
+
+    assert schema.draft == "draft7"
+    assert :ok == JSONSchex.validate(schema, [1])
+    assert {:error, [_]} = JSONSchex.validate(schema, [1, 2])
+  end
+
+  test "compile!/2 raises a compile error for a conflicting draft" do
+    error =
+      compile_error!(
+        ~S"""
+        defmodule JSONSchex.Test.ConflictingDraft do
+          require JSONSchex.Schema
+          @schema JSONSchex.Schema.compile!(%{"$schema" => "http://json-schema.org/draft-07/schema#"}, draft: "draft2020_12")
+        end
+        """,
+        "test/support/conflicting_draft_compile_error.exs"
+      )
+
+    assert error.description =~ ":draft is \"draft2020_12\""
+    assert error.file == "test/support/conflicting_draft_compile_error.exs"
   end
 
   test "compile!/2 preserves remote captures in embeddable options" do

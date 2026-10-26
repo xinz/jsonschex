@@ -7,7 +7,9 @@ defmodule JSONSchex.Validator.Reference do
   alias JSONSchex.Validator
   alias JSONSchex.Compiler
   alias JSONSchex.URIUtil
-  alias JSONSchex.Draft202012.Schemas
+  alias JSONSchex.ResourceContext
+  alias JSONSchex.Draft202012.Schemas, as: Draft202012Schemas
+  alias JSONSchex.Draft7.Schemas, as: Draft7Schemas
   alias JSONSchex.Types.ErrorContext
 
   @doc """
@@ -72,7 +74,7 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp effective_context_for_ref(validation_context, ref_string) do
-    case built_in_defs_for_ref(validation_context.source_id, ref_string) do
+    case built_in_defs_for_ref(validation_context.source_id, ref_string, validation_context.root_schema.draft) do
       nil ->
         validation_context
 
@@ -93,7 +95,7 @@ defmodule JSONSchex.Validator.Reference do
         resolve_registry_base_match(data, ref_string, path, validation_context, evaluated, base_schema, fragment)
 
       :halt ->
-        resolve_and_validate_jit(data, validation_context.raw, ref_string, path, validation_context, evaluated)
+        resolve_and_validate_jit(data, validation_context.raw, uri_to_load, path, validation_context, evaluated)
     end
   end
 
@@ -154,12 +156,15 @@ defmodule JSONSchex.Validator.Reference do
   end
   defp check_load_remote(_, _), do: :halt
 
-  defp built_in_defs_for_ref(_, nil), do: nil
-  defp built_in_defs_for_ref(base_uri, ref) do
+  defp built_in_defs_for_ref(_, nil, _draft), do: nil
+  defp built_in_defs_for_ref(base_uri, ref, draft) do
     uri = uri_to_resolve(base_uri, ref)
     {base, _fragment} = URIUtil.split_fragment(uri)
-    Schemas.compiled_defs(base)
+    builtin_compiled_defs(base, draft)
   end
+
+  defp builtin_compiled_defs(base, "draft7"), do: Draft7Schemas.compiled_defs(base)
+  defp builtin_compiled_defs(base, "draft2020_12"), do: Draft202012Schemas.compiled_defs(base)
 
   defp resolve_scoped_ref(base_uri, ref, registry) when base_uri == ref do
     Map.get(registry, ref)
@@ -206,7 +211,7 @@ defmodule JSONSchex.Validator.Reference do
 
     case Map.get(validation_context.root_schema.defs, base) do
       nil ->
-        case Schemas.compiled_defs(base) do
+        case builtin_compiled_defs(base, validation_context.root_schema.draft) do
           built_in_defs when is_map(built_in_defs) ->
             merged_context = merge_defs_into_context(validation_context, built_in_defs)
             compiled_remote = Map.fetch!(merged_context.root_schema.defs, base)
@@ -266,7 +271,8 @@ defmodule JSONSchex.Validator.Reference do
       loader: validation_context.root_schema.loader,
       base_uri: base,
       format_assertion: validation_context.root_schema.format_assertion,
-      content_assertion: validation_context.root_schema.content_assertion
+      content_assertion: validation_context.root_schema.content_assertion,
+      draft: validation_context.root_schema.draft
     ]
 
     case Compiler.compile(remote_raw, opts) do
@@ -324,11 +330,13 @@ defmodule JSONSchex.Validator.Reference do
        ) do
     case ExJSONPointer.resolve(raw_root, pointer) do
       {:ok, found_fragment} ->
+        base_uri = pointer_parent_base(raw_root, pointer, compile_base_uri || validation_context.source_id)
         opts = [
           loader: validation_context.root_schema.loader,
-          base_uri: compile_base_uri || validation_context.source_id,
+          base_uri: base_uri,
           format_assertion: validation_context.root_schema.format_assertion,
-          content_assertion: validation_context.root_schema.content_assertion
+          content_assertion: validation_context.root_schema.content_assertion,
+          draft: validation_context.root_schema.draft
         ]
         case Compiler.compile(found_fragment, opts) do
           {:ok, compiled_fragment} ->
@@ -340,6 +348,17 @@ defmodule JSONSchex.Validator.Reference do
 
       {:error, _token} ->
         {:error, %ErrorContext{contrast: "ref_not_found", input: pointer}}
+    end
+  end
+
+  defp pointer_parent_base(raw_root, pointer, resource_base) do
+    # The current resource's $id is already reflected in resource_base. Descendant
+    # $ids along a pointer, however, must be applied before compiling its target.
+    scope_root = if is_map(raw_root), do: Map.delete(raw_root, "$id"), else: raw_root
+
+    case ResourceContext.resolve(scope_root, resource_base, URIUtil.fragment(pointer)) do
+      {:ok, %{inherited_base: base}} -> base
+      :error -> resource_base
     end
   end
 end

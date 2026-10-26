@@ -21,7 +21,8 @@ defmodule JSONSchex.Types do
                  | {:error, term()})
               | nil,
             format_assertion: boolean(),
-            content_assertion: boolean()
+            content_assertion: boolean(),
+            draft: String.t()
           }
     defstruct [
       :rules,
@@ -30,7 +31,8 @@ defmodule JSONSchex.Types do
       :raw,
       :loader,
       format_assertion: false,
-      content_assertion: false
+      content_assertion: false,
+      draft: "draft2020_12"
     ]
   end
 

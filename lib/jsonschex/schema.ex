@@ -41,12 +41,20 @@ defmodule JSONSchex.Schema do
   - `:base_uri` — Starting base URI for resolving relative references
   - `:format_assertion` — Enable strict `format` validation (default: `false`)
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
+  - `:draft` — Use `"draft7"` or `"draft2020_12"` (strings, not atoms). A recognized root `$schema` selects the draft when
+    this option is omitted; a conflicting option raises a compile error. Without either, Draft 2020-12 is the default.
 
   ## Examples
 
       iex> require JSONSchex.Schema
       iex> schema = JSONSchex.Schema.compile!(%{"type" => "string", "format" => "email"}, format_assertion: true)
       iex> {:error, [_]} = JSONSchex.validate(schema, "not-an-email")
+
+      iex> draft7 = JSONSchex.Schema.compile!(%{"$schema" => "http://json-schema.org/draft-07/schema#", "items" => [%{"type" => "integer"}], "additionalItems" => false})
+      iex> JSONSchex.validate(draft7, [1])
+      :ok
+      iex> match?({:error, [_ | _]}, JSONSchex.validate(draft7, [1, 2]))
+      true
   """
   defmacro compile!(schema_ast, opts_ast \\ []) do
     compile_ast!(schema_ast, opts_ast, __CALLER__)
