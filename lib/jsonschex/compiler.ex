@@ -963,6 +963,7 @@ defmodule JSONSchex.Compiler do
     end
   end
 
+  # Process Draft 7's array-form items.
   defp compile_keyword({"items", sub_schemas}, full_schema, base, vocabs, %{draft: "draft7"} = ctx)
        when is_list(sub_schemas) do
     with {:ok, compiled_schemas} <- map_compile_list(sub_schemas, base, vocabs, ctx),
@@ -970,8 +971,8 @@ defmodule JSONSchex.Compiler do
            compile_schema_node(Map.get(full_schema, "additionalItems", true), base, vocabs, ctx) do
       {:ok,
        %Rule{
-         name: :tupleItems,
-         params: %{schemas: compiled_schemas, additional: compiled_additional}
+         name: :items,
+         params: %{draft: "draft7", schemas: compiled_schemas, additional: compiled_additional}
        }}
     else
       {:error, %Error{} = error} ->

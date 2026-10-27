@@ -64,6 +64,8 @@ defmodule JSONSchex.Types do
 
     `name` identifies the runtime rule implementation and `params` carries the
     serializable arguments consumed by `JSONSchex.Validator.Rules.apply/3`.
+    Keyword variants can share a name and use draft-tagged parameters: Draft 7's
+    array-form `items` uses `name: :items` with `params.draft: "draft7"` internally.
     """
     @type t :: %__MODULE__{
             name: atom(),

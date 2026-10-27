@@ -69,7 +69,7 @@ defmodule JSONSchex.Compiler.Cache do
        when name in [:contentSchema, :additionalProperties, :items, :contains,
                      :unevaluatedProperties, :unevaluatedItems], do: index_schema(schema, index)
 
-  defp index_rule(%Rule{name: :tupleItems, params: %{schemas: schemas, additional: additional}}, index) do
+  defp index_rule(%Rule{name: :items, params: %{draft: "draft7", schemas: schemas, additional: additional}}, index) do
     schemas
     |> Enum.reduce(index, &index_schema/2)
     |> then(&index_schema(additional, &1))

@@ -233,7 +233,7 @@ defmodule JSONSchex.Validator.Rules do
   end
 
   def apply(
-        %Rule{name: :tupleItems, params: %{schemas: schemas, additional: additional}},
+        %Rule{name: :items, params: %{draft: "draft7", schemas: schemas, additional: additional}},
         data,
         {path, _evaluated, root}
       ) do

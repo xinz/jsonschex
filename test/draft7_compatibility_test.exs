@@ -24,11 +24,53 @@ defmodule JSONSchex.Test.Draft7Compatibility do
 
     {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
 
+    assert [%{name: :items, params: %{draft: "draft7"}}] = compiled.rules
     assert :ok == JSONSchex.validate(compiled, [1])
     assert {:error, [extra_item]} = JSONSchex.validate(compiled, [1, 2])
     assert extra_item.rule == :boolean_schema
     assert {:error, [wrong_type]} = JSONSchex.validate(compiled, ["not an integer"])
     assert wrong_type.rule == :type
+  end
+
+  test "schema-form items retains its single-schema rule shape in both drafts" do
+    for draft <- ["draft7", "draft2020_12"] do
+      assert {:ok, compiled} =
+               JSONSchex.compile(%{"items" => %{"type" => "integer"}}, draft: draft)
+      assert [%{name: :items, params: %{start_index: 0, schema: _}}] = compiled.rules
+      assert :ok == JSONSchex.validate(compiled, [1])
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, ["1"])
+    end
+  end
+
+  test "the compilation cache indexes both tuple items and additionalItems schemas" do
+    prefix_uri = "https://example.com/prefix"
+    additional_uri = "https://example.com/additional"
+    prefix = %{"$id" => prefix_uri, "type" => "integer"}
+    additional = %{"$id" => additional_uri, "type" => "string"}
+    schema = %{"items" => [prefix], "additionalItems" => additional}
+
+    assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+    assert [%{name: :items, params: %{draft: "draft7"}}] = compiled.rules
+
+    # Remove the global registry so cache discovery must traverse the items rule.
+    cache = JSONSchex.Compiler.Cache.build(%{compiled | defs: %{}})
+    assert {:ok, %{raw: ^prefix}} =
+             JSONSchex.Compiler.Cache.fetch_scope(cache, prefix_uri, prefix, prefix_uri)
+    assert {:ok, %{raw: ^additional}} =
+             JSONSchex.Compiler.Cache.fetch_scope(cache, additional_uri, additional, additional_uri)
+
+    assert :ok == JSONSchex.validate(compiled, [1, "extra"])
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, [1, 2])
+  end
+
+  test "tupleItems is an unknown schema keyword, not a public tuple applicator" do
+    refute JSONSchex.Draft7.Dialect.keyword?("tupleItems")
+
+    for draft <- ["draft7", "draft2020_12"] do
+      assert {:ok, compiled} = JSONSchex.compile(%{"tupleItems" => [false]}, draft: draft)
+      assert compiled.rules == []
+      assert :ok == JSONSchex.validate(compiled, [1])
+    end
   end
 
   test "an explicit Draft 7 option ignores $ref siblings" do
