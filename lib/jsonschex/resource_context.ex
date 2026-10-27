@@ -12,7 +12,6 @@ defmodule JSONSchex.ResourceContext do
         }
 
   @doc false
-  @spec resolve(term(), String.t() | nil, String.t() | nil) :: {:ok, t()} | :error
   @spec resolve(term(), String.t() | nil, String.t() | nil, keyword()) :: {:ok, t()} | :error
   def resolve(document, initial_base, fragment, opts \\ []) do
     draft = Keyword.get(opts, :draft, "draft2020_12")
