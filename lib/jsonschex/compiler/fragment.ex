@@ -5,11 +5,25 @@ defmodule JSONSchex.Compiler.Fragment do
   alias JSONSchex.URIUtil
 
   def entry(document, opts) do
+    with {:ok, entry_schema, base_uri, _path} <- entry_with_path(document, opts) do
+      {:ok, entry_schema, base_uri}
+    end
+  end
+
+  def entry_with_path(document, opts) do
     with {:ok, entry} <- fetch_entry(opts),
          {:ok, pointer, base_uri_from_entry} <- entry_to_pointer(entry),
          {:ok, entry_schema} <- resolve_entry(document, pointer),
-         :ok <- validate_entry_schema(entry_schema, pointer) do
-      {:ok, entry_schema, base_uri(opts, base_uri_from_entry)}
+         :ok <- validate_entry_schema(entry_schema, pointer),
+         {:ok, path} <- decode_entry_path(pointer) do
+      {:ok, entry_schema, base_uri(opts, base_uri_from_entry), path}
+    end
+  end
+
+  defp decode_entry_path(pointer) do
+    case ExJSONPointer.decode_path(pointer) do
+      {:ok, path} -> {:ok, path}
+      {:error, reason} -> {:error, error("invalid_entry", pointer, reason)}
     end
   end
 

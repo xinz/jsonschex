@@ -69,8 +69,8 @@ defmodule JSONSchex.Compiler do
   """
   @spec compile_fragment(map() | boolean(), keyword()) :: {:ok, Schema.t()} | {:error, Error.t()}
   def compile_fragment(document, opts) when (is_map(document) or is_boolean(document)) and is_list(opts) do
-    with {:ok, entry_schema, base_uri} <- Fragment.entry(document, opts) do
-      compile_root_schema(entry_schema, document, base_uri, opts, :document)
+    with {:ok, entry_schema, base_uri, path} <- Fragment.entry_with_path(document, opts) do
+      compile_root_schema(entry_schema, document, base_uri, opts, {:document, path})
     end
   end
 
@@ -208,11 +208,13 @@ defmodule JSONSchex.Compiler do
     base
   end
 
+  # Modes describe the discovery scope: a schema tree or its containing document.
+  # The document path marks the selected schema, not the limit of discovery.
   defp scan_context(context_document, _base_uri, :schema, draft),
     do: ScopeScanner.scan(context_document, draft: draft)
 
-  defp scan_context(context_document, base_uri, :document, draft),
-    do: ScopeScanner.scan_all(context_document, base_uri, draft: draft)
+  defp scan_context(context_document, base_uri, {:document, path}, draft),
+    do: ScopeScanner.scan_all(context_document, base_uri, draft: draft, schema_path: path)
 
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
@@ -967,16 +969,21 @@ defmodule JSONSchex.Compiler do
   # Process Draft 7's array-form items.
   defp compile_keyword({"items", sub_schemas}, full_schema, base, vocabs, %{draft: "draft7"} = ctx)
        when is_list(sub_schemas) do
-    with {:ok, compiled_schemas} <- map_compile_list(sub_schemas, base, vocabs, ctx),
-         {:ok, compiled_additional} <-
-           compile_schema_node(Map.get(full_schema, "additionalItems", true), base, vocabs, ctx) do
-      {:ok,
-       %Rule{
-         name: :items,
-         params: %{draft: "draft7", schemas: compiled_schemas, additional: compiled_additional}
-       }}
-    else
-      {:error, %Error{} = error} ->
+    case map_compile_list(sub_schemas, base, vocabs, ctx) do
+      {:ok, compiled_schemas} ->
+        case compile_schema_node(Map.get(full_schema, "additionalItems", true), base, vocabs, ctx) do
+          {:ok, compiled_additional} ->
+            {:ok,
+             %Rule{
+               name: :items,
+               params: %{draft: "draft7", schemas: compiled_schemas, additional: compiled_additional}
+             }}
+
+          {:error, error} ->
+            {:error, %{error | path: ["additionalItems"] ++ (error.path || [])}}
+        end
+
+      {:error, error} ->
         {:error, %{error | path: ["items"] ++ (error.path || [])}}
     end
   end

@@ -32,6 +32,30 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     assert wrong_type.rule == :type
   end
 
+  test "tuple items and additionalItems compilation errors identify their own keyword" do
+    for {schema, path} <- [
+          {%{"items" => [true], "additionalItems" => %{"type" => 42}},
+           ["additionalItems", "type"]},
+          {%{"items" => [true, %{"type" => 42}], "additionalItems" => true},
+           ["items", "type"]},
+          {%{"items" => [%{"type" => 42}], "additionalItems" => %{"type" => 43}},
+           ["items", "type"]},
+          {%{"items" => [true], "additionalItems" => %{"not" => %{"type" => 42}}},
+           ["additionalItems", "not", "type"]}
+        ], mode <- ["schema", "document"] do
+      result =
+        case mode do
+          "schema" -> JSONSchex.compile(schema, draft: "draft7")
+          "document" -> JSONSchex.compile_fragment(schema, entry: "#", draft: "draft7")
+        end
+
+      assert {:error, error} = result
+      assert error.path == path
+      assert error.rule == :invalid_keyword_value
+      assert error.value == 42
+    end
+  end
+
   test "schema-form items retains its single-schema rule shape in both drafts" do
     for draft <- ["draft7", "draft2020_12"] do
       assert {:ok, compiled} =
@@ -339,6 +363,115 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     assert Map.has_key?(compiled.defs, uri)
     assert :ok == JSONSchex.validate(compiled, 1)
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+  end
+
+  test "document component names are not interpreted as Draft 7 keywords" do
+    uri = "https://example.com/parameter-schema"
+
+    for draft <- ["draft7", "draft2020_12"],
+        name <- ["prefixItems", "$defs", "contentSchema", "additionalItems", "$ref", "$id",
+                 "properties", "patternProperties", "definitions", "dependencies"],
+        container <- ["schemas", "parameters", "arbitrary-components"],
+        shape <- [:schema, :parameter] do
+      resource = %{"$id" => uri, "type" => "integer"}
+      component =
+        case shape do
+          :schema -> resource
+          :parameter -> %{"name" => "filter", "in" => "query", "schema" => resource}
+        end
+
+      document = %{
+        "components" => %{container => %{name => component}},
+        "entry" => %{"$ref" => uri}
+      }
+
+      assert {:ok, compiled} =
+               JSONSchex.compile_fragment(document, entry: "#/entry", draft: draft)
+      assert Map.has_key?(compiled.defs, uri)
+      assert :ok == JSONSchex.validate(compiled, 42)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "42")
+    end
+  end
+
+  test "document discovery preserves keyword-like names under arbitrary wrappers and lists" do
+    uri = "https://example.com/wrapped-schema"
+    document = %{
+      "wrappers" => [
+        %{"prefixItems" => %{
+          "additionalItems" => %{"$ref" => %{"$id" => uri, "type" => "integer"}}
+        }}
+      ],
+      "entry" => %{"$ref" => uri}
+    }
+
+    assert {:ok, compiled} =
+             JSONSchex.compile_fragment(document, entry: "#/entry", draft: "draft7")
+    assert Map.has_key?(compiled.defs, uri)
+    assert :ok == JSONSchex.validate(compiled, 42)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "42")
+  end
+
+  test "selected annotation-only schemas still prune ignored discovery subtrees" do
+    uri = "https://example.com/ignored-resource"
+    annotation = %{"$id" => uri, "$ref" => "#/missing"}
+
+    for keyword <- ["prefixItems", "$defs", "contentSchema", "additionalItems"],
+        entry <- ["#", "#/selected~1schema~0", "https://example.com/document#/selected~1schema~0"] do
+      schema = %{keyword => annotation}
+      document = if entry == "#", do: schema, else: %{"selected/schema~" => schema}
+
+      assert {:ok, compiled} =
+               JSONSchex.compile_fragment(document, entry: entry, draft: "draft7")
+      refute Map.has_key?(compiled.defs, uri)
+      refute Map.has_key?(compiled.defs, "#/missing")
+      assert :ok == JSONSchex.validate(compiled, 42)
+    end
+  end
+
+  test "explicit fragment selection takes precedence over a schema-map container role" do
+    schema = %{"$defs" => %{"$id" => "https://example.com/ignored", "type" => 42}}
+    document = %{"type" => "object", "properties" => schema}
+
+    assert {:ok, compiled} =
+             JSONSchex.compile_fragment(document, entry: "#/properties", draft: "draft7")
+    refute Map.has_key?(compiled.defs, "https://example.com/ignored")
+    assert :ok == JSONSchex.validate(compiled, 42)
+  end
+
+  test "selected schemas beneath ignored annotations discover only their own resources" do
+    uri = "https://example.com/selected-resource"
+    ignored_uri = "https://example.com/ignored-sibling"
+    selected = %{
+      "properties" => %{"value" => %{"$id" => uri, "type" => "integer"}},
+      "allOf" => [%{"$ref" => uri}]
+    }
+    document = %{
+      "type" => "object",
+      "$defs" => %{
+        "selected" => selected,
+        "ignored" => %{"$id" => ignored_uri, "type" => 42}
+      }
+    }
+
+    assert {:ok, compiled} =
+             JSONSchex.compile_fragment(document, entry: "#/$defs/selected", draft: "draft7")
+    assert Map.has_key?(compiled.defs, uri)
+    refute Map.has_key?(compiled.defs, ignored_uri)
+    assert :ok == JSONSchex.validate(compiled, 42)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "42")
+  end
+
+  test "selected schema paths match array indices without normalizing numeric map keys" do
+    schema = %{"$defs" => %{"$id" => "https://example.com/ignored", "type" => 42}}
+
+    for entry <- ["#/entries/0", "#/entries/%30", "#/entries/00", "#/entries/-1", "#/00"] do
+      document = if entry == "#/00", do: %{"00" => schema, "0" => false}, else: %{"entries" => [schema]}
+
+      assert {:ok, compiled} =
+               JSONSchex.compile_fragment(document, entry: entry, draft: "draft7")
+      refute Map.has_key?(compiled.defs, "https://example.com/ignored")
+      assert :ok == JSONSchex.validate(compiled, 42)
+    end
   end
 
   test "Draft 7 registers resources declared by tuple additionalItems" do
