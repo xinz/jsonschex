@@ -330,7 +330,12 @@ defmodule JSONSchex.Validator.Reference do
        ) do
     case ExJSONPointer.resolve(raw_root, pointer) do
       {:ok, found_fragment} ->
-        base_uri = pointer_parent_base(raw_root, pointer, compile_base_uri || validation_context.source_id)
+        base_uri = pointer_parent_base(
+          raw_root,
+          pointer,
+          compile_base_uri || validation_context.source_id,
+          validation_context.root_schema.draft
+        )
         opts = [
           loader: validation_context.root_schema.loader,
           base_uri: base_uri,
@@ -351,12 +356,12 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
-  defp pointer_parent_base(raw_root, pointer, resource_base) do
+  defp pointer_parent_base(raw_root, pointer, resource_base, draft) do
     # The current resource's $id is already reflected in resource_base. Descendant
     # $ids along a pointer, however, must be applied before compiling its target.
     scope_root = if is_map(raw_root), do: Map.delete(raw_root, "$id"), else: raw_root
 
-    case ResourceContext.resolve(scope_root, resource_base, URIUtil.fragment(pointer)) do
+    case ResourceContext.resolve(scope_root, resource_base, URIUtil.fragment(pointer), draft: draft) do
       {:ok, %{inherited_base: base}} -> base
       :error -> resource_base
     end

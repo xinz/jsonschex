@@ -3,12 +3,12 @@
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
 [![Draft 2020-12](https://img.shields.io/endpoint?url=https%3A%2F%2Fbowtie.report%2Fbadges%2Felixir-jsonschex%2Fcompliance%2Fdraft2020-12.json)](https://bowtie.report/#/implementations/elixir-jsonschex)
 
-JSONSchex is an implementation of [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) for Elixir, with a design that focuses on practical performance and future support for later specification updates.
+JSONSchex supports [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) and [Draft 7](https://json-schema.org/draft-07) for Elixir, with a design that focuses on practical performance. Draft 2020-12 remains the default when no recognized root `$schema` or explicit `:draft` selects another draft.
 
 ## Features
 
-- Implements JSON Schema Draft 2020-12 in full, including all core, applicator, validation, unevaluated, and content vocabulary keywords.
-- Passes 100% of the [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) for Draft 2020-12.
+- Supports Draft 7 semantics alongside Draft 2020-12 core, applicator, validation, unevaluated, and content vocabularies.
+- Passes the included [official JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) fixtures for both drafts.
 - Designed for performance and simplicity: compile a schema once into an executable `Schema` struct, then validate data repeatedly with no repeated parsing overhead.
 - Supports an Elixir/Plug OpenAPI v3 server implementation and code generator with JSON Schema validation, see [Oasis](https://hex.pm/packages/oasis).
 
@@ -106,8 +106,8 @@ JSONSchex follows a **two-phase approach** for optimal performance:
    - All `$id`, `$anchor`, and discovered local fragment references are scanned and registered
    - Keywords are compiled into serializable rule descriptors consumed by the validator
    - Remote `$ref` schemas can be loaded via a configured loader
-   - The built-in Draft 2020-12 dialect is recognized without requiring a remote meta-schema load
-   - Vocabularies are resolved based on `$schema` and `$vocabulary` declarations
+   - Canonical Draft 7 and Draft 2020-12 meta-schemas are embedded; built-in references need no loader
+   - Draft 2020-12 vocabularies are resolved from `$schema` and `$vocabulary`; Draft 7 uses its own keyword set
 
 2. **Validate** — Execute the compiled schema against data. During validation:
    - Rules are executed in order, accumulating errors
@@ -184,6 +184,7 @@ Enum.map(errors, &JSONSchex.format_error/1)
 
 - `:loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
 - `:base_uri` — Starting base URI for resolving relative references (see [Loader guide](guide/loader.md))
+- `:draft` — `"draft7"` or `"draft2020_12"` (as strings). A recognized root `$schema` selects the draft automatically; a conflicting option returns `:draft_conflict`. Without either, Draft 2020-12 is the default. `JSONSchex.Schema.compile!/2` uses the same policy, raising a compile error on conflict.
 - `:format_assertion` — Enable strict `format` validation (default: `false`; the built-in Draft 2020-12 dialect keeps `format` annotation-only unless explicitly enabled, see [Content and format guide](guide/content_and_format.md))
 - `:content_assertion` — Enable strict content vocabulary validation (default: `false`, see [Content and format guide](guide/content_and_format.md))
 
@@ -241,7 +242,7 @@ git submodule update --remote -- test/fixtures/JSON-Schema-Test-Suite && git sub
 
 This pulls two external test suites into `test/fixtures/`:
 
-- **[JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)** — The official language-agnostic test suite for JSON Schema (Draft 2020-12).
+- **[JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)** — The official language-agnostic test suite for JSON Schema (Draft 7 and Draft 2020-12).
 - **[uritemplate-test](https://github.com/uri-templates/uritemplate-test)** — Test cases for RFC 6570 URI Template validation.
 
 Then fetch dependencies and run the tests:
@@ -253,9 +254,10 @@ mix test
 
 ## Test suite summary
 
-JSONSchex runs the JSON Schema Test Suite for Draft 2020-12 with all tests passing.
+JSONSchex runs the included JSON Schema Test Suite fixtures for Draft 7 and Draft 2020-12 with all tests passing.
 
-- Default suite path:
+- Default suite paths:
+  - `test/fixtures/JSON-Schema-Test-Suite/tests/draft7`
   - `test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12`
 - Exclusions:
   - `optional/cross-draft`

@@ -53,19 +53,30 @@ defmodule JSONSchex.SchemaTraversal do
   end
 
   @doc false
-  def reduce_scope_subschemas(schema, acc, reducer) when is_map(schema) do
+  def reduce_scope_subschemas(schema, acc, reducer, draft \\ "draft2020_12")
+
+  def reduce_scope_subschemas(schema, acc, reducer, draft) when is_map(schema) do
     acc = reduce_schema_lists(schema, @schema_list_keywords, acc, reducer)
     acc = reduce_schema_maps(schema, @schema_map_keywords ++ @definition_keywords, acc, reducer)
     acc = reduce_schemas_at_keys(schema, @single_schema_keywords ++ @conditional_keywords, acc, reducer)
     acc = reduce_schema_map(Map.get(schema, "dependencies"), acc, reducer)
 
     case Map.get(schema, "items") do
-      items when is_list(items) -> reduce_schema_list(items, acc, reducer)
-      _ -> acc
+      items when is_list(items) ->
+        acc = reduce_schema_list(items, acc, reducer)
+
+        if draft == "draft7" do
+          reduce_schema(Map.get(schema, "additionalItems"), acc, reducer)
+        else
+          acc
+        end
+
+      _ ->
+        acc
     end
   end
 
-  def reduce_scope_subschemas(_schema, acc, _reducer), do: acc
+  def reduce_scope_subschemas(_schema, acc, _reducer, _draft), do: acc
 
   defp schemas_at_keys(schema, keywords) do
     keywords

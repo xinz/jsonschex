@@ -3,7 +3,7 @@ defmodule JSONSchex.MixProject do
 
   @source_url "https://github.com/xinz/jsonschex"
   @version "0.10.0"
-  @description "An implementation of the JSON Schema draft 2020-12 and latest specification for Elixir"
+  @description "An implementation of the JSON Schema specification for Elixir"
 
   def project do
     [
@@ -33,8 +33,7 @@ defmodule JSONSchex.MixProject do
         "guide/dialect_and_vocabulary.md",
         "guide/feature_matrix.md",
         "guide/content_and_format.md",
-        "guide/test_suite.md",
-        "guide/draft7_test_failures.md"
+        "guide/test_suite.md"
       ],
       groups_for_extras: [
         Guides: [
@@ -42,8 +41,7 @@ defmodule JSONSchex.MixProject do
           "guide/dialect_and_vocabulary.md",
           "guide/feature_matrix.md",
           "guide/content_and_format.md",
-          "guide/test_suite.md",
-          "guide/draft7_test_failures.md"
+          "guide/test_suite.md"
         ]
       ],
       groups_for_modules: [

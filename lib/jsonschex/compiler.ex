@@ -112,7 +112,7 @@ defmodule JSONSchex.Compiler do
     with :ok <- validate_required_vocabularies(raw_schema, ctx.draft),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list, ctx.draft),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
-      {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode)
+      {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode, ctx.draft)
       scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
       local_defs = root_compiled.defs
       root_compiled = %{root_compiled | raw: context_document}
@@ -208,8 +208,11 @@ defmodule JSONSchex.Compiler do
     base
   end
 
-  defp scan_context(context_document, _base_uri, :schema), do: ScopeScanner.scan(context_document)
-  defp scan_context(context_document, base_uri, :document), do: ScopeScanner.scan_all(context_document, base_uri)
+  defp scan_context(context_document, _base_uri, :schema, draft),
+    do: ScopeScanner.scan(context_document, draft: draft)
+
+  defp scan_context(context_document, base_uri, :document, draft),
+    do: ScopeScanner.scan_all(context_document, base_uri, draft: draft)
 
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
@@ -277,7 +280,7 @@ defmodule JSONSchex.Compiler do
         {:ok, fragment} ->
           parent_base =
             if ctx.draft == "draft7" do
-              case ResourceContext.resolve(raw_schema, base_uri, URIUtil.fragment(ref)) do
+              case ResourceContext.resolve(raw_schema, base_uri, URIUtil.fragment(ref), draft: ctx.draft) do
                 {:ok, %{inherited_base: inherited_base}} -> inherited_base
                 :error -> base_uri
               end
@@ -382,6 +385,8 @@ defmodule JSONSchex.Compiler do
   end
 
   defp resolve_uri(parent, id), do: URIUtil.resolve(parent, id)
+
+  defp compile_local_defs(_schema, _base, _vocabs, %{draft: "draft7"}), do: {:ok, %{}}
 
   defp compile_local_defs(schema, base, vocabs, ctx) do
     raw_defs = Map.get(schema, "$defs", %{})
@@ -576,16 +581,20 @@ defmodule JSONSchex.Compiler do
     }
   end
 
-  defp compile_keyword({"contentMediaType", _media_type}, full_schema, _base, _vocabs, ctx) do
-    if ctx.content_assertion and not Map.has_key?(full_schema, "contentSchema") do
+  defp content_schema_enabled?(schema, vocabs, ctx) do
+    Map.has_key?(schema, "contentSchema") and keyword_allowed?("contentSchema", vocabs, ctx)
+  end
+
+  defp compile_keyword({"contentMediaType", _media_type}, full_schema, _base, vocabs, ctx) do
+    if ctx.content_assertion and not content_schema_enabled?(full_schema, vocabs, ctx) do
       {:ok, content_assertion_rule(full_schema)}
     else
       {:ok, nil}
     end
   end
 
-  defp compile_keyword({"contentEncoding", _encoding}, full_schema, _base, _vocabs, ctx) do
-    if ctx.content_assertion and not Map.has_key?(full_schema, "contentSchema") and
+  defp compile_keyword({"contentEncoding", _encoding}, full_schema, _base, vocabs, ctx) do
+    if ctx.content_assertion and not content_schema_enabled?(full_schema, vocabs, ctx) and
          not Map.has_key?(full_schema, "contentMediaType") do
       {:ok, content_assertion_rule(full_schema)}
     else
@@ -972,7 +981,7 @@ defmodule JSONSchex.Compiler do
 
   defp compile_keyword({"items", sub_schema}, full_schema, base, vocabs, ctx) do
     start_index =
-      if is_list(Map.get(full_schema, "prefixItems")),
+      if ctx.draft == "draft2020_12" and is_list(Map.get(full_schema, "prefixItems")),
         do: length(full_schema["prefixItems"]),
         else: 0
 
@@ -992,8 +1001,8 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"contains", sub_schema}, full_schema, base, vocabs, ctx) do
     case compile_schema_node(sub_schema, base, vocabs, ctx) do
       {:ok, compiled_sub} ->
-        min = Map.get(full_schema, "minContains", 1)
-        max = Map.get(full_schema, "maxContains")
+        min = if ctx.draft == "draft7", do: 1, else: Map.get(full_schema, "minContains", 1)
+        max = if ctx.draft == "draft7", do: nil, else: Map.get(full_schema, "maxContains")
 
         {:ok,
          %Rule{

@@ -139,11 +139,19 @@ defmodule JSONSchex.Test.RefRemote do
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "not an integer")
   end
 
-  test "JIT pointer targets inherit ancestor $ids in both drafts" do
+  test "Draft 7 JIT pointer targets inherit ancestor $ids through definitions" do
+    assert_jit_pointer_scope("draft7", "definitions")
+  end
+
+  test "Draft 2020-12 JIT pointer targets inherit ancestor $ids through $defs" do
+    assert_jit_pointer_scope("draft2020_12", "$defs")
+  end
+
+  defp assert_jit_pointer_scope(draft, definitions_keyword) do
     parent = self()
     root_uri = "https://example.com/base/root/entry.json"
     leaf_uri = "https://example.com/base/root/nested/leaf.json"
-    pointer = root_uri <> "#/$defs/parent/properties/value"
+    pointer = root_uri <> "#/" <> definitions_keyword <> "/parent/properties/value"
 
     loader = fn
       ^leaf_uri ->
@@ -157,8 +165,8 @@ defmodule JSONSchex.Test.RefRemote do
 
     document = %{
       "$id" => "root/entry.json",
-      "$ref" => pointer,
-      "$defs" => %{
+      "allOf" => [%{"$ref" => pointer}],
+      definitions_keyword => %{
         "parent" => %{
           "$id" => "nested/",
           "properties" => %{"value" => %{"$ref" => "leaf.json"}}
@@ -166,23 +174,21 @@ defmodule JSONSchex.Test.RefRemote do
       }
     }
 
-    for draft <- ["draft2020_12", "draft7"] do
-      assert {:ok, compiled} =
-               JSONSchex.compile_fragment(document,
-                 entry: "#",
-                 base_uri: "https://example.com/base/",
-                 loader: loader,
-                 draft: draft
-               )
+    assert {:ok, compiled} =
+             JSONSchex.compile_fragment(document,
+               entry: "#",
+               base_uri: "https://example.com/base/",
+               loader: loader,
+               draft: draft
+             )
 
-      refute Map.has_key?(compiled.defs, pointer)
-      assert :ok == JSONSchex.validate(compiled, 42)
-      assert_received {:loaded, ^leaf_uri}
-      refute_received {:unexpected_load, _}
-      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "42")
-      assert_received {:loaded, ^leaf_uri}
-      refute_received {:unexpected_load, _}
-    end
+    refute Map.has_key?(compiled.defs, pointer)
+    assert :ok == JSONSchex.validate(compiled, 42)
+    assert_received {:loaded, ^leaf_uri}
+    refute_received {:unexpected_load, _}
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "42")
+    assert_received {:loaded, ^leaf_uri}
+    refute_received {:unexpected_load, _}
   end
 
   test "invalid dynamic JIT fallback returns error instead of crashing" do
