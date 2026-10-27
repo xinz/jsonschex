@@ -39,14 +39,6 @@ defmodule JSONSchex.Validator.Rules do
   end
 
   def apply(
-        %Rule{name: :contentAssertion, params: %{media_type: media_type, encoding: encoding}},
-        data,
-        {path, _evaluated, _root}
-      ) do
-    Keywords.validate_content_assertion(data, media_type, encoding, path)
-  end
-
-  def apply(
         %Rule{
           name: :contentSchema,
           params: %{schema: compiled_sub, media_type: media_type, encoding: encoding}
@@ -334,6 +326,14 @@ defmodule JSONSchex.Validator.Rules do
       {:error, errors} ->
         {:error, errors}
     end
+  end
+
+  def apply(
+        %Rule{name: name, params: %{media_type: media_type, encoding: encoding}},
+        data,
+        {path, _evaluated, _root}
+      ) when name in [:contentEncoding, :contentMediaType] do
+    Keywords.validate_content_assertion(data, media_type, encoding, path)
   end
 
   def apply(%Rule{name: name}, _data, _ctx) do

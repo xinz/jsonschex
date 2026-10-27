@@ -571,9 +571,9 @@ defmodule JSONSchex.Compiler do
     }
   end
 
-  defp content_assertion_rule(full_schema) do
+  defp content_assertion_rule(name, full_schema) do
     %Rule{
-      name: :contentAssertion,
+      name: name,
       params: %{
         media_type: Map.get(full_schema, "contentMediaType"),
         encoding: Map.get(full_schema, "contentEncoding")
@@ -585,9 +585,10 @@ defmodule JSONSchex.Compiler do
     Map.has_key?(schema, "contentSchema") and keyword_allowed?("contentSchema", vocabs, ctx)
   end
 
+  # A media-type assertion also decodes sibling contentEncoding, avoiding duplicate work.
   defp compile_keyword({"contentMediaType", _media_type}, full_schema, _base, vocabs, ctx) do
     if ctx.content_assertion and not content_schema_enabled?(full_schema, vocabs, ctx) do
-      {:ok, content_assertion_rule(full_schema)}
+      {:ok, content_assertion_rule(:contentMediaType, full_schema)}
     else
       {:ok, nil}
     end
@@ -596,7 +597,7 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"contentEncoding", _encoding}, full_schema, _base, vocabs, ctx) do
     if ctx.content_assertion and not content_schema_enabled?(full_schema, vocabs, ctx) and
          not Map.has_key?(full_schema, "contentMediaType") do
-      {:ok, content_assertion_rule(full_schema)}
+      {:ok, content_assertion_rule(:contentEncoding, full_schema)}
     else
       {:ok, nil}
     end
