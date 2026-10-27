@@ -56,9 +56,8 @@ defmodule JSONSchex.ScopeScanner do
     do_scan_all(document, base_uri, {%{}, MapSet.new()}, Keyword.get(opts, :draft, "draft2020_12"))
   end
 
-  defp do_scan(schema, base_uri, {registry, refs}, draft) when is_map(schema) do
-    raw_schema = schema
-    schema = scope_schema(schema, draft)
+  defp do_scan(raw_schema, base_uri, {registry, refs}, draft) when is_map(raw_schema) do
+    schema = scope_schema(raw_schema, draft)
     current_id = Map.get(schema, "$id")
     new_base_uri = URIUtil.resolve(base_uri, current_id) || ""
 
