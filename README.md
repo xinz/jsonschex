@@ -3,7 +3,7 @@
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
 [![Draft 2020-12](https://img.shields.io/endpoint?url=https%3A%2F%2Fbowtie.report%2Fbadges%2Felixir-jsonschex%2Fcompliance%2Fdraft2020-12.json)](https://bowtie.report/#/implementations/elixir-jsonschex)
 
-JSONSchex supports [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) and [Draft 7](https://json-schema.org/draft-07) for Elixir, with a design that focuses on practical performance. Draft 2020-12 remains the default when no recognized root `$schema` or explicit `:draft` selects another draft.
+JSONSchex supports [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) and [Draft 7](https://json-schema.org/draft-07) for Elixir, with a design that focuses on practical performance. Draft 2020-12 is the default when no recognized root `$schema` or explicit `:draft` selects another draft.
 
 ## Features
 
@@ -34,6 +34,32 @@ end
 :ok = JSONSchex.validate(compiled, [1, 2, 3])
 {:error, errors} = JSONSchex.validate(compiled, [1, "bad"])
 ```
+
+## Draft selection
+
+A recognized root `$schema` selects Draft 7 or Draft 2020-12 automatically:
+
+```elixir
+# Draft 7 uses array-form items for positional validation.
+schema = %{
+  "$schema" => "http://json-schema.org/draft-07/schema#",
+  "items" => [%{"type" => "integer"}],
+  "additionalItems" => false
+}
+
+{:ok, compiled} = JSONSchex.compile(schema)
+:ok = JSONSchex.validate(compiled, [1])
+{:error, _errors} = JSONSchex.validate(compiled, [1, 2])
+
+# Without a recognized declaration, select Draft 7 explicitly with a string value.
+{:ok, _compiled} = JSONSchex.compile(Map.delete(schema, "$schema"), draft: "draft7")
+```
+
+The accepted `:draft` values are `"draft7"` and `"draft2020_12"`. A recognized
+`$schema` and an explicit `:draft` must agree; otherwise compilation returns
+`:draft_conflict`. Without either, Draft 2020-12 is the default.
+`JSONSchex.Schema.compile!/2` follows the same policy and raises `CompileError`
+on conflict. See the [dialect guide](guide/dialect_and_vocabulary.md) for details.
 
 ## Compile-time schemas
 
@@ -103,7 +129,7 @@ captures like `&MyLoader.fetch/1` over anonymous functions.
 JSONSchex follows a **two-phase approach** for optimal performance:
 
 1. **Compile** — Parse and optimize a JSON Schema into an executable `Schema` struct. During compilation:
-   - All `$id`, `$anchor`, and discovered local fragment references are scanned and registered
+   - Schema resources and eligible local fragment references are registered according to the selected draft
    - Keywords are compiled into serializable rule descriptors consumed by the validator
    - Remote `$ref` schemas can be loaded via a configured loader
    - Canonical Draft 7 and Draft 2020-12 meta-schemas are embedded; built-in references need no loader
@@ -112,7 +138,7 @@ JSONSchex follows a **two-phase approach** for optimal performance:
 2. **Validate** — Execute the compiled schema against data. During validation:
    - Rules are executed in order, accumulating errors
    - Evaluated property/item keys are tracked for `unevaluatedProperties` and `unevaluatedItems`
-   - References (`$ref`, `$dynamicRef`) are resolved from the compiled registry
+   - `$ref` is resolved in both drafts; `$dynamicRef` is supported in Draft 2020-12
    - All errors are collected and returned together
 
 This design allows you to compile a schema once and reuse it for multiple validations, significantly improving performance for repeated validations.
@@ -185,10 +211,10 @@ Enum.map(errors, &JSONSchex.format_error/1)
 - `:loader` — Function for loading remote `$ref` schemas (see [Loader guide](guide/loader.md))
 - `:base_uri` — Starting base URI for resolving relative references (see [Loader guide](guide/loader.md))
 - `:draft` — `"draft7"` or `"draft2020_12"` (as strings). A recognized root `$schema` selects the draft automatically; a conflicting option returns `:draft_conflict`. Without either, Draft 2020-12 is the default. `JSONSchex.Schema.compile!/2` uses the same policy, raising a compile error on conflict.
-- `:format_assertion` — Enable strict `format` validation (default: `false`; the built-in Draft 2020-12 dialect keeps `format` annotation-only unless explicitly enabled, see [Content and format guide](guide/content_and_format.md))
+- `:format_assertion` — Explicitly enable `format` validation (default: `false`). The canonical Draft 2020-12 dialect is annotation-only by default; an active format-assertion vocabulary also enables validation (see [Content and format guide](guide/content_and_format.md)).
 - `:content_assertion` — Enable strict content vocabulary validation (default: `false`, see [Content and format guide](guide/content_and_format.md))
 
-`JSONSchex.compile_fragment/2` accepts a containing document plus an `:entry` JSON Pointer or URI reference. Use `:base_uri` when a document-local entry contains relative external references. If `:entry` includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution. `JSONSchex.bundle_fragment/2` uses the same entry options and returns a raw schema with reachable external resources mounted under `$defs`. Generated `$defs` keys beginning with `jsonschex_` are collision-safe internal storage names, not stable reference paths; resources retain their identity through `$id` and anchors. Loader wrapper responses use atom metadata keys only: `{:ok, %{document: schema, base_uri: base_uri}}`.
+`JSONSchex.compile_fragment/2` accepts a containing document plus an `:entry` JSON Pointer or URI reference. Draft detection uses the containing document's root `$schema`; pass `:draft` when that declaration is absent or unrecognized. Use `:base_uri` when a document-local entry contains relative external references. If `:entry` includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution. `JSONSchex.bundle_fragment/2` uses the same entry options and returns a raw schema with reachable external resources mounted under `$defs`. Generated `$defs` keys beginning with `jsonschex_` are collision-safe internal storage names, not stable reference paths; resources retain their identity through `$id` and anchors. Loader wrapper responses use atom metadata keys only: `{:ok, %{document: schema, base_uri: base_uri}}`.
 
 `JSONSchex.Ref.resolve_selected/2` provides selector-driven `$ref` resolution for JSON-like documents. It resolves only `$ref` nodes selected by a caller-provided `:select` function, replaces selected refs with their target values, preserves unselected refs, continues walking their sibling values, and rebases preserved descendant refs when external content is inlined. It uses the same `:base_uri` / `:loader` mechanics for external resources.
 

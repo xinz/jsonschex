@@ -4,20 +4,42 @@ This guide explains how JSONSchex interprets `$schema` and `$vocabulary`, and ho
 
 ## Overview
 
-- A recognized root `$schema` URI selects Draft 7 or Draft 2020-12 automatically. A custom or absent `$schema` defaults to Draft 2020-12.
+- A recognized root `$schema` URI selects Draft 7 or Draft 2020-12 automatically. If neither a recognized URI nor a valid `:draft` selects a draft, compilation defaults to Draft 2020-12.
 - `:draft` can explicitly select `"draft7"` or `"draft2020_12"` (string values, not atoms); when it conflicts with a recognized root `$schema`, compilation fails instead of silently choosing either one.
 - `$vocabulary` applies to Draft 2020-12 meta-schemas. Draft 7 predates `$vocabulary` and uses its own keyword set.
 
-## Dialect resolution
+## Draft selection
 
-For Draft 2020-12 (the default when no recognized root `$schema` or `:draft` is supplied):
+The runtime compiler and `JSONSchex.Schema.compile!/2` follow the same rules:
+
+| Root `$schema` | `:draft` | Result |
+| --- | --- | --- |
+| Recognized URI | Omitted | Use the declared draft |
+| Recognized URI | Matching value | Use that draft |
+| Recognized URI | Conflicting value | Fail with `:draft_conflict` |
+| Absent or unrecognized URI | Valid value | Use the option |
+| Absent or unrecognized URI | Omitted | Use Draft 2020-12 |
+
+Recognized URIs are `http://json-schema.org/draft-07/schema` (with or without a trailing `#`) and `https://json-schema.org/draft/2020-12/schema`. Other URIs do not infer a draft. The option accepts only the strings `"draft7"` and `"draft2020_12"`; invalid values return `:invalid_draft`. The compile-time macro raises `CompileError` instead of returning these errors.
+
+For `compile_fragment/2`, draft detection uses the containing document's root `$schema`, not a nested fragment's declaration. Referenced external schemas declaring a different recognized draft are not automatically switched: their compilation reports a conflict. Cross-draft resolution remains outside this policy.
+
+## Meta-schema and vocabulary resolution
+
+### Draft 2020-12
 
 1. The canonical meta-schema URI (`https://json-schema.org/draft/2020-12/schema`) is built in, so no loader is needed.
 2. The built-in dialect uses Draft 2020-12 active vocabulary defaults and honors an explicit root-level `$vocabulary` declaration.
 3. Other `$schema` URIs are loaded through `:loader` when one is supplied; a loaded meta-schema's `$vocabulary` selects the active vocabularies.
 4. Without a loader, JSONSchex falls back to its Draft 2020-12 capability set.
 
-For Draft 7, declare `"$schema" => "http://json-schema.org/draft-07/schema#"` (the form without `#` also works), or pass `draft: "draft7"` to `JSONSchex.compile/2` or `JSONSchex.Schema.compile!/2` when there is no recognized `$schema`. The Draft 7 meta-schema is embedded as an Elixir map, so built-in references require neither a loader nor runtime file access. Unknown Draft 7 keywords are ignored rather than interpreted as Draft 2020-12 keywords. A caller-supplied loader is still needed for other remote schemas. For `compile_fragment/2`, draft detection uses the containing document's root `$schema`, not a nested fragment's declaration. Referenced external schemas declaring a different recognized draft are not automatically switched; compilation reports a conflict, and cross-draft resolution remains outside this policy.
+The fallback capability set includes format-assertion; it differs from the canonical dialect's annotation-only format defaults. Declare the canonical `$schema` URI when those standard defaults are required.
+
+### Draft 7
+
+Declare `"$schema" => "http://json-schema.org/draft-07/schema#"`, or pass `draft: "draft7"` when there is no recognized declaration. The canonical meta-schema is embedded as an Elixir map, so built-in references require neither a loader nor runtime file access. Other remote schemas still require a caller-supplied loader.
+
+Draft 7 uses its own keyword set and ignores `$vocabulary`. Newer-draft keywords such as `prefixItems`, `minContains`, `maxContains`, and `contentSchema` do not gain validation semantics. `$defs` annotations are not eagerly compiled, although explicit JSON Pointer references into their content remain possible.
 
 ## $vocabulary Semantics
 
@@ -160,35 +182,32 @@ schema = %{
 
 ### Example 3: Format assertion through vocabulary
 
-The format vocabulary has two modes:
+`format_assertion: true` enables format validation explicitly. In Draft 2020-12, an active format-assertion vocabulary also enables it; setting the option to `false` does not override that vocabulary.
 
 ```elixir
-# Meta-schema with format as annotation only
-annotation_meta = %{
-  "$vocabulary" => %{
-    "https://json-schema.org/draft/2020-12/vocab/core" => true,
-    "https://json-schema.org/draft/2020-12/vocab/format-annotation" => true
-  }
+# The canonical dialect uses format annotations by default.
+schema = %{
+  "$schema" => "https://json-schema.org/draft/2020-12/schema",
+  "type" => "string",
+  "format" => "email"
 }
 
-# Meta-schema with format as assertion
-assertion_meta = %{
-  "$vocabulary" => %{
-    "https://json-schema.org/draft/2020-12/vocab/core" => true,
-    "https://json-schema.org/draft/2020-12/vocab/format-assertion" => true
-  }
-}
+{:ok, annotations} = JSONSchex.compile(schema)
+:ok = JSONSchex.validate(annotations, "not-an-email")
 
-# The compile-time option overrides the vocabulary setting
-schema = %{"type" => "string", "format" => "email"}
+# Explicit opt-in enables assertion without changing the vocabulary declaration.
+{:ok, assertions} = JSONSchex.compile(schema, format_assertion: true)
+{:error, _errors} = JSONSchex.validate(assertions, "not-an-email")
 
-# Annotation mode - format is not validated
-{:ok, compiled1} = JSONSchex.compile(schema, format_assertion: false)
-JSONSchex.validate(compiled1, "not-an-email")  # => :ok
+# An active assertion vocabulary enables checks even when the option is false.
+assertion_schema = Map.put(schema, "$vocabulary", %{
+  "https://json-schema.org/draft/2020-12/vocab/core" => true,
+  "https://json-schema.org/draft/2020-12/vocab/validation" => true,
+  "https://json-schema.org/draft/2020-12/vocab/format-assertion" => true
+})
 
-# Assertion mode - format is validated
-{:ok, compiled2} = JSONSchex.compile(schema, format_assertion: true)
-JSONSchex.validate(compiled2, "not-an-email")  # => {:error, [...]}
+{:ok, vocabulary_assertions} = JSONSchex.compile(assertion_schema, format_assertion: false)
+{:error, _errors} = JSONSchex.validate(vocabulary_assertions, "not-an-email")
 ```
 
 ## Practical guidance

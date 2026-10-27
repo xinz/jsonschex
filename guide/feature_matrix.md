@@ -1,6 +1,6 @@
 # Draft 2020-12 Feature Matrix
 
-This guide summarizes JSONSchex support for Draft 2020-12 keywords and vocabularies.
+This guide summarizes JSONSchex support for Draft 2020-12 keywords and vocabularies. Draft 7 is supported separately; its keyword and reference semantics differ. See the [dialect guide](dialect_and_vocabulary.md) before applying this matrix to a Draft 7 schema.
 
 ## Legend
 
@@ -12,7 +12,7 @@ This guide summarizes JSONSchex support for Draft 2020-12 keywords and vocabular
 
 | Keyword | Status | Notes |
 |---|---|---|
-| `$schema` | ✅ | Dialect resolution; loader required for remote meta-schema |
+| `$schema` | ✅ | Canonical dialects are built in; custom meta-schemas may require a loader |
 | `$id` | ✅ | Base URI scoping supported |
 | `$ref` | ✅ | Supports remote refs with loader |
 | `$anchor` | ✅ | Anchor resolution supported |
@@ -79,9 +79,10 @@ This guide summarizes JSONSchex support for Draft 2020-12 keywords and vocabular
 
 | Keyword | Status | Notes |
 |---|---|---|
-| `format` | ⚠️ | Assertion behavior requires `format_assertion: true` |
+| `format` | ⚠️ | Enabled by `format_assertion: true` or an active format-assertion vocabulary |
 
 ## Notes
 
-- When assertion options are not enabled, the corresponding keywords are accepted but do not enforce validation.
-- For remote meta-schema resolution, provide a `:loader` to `JSONSchex.compile/2`.
+- Content keywords are annotation-only unless `content_assertion: true` is enabled. Format behavior also depends on the active vocabulary set.
+- Built-in meta-schemas need no loader. Provide `:loader` for other remote resources.
+- The official fixture runs exclude `optional/cross-draft`; supported keywords do not imply complete cross-draft resolution.

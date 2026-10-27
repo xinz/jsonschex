@@ -39,7 +39,7 @@ defmodule JSONSchex.Schema do
 
   - `:loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
   - `:base_uri` — Starting base URI for resolving relative references
-  - `:format_assertion` — Enable strict `format` validation (default: `false`)
+  - `:format_assertion` — Explicitly enable `format` validation (default: `false`); an active Draft 2020-12 format-assertion vocabulary also enables it.
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
   - `:draft` — Use `"draft7"` or `"draft2020_12"` (strings, not atoms). A recognized root `$schema` selects the draft when
     this option is omitted; a conflicting option raises a compile error. Without either, Draft 2020-12 is the default.

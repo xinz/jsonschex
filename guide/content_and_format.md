@@ -4,20 +4,19 @@ This guide explains how JSONSchex handles the `content*` vocabulary and the `for
 
 ## Overview
 
-JSONSchex treats certain vocabularies as **annotation-only by default**. You can opt into assertion behavior at compile time:
+Content keywords are **annotation-only by default**. Enable checks with `content_assertion: true` when compiling the schema. `format_assertion: true` explicitly enables format checks; Draft 2020-12 can also enable them through an active format-assertion vocabulary.
 
-- `contentEncoding`, `contentMediaType`, `contentSchema` are enabled by `content_assertion: true`
-- `format` is enabled by `format_assertion: true`
-
-If the corresponding assertion flag is not enabled, the keyword is accepted but does not enforce validation.
+Draft 7 supports `contentEncoding` and `contentMediaType`, but not `contentSchema`. Draft selection follows the [dialect guide](dialect_and_vocabulary.md).
 
 ## Content Vocabulary Assertions
 
 ### Keywords
 
-- `contentEncoding`
-- `contentMediaType`
-- `contentSchema`
+| Keyword | Draft 7 | Draft 2020-12 |
+| --- | --- | --- |
+| `contentEncoding` | Optional assertion | Optional assertion |
+| `contentMediaType` | Optional assertion | Optional assertion |
+| `contentSchema` | Unknown keyword; ignored | Validates decoded content when assertions are enabled |
 
 ### Default behavior
 
@@ -43,7 +42,9 @@ When `content_assertion` is enabled:
   - `application/json`
   - Any media type ending in `+json`
 - Encoding and media type are asserted even when `contentSchema` is absent.
-- When `contentSchema` is present, the decoded and parsed content is also validated against it.
+- In Draft 2020-12, a supported `contentSchema` also validates the decoded and parsed value.
+- In Draft 7, `contentSchema` is ignored even when assertions are enabled; it does not suppress encoding or media-type checks.
+- These checks apply only to strings. Use `"type" => "string"` when other instance types must be rejected.
 
 ### Error reporting
 
@@ -53,9 +54,11 @@ Errors are surfaced using the following rule identifiers:
 - `:contentMediaType` for media type parsing failures
 - The underlying schema rule for `contentSchema` validation failures
 
+Nested validation paths in `Error.path` are stored deepest-first. `JSONSchex.format_error/1` renders them as root-first JSON Pointer paths.
+
 ### Complete End-to-End Example
 
-Here's a complete example showing content validation with base64-encoded JSON validated against a `contentSchema`:
+This Draft 2020-12 example checks base64-encoded JSON against a `contentSchema`:
 
 ```elixir
 # Define a schema with content assertions
@@ -109,7 +112,7 @@ non_json_base64 = Base.encode64("This is not JSON")
 invalid_json = Jason.encode!(%{"name" => "Bob", "age" => -5})  # age is negative
 invalid_data = %{"encodedData" => Base.encode64(invalid_json)}
 {:error, [error]} = JSONSchex.validate(compiled, invalid_data)
-# error.path => ["encodedData", "age"]
+# error.path => ["age", "encodedData"]
 # error.rule => :minimum
 # JSONSchex.format_error(error)
 # => "At /encodedData/age: Value -5 is less than minimum 0"
@@ -141,7 +144,9 @@ Content vocabulary assertions are useful for:
 
 ### Default behavior
 
-`format` is **annotation-only** by default.
+`format` is **annotation-only** in Draft 7 and in the canonical Draft 2020-12 dialect unless assertions are enabled.
+
+For Draft 2020-12, an active format-assertion vocabulary also enables validation. The schema-less/custom-meta-schema fallback uses the implementation capability set, which includes that vocabulary. Declare the canonical `$schema` URI for the standard annotation-only defaults; `format_assertion: false` does not disable an active assertion vocabulary.
 
 ### Enabling assertions
 
