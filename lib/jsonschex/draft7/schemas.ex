@@ -139,12 +139,23 @@ defmodule JSONSchex.Draft7.Schemas do
 
   def fetch(_uri), do: :error
 
-  @doc "Returns compiled resources for a Draft 7 meta-schema reference."
-  def compiled_defs(uri) when uri in [@base_uri, @schema_uri] do
-    case :persistent_term.get(@compiled_defs_cache_key, :undefined) do
+  @doc """
+  Returns compiled resources for a Draft 7 meta-schema reference.
+
+  The `:format_assertion` and `:content_assertion` options default to `false`.
+  Both canonical URI forms share the same cache for each boolean option pair.
+  """
+  def compiled_defs(uri, opts \\ [])
+
+  def compiled_defs(uri, opts) when uri in [@base_uri, @schema_uri] do
+    format_assertion = !!Keyword.get(opts, :format_assertion, false)
+    content_assertion = !!Keyword.get(opts, :content_assertion, false)
+    cache_key = compiled_defs_cache_key(format_assertion, content_assertion)
+
+    case :persistent_term.get(cache_key, :undefined) do
       :undefined ->
-        compiled = build_compiled_defs()
-        :persistent_term.put(@compiled_defs_cache_key, compiled)
+        compiled = build_compiled_defs(format_assertion, content_assertion)
+        :persistent_term.put(cache_key, compiled)
         compiled
 
       compiled ->
@@ -152,11 +163,25 @@ defmodule JSONSchex.Draft7.Schemas do
     end
   end
 
-  def compiled_defs(_uri), do: nil
+  def compiled_defs(_uri, _opts), do: nil
 
-  defp build_compiled_defs do
+  # Keep the default registry compatible with cache entries created by compiled_defs/1.
+  defp compiled_defs_cache_key(false, false), do: @compiled_defs_cache_key
+
+  defp compiled_defs_cache_key(format_assertion, content_assertion) do
+    {__MODULE__, :compiled_defs, format_assertion, content_assertion}
+  end
+
+  defp build_compiled_defs(format_assertion, content_assertion) do
     {:ok, raw_schema} = fetch(@schema_uri)
-    {:ok, compiled_schema} = Compiler.compile(raw_schema, draft: "draft7", base_uri: @base_uri)
+
+    {:ok, compiled_schema} =
+      Compiler.compile(raw_schema,
+        draft: "draft7",
+        base_uri: @base_uri,
+        format_assertion: format_assertion,
+        content_assertion: content_assertion
+      )
 
     compiled_schema.defs
     |> Map.put(@base_uri, compiled_schema)

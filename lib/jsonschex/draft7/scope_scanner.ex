@@ -150,13 +150,15 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   # and scanning a reached target each apply that target's $id exactly once.
   defp resource_owner(%{"$ref" => _}, _base_uri, owner), do: owner
   defp resource_owner(%{"$id" => id} = raw_schema, base_uri, owner) when is_binary(id) do
+    {id_base, _fragment} = URIUtil.split_fragment(id)
     uri = URIUtil.resolve(base_uri, id) || ""
     {base, _fragment} = URIUtil.split_fragment(uri)
     {owner_base, _fragment} = URIUtil.split_fragment(resource_uri(owner))
 
     # Fragment IDs name subschemas within a resource; they do not change the raw
-    # root against which that resource's JSON Pointers are resolved.
-    if base == owner_base, do: owner, else: {{:id, uri}, raw_schema, base_uri}
+    # root against which that resource's JSON Pointers are resolved, even when
+    # URI resolution falls back to the child ID for a relative parent base.
+    if id_base == "" or base == owner_base, do: owner, else: {{:id, uri}, raw_schema, base_uri}
   end
   defp resource_owner(_raw_schema, _base_uri, owner), do: owner
 

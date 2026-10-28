@@ -31,11 +31,13 @@ defmodule JSONSchex.ResourceContext do
   defp walk(value, [], current_base, resource, resource_base, resources, draft) do
     case resource_id(value, draft) do
       id when is_binary(id) ->
+        {_base, resource, resource_base} = enter_resource(value, id, current_base, resource, resource_base)
+
         {:ok,
          %{
            target: value,
-           resource: value,
-           resource_base: current_base,
+           resource: resource,
+           resource_base: resource_base,
            inherited_base: current_base,
            resources: Enum.reverse([{value, current_base} | resources])
          }}
@@ -56,7 +58,8 @@ defmodule JSONSchex.ResourceContext do
     {current_base, resource, resource_base, resources} =
       case resource_id(map, draft) do
         id when is_binary(id) ->
-          {URIUtil.resolve(current_base, id), map, current_base, [{map, current_base} | resources]}
+          {base, resource, resource_base} = enter_resource(map, id, current_base, resource, resource_base)
+          {base, resource, resource_base, [{map, current_base} | resources]}
 
         _ ->
           {current_base, resource, resource_base, resources}
@@ -82,6 +85,19 @@ defmodule JSONSchex.ResourceContext do
   end
 
   defp walk(_value, _tokens, _current_base, _resource, _resource_base, _resources, _draft), do: :error
+
+  # Fragment-only IDs still affect URI inheritance, but only a changed resource
+  # URI establishes a new raw root for JSON Pointer lookup.
+  defp enter_resource(value, id, base, resource, resource_base) do
+    new_base = URIUtil.resolve(base, id)
+    {id_base, _fragment} = URIUtil.split_fragment(id)
+    {parent_uri, _fragment} = URIUtil.split_fragment(base || "")
+    {resource_uri, _fragment} = URIUtil.split_fragment(new_base)
+
+    if id_base == "" or resource_uri == parent_uri,
+      do: {new_base, resource, resource_base},
+      else: {new_base, value, base}
+  end
 
   defp resource_id(%{"$ref" => _}, "draft7"), do: nil
   defp resource_id(map, _draft) when is_map(map), do: Map.get(map, "$id")

@@ -191,6 +191,84 @@ defmodule JSONSchex.Test.RefRemote do
     refute_received {:unexpected_load, _}
   end
 
+  for draft <- ["draft7", "draft2020_12"], ref_kind <- [:absolute, :local] do
+    test "JIT targets retain their embedded resource for #{ref_kind} refs in #{draft}" do
+      remote_uri = "https://example.com/remote.json"
+      resource_uri = "https://example.com/nested/"
+      parent = self()
+      inner_ref =
+        case unquote(ref_kind) do
+          :absolute -> resource_uri <> "#/definitions/value"
+          :local -> "#/definitions/value"
+        end
+      remote = %{
+        "$id" => remote_uri,
+        "definitions" => %{
+          "holder" => %{
+            "$id" => "nested/",
+            "definitions" => %{"value" => %{"type" => "integer"}},
+            "properties" => %{"entry" => %{"$ref" => inner_ref}}
+          }
+        }
+      }
+
+      # An absolute reference must not select the retrieval document's decoy.
+      # Leave local refs without a matching root pointer to avoid eager aliases
+      # masking the JIT resource-root behavior under test.
+      remote =
+        if unquote(ref_kind) == :absolute,
+          do: put_in(remote, ["definitions", "value"], %{"type" => "string"}),
+          else: remote
+
+      loader = fn
+        ^remote_uri ->
+          send(parent, {:loaded, remote_uri})
+          {:ok, remote}
+        uri ->
+          flunk("Unexpected external load: #{uri}")
+      end
+      schema = %{"$ref" => remote_uri <> "#/definitions/holder/properties/entry"}
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: unquote(draft), loader: loader)
+      refute Map.has_key?(compiled.defs, "#/definitions/value")
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert_received {:loaded, ^remote_uri}
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+      assert_received {:loaded, ^remote_uri}
+    end
+  end
+
+  for entry_id <- [nil, "#entry"] do
+    test "Draft 7 JIT pointers retain resource roots across fragment IDs with entry ID #{inspect(entry_id)}" do
+      remote_uri = "https://example.com/fragment-ids.json"
+      entry = %{"allOf" => [%{"$ref" => "#/definitions/value"}]}
+      entry = if unquote(entry_id), do: Map.put(entry, "$id", unquote(entry_id)), else: entry
+      remote = %{
+        "$id" => remote_uri,
+        "definitions" => %{
+          "holder" => %{
+            "$id" => "nested/",
+            "definitions" => %{"value" => %{"type" => "integer"}},
+            # The explicit pointer crosses unknown content. Neither the ancestor
+            # nor the entry's fragment-only ID can replace holder as the raw root.
+            "custom" => %{"$id" => "#named", "entry" => entry}
+          }
+        }
+      }
+      loader = fn
+        ^remote_uri -> {:ok, remote}
+        uri -> flunk("Unexpected external load: #{uri}")
+      end
+      schema = %{"$ref" => remote_uri <> "#/definitions/holder/custom/entry"}
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7", loader: loader)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+    end
+  end
+
   test "invalid dynamic JIT fallback returns error instead of crashing" do
     schema = %{
       "$ref" => "http://example.com/remote.json#/properties/does_not_exist"

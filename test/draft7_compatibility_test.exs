@@ -1264,6 +1264,61 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     end
   end
 
+  for resource_id <- ["resource/", "resource.json", "https://example.com/resource/"] do
+    test "Draft 7 schema scanning keeps fragment-only IDs within #{resource_id}'s resource" do
+      poison_uri = "https://example.com/poison"
+      schema = %{
+        "$id" => unquote(resource_id),
+        "custom" => %{"pick" => true},
+        "definitions" => %{
+          "anchor" => %{
+            "$id" => "#named",
+            "allOf" => [%{"$ref" => "#/custom/pick"}],
+            "custom" => %{"pick" => %{"$id" => poison_uri, "type" => 42}}
+          }
+        }
+      }
+
+      # The anchor's custom map is ignored annotation data with a competing target.
+      # The explicit pointer must select the root's true schema, not this poison.
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      refute Map.has_key?(scopes, poison_uri)
+
+      # A reached resource proves discovery follows the pointer rather than skipping it.
+      reached_uri = "https://example.com/reached"
+      schema = put_in(schema, ["custom", "pick"], %{"$id" => reached_uri, "type" => "integer"})
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      assert Map.has_key?(scopes, reached_uri)
+      refute Map.has_key?(scopes, poison_uri)
+    end
+
+    test "Draft 7 compilation keeps fragment-only IDs within #{resource_id}'s resource" do
+      poison_uri = "https://example.com/poison"
+      schema = %{
+        "$id" => unquote(resource_id),
+        "custom" => %{"pick" => true},
+        "definitions" => %{
+          "anchor" => %{
+            "$id" => "#named",
+            "allOf" => [%{"$ref" => "#/custom/pick"}],
+            "custom" => %{"pick" => %{"$id" => poison_uri, "type" => 42}}
+          }
+        }
+      }
+
+      # Schema compilation must not activate the anchor's ignored annotation target.
+      # Broad document discovery via scan_all intentionally walks arbitrary custom maps.
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+      refute Map.has_key?(compiled.defs, poison_uri)
+
+      reached_uri = "https://example.com/reached"
+      schema = put_in(schema, ["custom", "pick"], %{"$id" => reached_uri, "type" => "integer"})
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+      assert Map.has_key?(compiled.defs, reached_uri)
+      refute Map.has_key?(compiled.defs, poison_uri)
+    end
+  end
+
   defp registered_resource_pointer_schema(ref) do
     resource_uri = "https://example.com/b"
     integer_uri = "https://example.com/integer"

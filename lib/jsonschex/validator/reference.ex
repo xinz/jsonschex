@@ -74,7 +74,7 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp effective_context_for_ref(validation_context, ref_string) do
-    case built_in_defs_for_ref(validation_context.source_id, ref_string, validation_context.root_schema.draft) do
+    case built_in_defs_for_ref(validation_context.source_id, ref_string, validation_context.root_schema) do
       nil ->
         validation_context
 
@@ -156,15 +156,19 @@ defmodule JSONSchex.Validator.Reference do
   end
   defp check_load_remote(_, _), do: :halt
 
-  defp built_in_defs_for_ref(_, nil, _draft), do: nil
-  defp built_in_defs_for_ref(base_uri, ref, draft) do
+  defp built_in_defs_for_ref(_, nil, _schema), do: nil
+  defp built_in_defs_for_ref(base_uri, ref, schema) do
     uri = uri_to_resolve(base_uri, ref)
     {base, _fragment} = URIUtil.split_fragment(uri)
-    builtin_compiled_defs(base, draft)
+    builtin_compiled_defs(base, schema)
   end
 
-  defp builtin_compiled_defs(base, "draft7"), do: Draft7Schemas.compiled_defs(base)
-  defp builtin_compiled_defs(base, "draft2020_12"), do: Draft202012Schemas.compiled_defs(base)
+  defp builtin_compiled_defs(base, %{draft: "draft7"} = schema) do
+    Draft7Schemas.compiled_defs(base,
+      format_assertion: schema.format_assertion,
+      content_assertion: schema.content_assertion)
+  end
+  defp builtin_compiled_defs(base, %{draft: "draft2020_12"}), do: Draft202012Schemas.compiled_defs(base)
 
   defp resolve_scoped_ref(base_uri, ref, registry) when base_uri == ref do
     Map.get(registry, ref)
@@ -211,7 +215,7 @@ defmodule JSONSchex.Validator.Reference do
 
     case Map.get(validation_context.root_schema.defs, base) do
       nil ->
-        case builtin_compiled_defs(base, validation_context.root_schema.draft) do
+        case builtin_compiled_defs(base, validation_context.root_schema) do
           built_in_defs when is_map(built_in_defs) ->
             merged_context = merge_defs_into_context(validation_context, built_in_defs)
             compiled_remote = Map.fetch!(merged_context.root_schema.defs, base)
@@ -330,7 +334,7 @@ defmodule JSONSchex.Validator.Reference do
        ) do
     case ExJSONPointer.resolve(raw_root, pointer) do
       {:ok, found_fragment} ->
-        base_uri = pointer_parent_base(
+        {base_uri, resource} = pointer_context(
           raw_root,
           pointer,
           compile_base_uri || validation_context.source_id,
@@ -345,6 +349,9 @@ defmodule JSONSchex.Validator.Reference do
         ]
         case Compiler.compile(found_fragment, opts) do
           {:ok, compiled_fragment} ->
+            # A source transition must carry the owning resource, not the selected
+            # leaf, so subsequent pointers resolve against the same URI and raw root.
+            compiled_fragment = %{compiled_fragment | raw: resource}
             Validator.validate_entry(compiled_fragment, data, current_path, validation_context, evaluated)
 
           {:error, error} ->
@@ -356,14 +363,17 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
-  defp pointer_parent_base(raw_root, pointer, resource_base, draft) do
+  defp pointer_context(raw_root, pointer, resource_base, draft) do
     # The current resource's $id is already reflected in resource_base. Descendant
     # $ids along a pointer, however, must be applied before compiling its target.
     scope_root = if is_map(raw_root), do: Map.delete(raw_root, "$id"), else: raw_root
 
     case ResourceContext.resolve(scope_root, resource_base, URIUtil.fragment(pointer), draft: draft) do
-      {:ok, %{inherited_base: base}} -> base
-      :error -> resource_base
+      {:ok, %{inherited_base: base, resource: resource}} ->
+        resource = if resource === scope_root, do: raw_root, else: resource
+        {base, resource}
+      :error ->
+        {resource_base, raw_root}
     end
   end
 end

@@ -95,10 +95,16 @@ end
 mix test test/debug_type_test.exs --trace
 ```
 
-The single-file macro uses the default draft. To focus on Draft 7 while preserving its configured options, filter the existing official test module instead:
+The single-file macro uses the default draft. On Elixir 1.19 or newer, focus on Draft 7 while preserving its configured options by filtering the existing official test module:
 
 ```bash
 mix test test/official_jsts_draft7_test.exs --name-pattern 'JSTS: type -'
+```
+
+The `--name-pattern` option was introduced in Elixir 1.19. On older supported Elixir versions, run the complete Draft 7 module instead:
+
+```bash
+mix test test/official_jsts_draft7_test.exs --trace
 ```
 
 ### Example: Testing a single schema from a suite file
