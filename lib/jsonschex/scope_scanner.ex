@@ -38,9 +38,11 @@ defmodule JSONSchex.ScopeScanner do
   `$ref` siblings and newer-draft annotations and scan tuple `additionalItems`.
   Both drafts honor `:base_uri` as the initial URI for resolving resource IDs;
   omitting it retains the default `nil` base. Draft 7 also expands the registry
-  through explicitly referenced pointer targets within their owning resource,
-  without scanning unrelated ignored content. Additional discovery does not add
-  root-document aliases to `refs`.
+  through explicitly referenced pointer targets, including targets in other
+  registered resources, without scanning unrelated ignored content or loading
+  external schemas. Pointers awaiting a newly discovered resource are retried only
+  when the registry grows. Additional discovery does not add root-document aliases
+  to `refs`.
   """
   @spec scan(map() | boolean(), keyword()) :: scan_result()
   def scan(schema, opts \\ []) do

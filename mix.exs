@@ -126,9 +126,9 @@ defmodule JSONSchex.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_json_pointer, "~> 0.8"},
+      {:ex_json_pointer, "~> 0.9"},
       {:jason, "~> 1.4", optional: true},
-      {:decimal, "~> 1.0 or ~> 2.0 or ~> 3.0", optional: true},
+      {:decimal, "~> 3.2", optional: true},
       {:idna, "~> 6.0 or ~> 7.1", optional: true},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]

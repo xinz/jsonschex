@@ -862,6 +862,302 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     refute Map.has_key?(compiled.defs, poison_uri)
   end
 
+  test "Selected fragment compilation agrees with inherited discovery base" do
+    resource_uri = "https://example.com/nested/integer"
+    document = %{
+      "type" => "object",
+      "$defs" => %{
+        "holder" => %{
+          "$id" => "https://example.com/nested/",
+          "entry" => %{
+            "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}},
+            "allOf" => [%{"$ref" => "integer"}]
+          }
+        }
+      }
+    }
+
+    # $defs is intentionally unknown in Draft 7; :entry explicitly selects a schema
+    # from this document data. Ancestor-ID inheritance is a fragment API contract,
+    # not automatic evaluation of $defs as a schema keyword.
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+      entry: "#/$defs/holder/entry",
+      base_uri: "https://example.com/base/root.json",
+      draft: "draft7")
+
+    # Discovery already uses the ancestor ID; entry validation must use that same base.
+    assert Map.has_key?(compiled.defs, resource_uri)
+    refute Map.has_key?(compiled.defs, "https://example.com/base/integer")
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+             JSONSchex.validate(compiled, "1")
+  end
+
+  test "Discovery follows pointers into another registered resource" do
+    for ref <- ["https://example.com/b#/$defs/selected", "b#/$defs/selected"] do
+      {schema, resource_uri, integer_uri, ignored_uri} = registered_resource_pointer_schema(ref)
+      {scopes, refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+
+      # B is already known; following its pointer must not require an external loader.
+      assert Map.has_key?(scopes, resource_uri)
+      refute Map.has_key?(scopes, ignored_uri)
+      assert refs == MapSet.new()
+      assert Map.has_key?(scopes, integer_uri)
+    end
+  end
+
+  test "Schema validation follows a pointer into a registered resource" do
+    for ref <- ["https://example.com/b#/$defs/selected", "b#/$defs/selected"] do
+      {schema, resource_uri, integer_uri, ignored_uri} = registered_resource_pointer_schema(ref)
+      compiled = compile_schema!(schema, "schema", draft: "draft7")
+
+      assert Map.has_key?(compiled.defs, resource_uri)
+      refute Map.has_key?(compiled.defs, ignored_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+      assert Map.has_key?(compiled.defs, integer_uri)
+    end
+  end
+
+  test "Fragment validation follows a pointer into a registered resource" do
+    for ref <- ["https://example.com/b#/$defs/selected", "b#/$defs/selected"] do
+      {schema, resource_uri, integer_uri, ignored_uri} = registered_resource_pointer_schema(ref)
+      compiled = compile_schema!(schema, "document", draft: "draft7")
+
+      assert Map.has_key?(compiled.defs, resource_uri)
+      refute Map.has_key?(compiled.defs, ignored_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+      assert Map.has_key?(compiled.defs, integer_uri)
+    end
+  end
+
+  test "Registered-resource pointer fixtures validate in Draft 2020-12" do
+    # Here $defs is a recognized keyword, so discovery may visit both entries.
+    # Excluding the unselected sibling is asserted only in the Draft 7 cases.
+    for ref <- ["https://example.com/b#/$defs/selected", "b#/$defs/selected"],
+        mode <- ["schema", "document"] do
+      {schema, resource_uri, integer_uri, _ignored_uri} = registered_resource_pointer_schema(ref)
+      compiled = compile_schema!(schema, mode, draft: "draft2020_12")
+
+      assert Map.has_key?(compiled.defs, resource_uri)
+      assert Map.has_key?(compiled.defs, integer_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 selected fragment applies ancestor and entry IDs once through escaped array paths" do
+    entry_uri = "https://example.com/base/nested/entry/"
+    resource_uri = entry_uri <> "integer"
+    document = %{
+      "$id" => "root/",
+      "$defs" => %{
+        "holders" => [%{
+          "$id" => "../nested/",
+          "entry/with~tokens" => %{
+            "$id" => "entry/",
+            "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}},
+            "allOf" => [%{"$ref" => "integer"}]
+          }
+        }]
+      }
+    }
+
+    for index <- ["0", "00", "-1"] do
+      assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+        entry: "#/$defs/holders/" <> index <> "/entry~1with~0tokens",
+        base_uri: "https://example.com/base/document.json", draft: "draft7")
+      assert compiled.source_id == entry_uri
+      assert Map.has_key?(compiled.defs, resource_uri)
+      refute Map.has_key?(compiled.defs, entry_uri <> "entry/integer")
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 inherited bases preserve decoded tokens from both pointer representations" do
+    root_uri = "https://example.com/root/"
+    entry = %{
+      "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}},
+      "allOf" => [%{"$ref" => "integer"}]
+    }
+    document = %{
+      "$id" => root_uri,
+      "containers" => %{
+        "literal%2Fkey" => %{"$id" => "literal/", "entry" => entry},
+        "literal~1key" => %{"$id" => "tilde/", "entry" => entry},
+        "slash/key~" => %{"$id" => "escaped/", "entry" => entry},
+        "space key" => %{"$id" => "space/", "entry" => entry},
+        "unicode-雪" => %{"$id" => "unicode/", "entry" => entry}
+      }
+    }
+
+    # Percent escapes are literal in JSON-string pointers and decoded once in URI
+    # fragments. Decoded ~1 sequences must stay literal during ancestor traversal.
+    # Both selection and ancestor traversal must reach the same holder.
+    for {pointer, suffix} <- [
+          {"/containers/literal%2Fkey/entry", "literal/"},
+          {"#/containers/literal%252Fkey/entry", "literal/"},
+          {"https://example.com/document#/containers/literal%252Fkey/entry", "literal/"},
+          {"/containers/literal~01key/entry", "tilde/"},
+          {"#/containers/literal~01key/entry", "tilde/"},
+          {"/containers/slash~1key~0/entry", "escaped/"},
+          {"#/containers/slash~1key~0/entry", "escaped/"},
+          {"#/containers/slash%7E1key%7E0/entry", "escaped/"},
+          {"/containers/space key/entry", "space/"},
+          {"#/containers/space%20key/entry", "space/"},
+          {"https://example.com/document#/containers/space%20key/entry", "space/"},
+          {"/containers/unicode-雪/entry", "unicode/"},
+          {"#/containers/unicode-%E9%9B%AA/entry", "unicode/"}
+        ] do
+      assert {:ok, compiled} = JSONSchex.compile_fragment(document, entry: pointer, draft: "draft7")
+      assert compiled.source_id == root_uri <> suffix
+      assert Map.has_key?(compiled.defs, root_uri <> suffix <> "integer")
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 inherited entry bases ignore ref sibling IDs and preserve ancestor registrations" do
+    root_uri = "https://example.com/root/"
+    document = %{
+      "$id" => root_uri,
+      "$defs" => %{
+        "holder" => %{
+          "$ref" => "#/unused",
+          "$id" => "https://wrong.example/",
+          "entry" => %{
+            "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}},
+            "allOf" => [%{"$ref" => "integer"}]
+          }
+        }
+      }
+    }
+
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+      entry: "#/$defs/holder/entry", draft: "draft7")
+    assert compiled.source_id == root_uri
+    assert Map.has_key?(compiled.defs, root_uri <> "integer")
+    refute Map.has_key?(compiled.defs, "https://wrong.example/")
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+
+    # Sharing an inherited source URI does not make the entry the resource root.
+    registered_root = Map.fetch!(compiled.defs, root_uri)
+    assert registered_root.raw === document
+    assert :ok == JSONSchex.validate(registered_root, "not an integer")
+  end
+
+  test "Draft 7 cross-resource discovery applies relative resource and target IDs once" do
+    resource_uri = "https://example.com/b/"
+    target_uri = resource_uri <> "selected/"
+    integer_uri = target_uri <> "integer"
+    ignored_uri = "https://example.com/cross-resource-decoy"
+    schema = %{
+      "$id" => "https://example.com/a",
+      "definitions" => %{
+        "b" => %{
+          "$id" => "b/",
+          "$defs" => %{
+            "selected" => %{
+              "$id" => "selected/",
+              "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}},
+              "allOf" => [%{"$ref" => "integer"}]
+            },
+            "ignored" => %{"$id" => ignored_uri, "type" => 42}
+          }
+        }
+      },
+      "allOf" => [%{"$ref" => "b/#/$defs/selected"}]
+    }
+
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, resource_uri)
+      assert Map.has_key?(compiled.defs, target_uri)
+      assert Map.has_key?(compiled.defs, integer_uri)
+      refute Map.has_key?(compiled.defs, "https://example.com/b/b/selected/integer")
+      refute Map.has_key?(compiled.defs, ignored_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 discovery retries pointers after their resource is discovered without external loading" do
+    {initial, resource_uri, integer_uri, ignored_uri} =
+      registered_resource_pointer_schema("https://example.com/b#/$defs/selected")
+    resource = put_in(initial["definitions"]["b"], ["$defs", "ignored", "type"], 42)
+    schema = %{
+      "$id" => "https://example.com/a",
+      "allOf" => [
+        %{"$ref" => "#/$defs/activate"},
+        %{"$ref" => "b#/$defs/selected"}
+      ],
+      "$defs" => %{"activate" => %{"definitions" => %{"b" => resource}}}
+    }
+    loader = fn uri -> flunk("Unexpected external load: #{uri}") end
+
+    # References are queued in reverse traversal order: B is attempted before activate.
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7", loader: loader)
+      assert Map.has_key?(compiled.defs, resource_uri)
+      assert Map.has_key?(compiled.defs, integer_uri)
+      refute Map.has_key?(compiled.defs, ignored_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 discovery terminates cycles between pointers in registered resources" do
+    {schema, resource_uri, integer_uri, ignored_uri} =
+      registered_resource_pointer_schema("https://example.com/b#/$defs/selected")
+    schema = put_in(schema, ["definitions", "b", "$defs", "selected", "allOf"],
+      [%{"$ref" => "https://example.com/a#/$defs/cycle"}])
+    schema = Map.put(schema, "$defs", %{
+      "cycle" => %{"$ref" => "https://example.com/b#/$defs/selected"}
+    })
+
+    # Assert discovery/compilation only, not validation of an unconditional ref cycle.
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, resource_uri)
+      assert Map.has_key?(compiled.defs, integer_uri)
+      refute Map.has_key?(compiled.defs, ignored_uri)
+    end
+  end
+
+  defp registered_resource_pointer_schema(ref) do
+    resource_uri = "https://example.com/b"
+    integer_uri = "https://example.com/integer"
+    ignored_uri = "https://example.com/ignored-resource-sibling"
+    schema = %{
+      "$id" => "https://example.com/a",
+      "definitions" => %{
+        "b" => %{
+          "$id" => resource_uri,
+          # In Draft 7 this unknown keyword must not trigger eager traversal. The
+          # explicit URI pointer selects "selected" only, leaving "ignored" inactive.
+          # Native definitions would conceal the discovery gap exercised here.
+          "$defs" => %{
+            "selected" => %{
+              "definitions" => %{"integer" => %{"$id" => integer_uri, "type" => "integer"}},
+              # An absolute child reference isolates discovery from JIT local-root issues.
+              "allOf" => [%{"$ref" => integer_uri}]
+            },
+            "ignored" => %{"$id" => ignored_uri, "type" => "null"}
+          }
+        }
+      },
+      "allOf" => [%{"$ref" => ref}]
+    }
+
+    {schema, resource_uri, integer_uri, ignored_uri}
+  end
+
   defp compile_schema!(schema, mode, opts) do
     result =
       case mode do

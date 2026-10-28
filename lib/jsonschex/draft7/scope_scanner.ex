@@ -166,48 +166,68 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   defp finish({registry, refs, pending}) do
     # Additional pointers drive discovery only. Publishing them as root-document
     # aliases would resolve embedded resources' local pointers against the wrong root.
-    {follow_refs(pending, MapSet.new(), registry), refs}
+    {follow_refs(pending, [], MapSet.new(), registry, false), refs}
   end
 
-  defp follow_refs([], _seen, registry), do: registry
-  defp follow_refs([{owner, ref} | pending], seen, registry) do
-    {resource_key, resource, base_uri} = owner
+  # A pointer may name a resource discovered by a later work item. Retry unresolved
+  # owners only when the registry grows; genuinely external references never load.
+  defp follow_refs([], deferred, seen, registry, true) when deferred != [] do
+    follow_refs(Enum.reverse(deferred), [], seen, registry, false)
+  end
+  defp follow_refs([], _deferred, _seen, registry, _grew?), do: registry
 
-    with {:ok, pointer} <- local_pointer(ref, owner),
+  defp follow_refs([{owner, ref} = item | pending], deferred, seen, registry, grew?) do
+    with {:ok, {resource_key, resource, base_uri} = target_resource, pointer} <-
+           pointer_owner(ref, owner, registry),
          false <- MapSet.member?(seen, {resource_key, pointer}) do
       seen = MapSet.put(seen, {resource_key, pointer})
 
       case ResourceContext.resolve(resource, base_uri, pointer, draft: "draft7") do
         {:ok, context} ->
-          target_owner = Enum.reduce(context.resources, owner, fn {raw, parent_base}, owner ->
+          target_owner = Enum.reduce(context.resources, target_resource, fn {raw, parent_base}, owner ->
             resource_owner(raw, parent_base, owner)
           end)
           {discovered, _refs, more} =
             do_scan(context.target, context.inherited_base, {%{}, MapSet.new(), []}, target_owner)
 
           # Ordinary traversal keeps its existing duplicate-identity precedence.
-          registry = Map.merge(discovered, registry)
-          follow_refs(more ++ pending, seen, registry)
+          expanded = Map.merge(discovered, registry)
+          grew? = grew? or map_size(expanded) > map_size(registry)
+          follow_refs(more ++ pending, deferred, seen, expanded, grew?)
 
         :error ->
-          follow_refs(pending, seen, registry)
+          follow_refs(pending, deferred, seen, registry, grew?)
       end
     else
-      _ -> follow_refs(pending, seen, registry)
+      :unknown_resource -> follow_refs(pending, [item | deferred], seen, registry, grew?)
+      _ -> follow_refs(pending, deferred, seen, registry, grew?)
     end
   end
 
-  defp local_pointer(ref, owner) do
+  defp pointer_owner(ref, owner, registry) do
     case URIUtil.split_fragment(ref) do
       {"", pointer} ->
-        {:ok, pointer}
+        {:ok, owner, pointer}
 
       _ ->
         uri = resource_uri(owner)
         {resource_base, _fragment} = URIUtil.split_fragment(uri)
         {ref_base, pointer} = URIUtil.split_fragment(URIUtil.resolve(uri, ref))
 
-        if ref_base == resource_base, do: {:ok, pointer}, else: :error
+        if ref_base == resource_base do
+          {:ok, owner, pointer}
+        else
+          case Map.fetch(registry, ref_base) do
+            {:ok, resource} when is_map(resource) ->
+              # This URI already includes the resource's own $id. Normalize only
+              # the resolution copy, keeping the registered raw schema intact.
+              target_resource = {{:id, ref_base}, Map.delete(resource, "$id"), ref_base}
+              {:ok, target_resource, pointer}
+
+            _ ->
+              :unknown_resource
+          end
+        end
     end
   end
 

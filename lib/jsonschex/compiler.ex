@@ -66,6 +66,9 @@ defmodule JSONSchex.Compiler do
   @doc """
   Compiles a JSON Schema fragment from a containing document while preserving
   that document as the reference-resolution context.
+
+  Draft 7 entries inherit ancestor `$id` bases for node compilation, while document
+  discovery and pointer lookup retain the original retrieval base.
   """
   @spec compile_fragment(map() | boolean(), keyword()) :: {:ok, Schema.t()} | {:error, Error.t()}
   def compile_fragment(document, opts) when (is_map(document) or is_boolean(document)) and is_list(opts) do
@@ -108,10 +111,11 @@ defmodule JSONSchex.Compiler do
 
   defp compile_root_with_draft(raw_schema, context_document, init_base, scope_mode, ctx) do
     loader = ctx.loader
+    entry_base = entry_base(context_document, init_base, scope_mode, ctx.draft)
 
     with :ok <- validate_required_vocabularies(raw_schema, ctx.draft),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list, ctx.draft),
-         {:ok, root_compiled} <- compile_schema_node(raw_schema, init_base, root_vocabs, ctx) do
+         {:ok, root_compiled} <- compile_schema_node(raw_schema, entry_base, root_vocabs, ctx) do
       {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode, ctx.draft)
       scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
       local_defs = root_compiled.defs
@@ -122,7 +126,10 @@ defmodule JSONSchex.Compiler do
           if Map.has_key?(acc_defs, id) do
             {:cont, acc_defs}
           else
-            if id == root_compiled.source_id do
+            # A selected entry can inherit an ancestor's URI without representing
+            # that resource. Only reuse it for the same raw schema in Draft 7.
+            if id == root_compiled.source_id and
+                 (ctx.draft != "draft7" or scope_mode == :schema or sub_raw === raw_schema) do
               {:cont, Map.put(acc_defs, id, root_compiled)}
             else
               case validate_required_vocabularies(sub_raw, ctx.draft) do
@@ -207,6 +214,31 @@ defmodule JSONSchex.Compiler do
     {base, _fragment} = URIUtil.split_fragment(uri)
     base
   end
+
+  defp entry_base(context_document, init_base, {:document, [_ | _] = path}, "draft7") do
+    # Traverse decoded tokens directly, apply only ancestor IDs;
+    # compile_schema_node/4 applies the entry's own ID once.
+    {_entry, inherited_base} =
+      ExJSONPointer.resolve_while(
+        context_document,
+        path,
+        init_base,
+        fn value, _token, {parent, base} ->
+          inherited_base =
+            case parent do
+              %{"$ref" => _} -> base
+              %{"$id" => id} when is_binary(id) -> resolve_uri(base, id)
+              _ -> base
+            end
+
+          {:cont, {value, inherited_base}}
+        end
+      )
+
+    inherited_base
+  end
+
+  defp entry_base(_context_document, init_base, _scope_mode, _draft), do: init_base
 
   # Modes describe the discovery scope: a schema tree or its containing document.
   # The document path marks the selected schema, not the limit of discovery.
