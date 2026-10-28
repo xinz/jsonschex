@@ -9,9 +9,12 @@
     * Select the draft from a recognized root `$schema` or the string-valued `:draft` option (`"draft7"` or `"draft2020_12"`), retaining Draft 2020-12 as the fallback. Return structured errors for conflicting declarations or invalid options; compile-time schema macros raise `CompileError`. Fragment compilation uses the containing document's root declaration.
     * Embed the canonical Draft 7 meta-schema and cache its compiled reference registry. Both canonical HTTP URI forms, with and without a trailing `#`, resolve without a loader or runtime file access.
     * Make scope discovery draft-aware: ignore `$ref` siblings and newer-draft annotations, skip eager `$defs` compilation, and register resources under tuple `additionalItems`. Preserve explicit JSON Pointer references into annotation content.
+    * Discover nested `$id` resources in explicitly referenced Draft 7 pointer targets, including targets under ignored content, without activating unrelated siblings. Follow transitive pointers within their owning resources, preserve fragment-ID pointer roots, and terminate discovery cycles.
     * Preserve ancestor `$id` scopes during eager and JIT pointer compilation without reapplying the resource root's ID or interpreting ignored `$ref` sibling IDs. Resolve absolute references to the current URN resource as local pointers.
     * Assert standalone `contentEncoding` and `contentMediaType` when `content_assertion: true`, even without `contentSchema`. An ignored Draft 7 `contentSchema` no longer disables these checks; content handling remains annotation-only by default.
     * Run an independent official Draft 7 suite and add compatibility, reference, cache, and compile-time embedding regressions. Both draft suites retain the `optional/cross-draft` exclusion.
+
+  * Honor `:base_uri` consistently during schema scope discovery in both drafts, resolving relative `$id` resources and Draft 2020-12 anchors against the supplied retrieval base instead of registering unqualified identities.
 
 ## v0.10.0 (2026-09-14)
 

@@ -633,6 +633,235 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     refute_received {:loaded, "https://wrong.example/leaf.json"}
   end
 
+  test "explicit Draft 7 pointer targets discover nested resources without activating ignored siblings" do
+    uri = "https://example.com/embedded-integer"
+    ignored_uri = "https://example.com/ignored"
+    target = %{
+      "definitions" => %{"integer" => %{"$id" => uri, "type" => "integer"}},
+      "allOf" => [%{"$ref" => uri}]
+    }
+    ignored = %{"$id" => ignored_uri, "type" => 42, "$defs" => %{"invalid" => %{"type" => 42}}}
+    schemas = [
+      %{"$ref" => "#/definitions/selected", "definitions" => %{"selected" => target, "ignored" => ignored}},
+      %{"allOf" => [%{"$ref" => "#/$defs/selected~1part~0"}],
+        "$defs" => %{"selected/part~" => target, "ignored" => ignored}},
+      %{"$id" => "https://example.com/root",
+        "allOf" => [%{"$ref" => "https://example.com/root#/$defs/selected"}],
+        "$defs" => %{"selected" => target, "ignored" => ignored}}
+    ]
+
+    for schema <- schemas, mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, uri)
+      refute Map.has_key?(compiled.defs, ignored_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 discovery follows transitive pointers and still ignores reached ref siblings" do
+    uri = "https://example.com/transitive-integer"
+    ignored_uri = "https://example.com/ignored-ref-sibling"
+    schema = %{
+      "$ref" => "#/definitions/first",
+      "definitions" => %{
+        "first" => %{
+          "$ref" => "#/definitions/second",
+          "$id" => "https://wrong.example/",
+          "definitions" => %{"ignored" => %{"$id" => ignored_uri, "type" => 42}}
+        },
+        "second" => %{
+          "definitions" => %{"integer" => %{"$id" => uri, "type" => "integer"}},
+          "allOf" => [%{"$ref" => uri}]
+        }
+      }
+    }
+
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, uri)
+      refute Map.has_key?(compiled.defs, ignored_uri)
+      refute Map.has_key?(compiled.defs, "https://wrong.example/")
+      refute Map.has_key?(compiled.defs, "#/definitions/second")
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 referenced resource discovery applies retrieval and ancestor IDs exactly once" do
+    uri = "https://example.com/base/nested/target/integer"
+    schema = %{
+      "$id" => "root.json",
+      "allOf" => [%{"$ref" => "#/$defs/holder/definitions/target"}],
+      "$defs" => %{
+        "holder" => %{
+          "$id" => "nested/",
+          "definitions" => %{
+            "target" => %{
+              "$id" => "target/",
+              "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}},
+              "allOf" => [%{"$ref" => "integer"}]
+            }
+          }
+        }
+      }
+    }
+
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7", base_uri: "https://example.com/base/input.json")
+      assert Map.has_key?(compiled.defs, uri)
+      refute Map.has_key?(compiled.defs, "https://example.com/base/nested/target/target/integer")
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 pointer discovery resolves each local pointer against its owning resource" do
+    uri = "https://example.com/nested/integer"
+    decoy_uri = "https://example.com/outer-decoy"
+    schema = %{
+      "$id" => "https://example.com/root",
+      "definitions" => %{
+        "holder" => %{
+          "$id" => "nested/",
+          "allOf" => [%{"$ref" => "#/$defs/selected"}],
+          "$defs" => %{
+            "selected" => %{
+              "definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}}
+            }
+          }
+        }
+      },
+      "$defs" => %{
+        "selected" => %{"definitions" => %{"decoy" => %{"$id" => decoy_uri, "type" => 42}}}
+      }
+    }
+
+    # Identical pointer text in two resource owners must not share a visited entry.
+    other = Map.put(schema["definitions"]["holder"], "$id", "other/")
+    schema = put_in(schema, ["definitions", "other"], other)
+
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, uri)
+      assert Map.has_key?(compiled.defs, "https://example.com/other/integer")
+      refute Map.has_key?(compiled.defs, decoy_uri)
+    end
+  end
+
+  test "Draft 7 resource discovery terminates for self and mutually recursive pointers" do
+    uri = "https://example.com/cyclic-integer"
+    for ref <- ["#", "#/definitions/first"], mode <- ["schema", "document"] do
+      schema = %{
+        "$ref" => "#/definitions/first",
+        "definitions" => %{
+          "first" => %{"allOf" => [%{"$ref" => "#/definitions/second"}]},
+          "second" => %{
+            "allOf" => [%{"$ref" => ref}],
+            "definitions" => %{"integer" => %{"$id" => uri, "type" => "integer"}}
+          }
+        }
+      }
+
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, uri)
+    end
+  end
+
+  test "Draft 7 fragment pointer discovery keeps the containing document as its initial resource" do
+    uri = "https://example.com/fragment-integer"
+    document = %{
+      "type" => "object",
+      "entry" => %{"$ref" => "#/$defs/selected"},
+      "$defs" => %{
+        "selected" => %{
+          "definitions" => %{"integer" => %{"$id" => uri, "type" => "integer"}},
+          "allOf" => [%{"$ref" => uri}]
+        },
+        "ignored" => %{"$id" => "https://example.com/ignored", "type" => 42}
+      }
+    }
+
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document, entry: "#/entry", draft: "draft7")
+    assert Map.has_key?(compiled.defs, uri)
+    refute Map.has_key?(compiled.defs, "https://example.com/ignored")
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+  end
+
+  test "Draft 7 fragment-only IDs do not replace the enclosing pointer resource" do
+    poison_uri = "https://example.com/fragment-decoy"
+    poison = %{"definitions" => %{"bad" => %{"$id" => poison_uri, "type" => 42}}}
+    schema = %{
+      "$id" => "https://example.com/root",
+      "$defs" => %{"pick" => true},
+      "definitions" => %{
+        "anchored" => %{
+          "$id" => "#anchor",
+          "allOf" => [%{"$ref" => "#/$defs/pick"}],
+          "$defs" => %{"pick" => poison}
+        }
+      }
+    }
+
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, "https://example.com/root#anchor")
+      refute Map.has_key?(compiled.defs, poison_uri)
+    end
+  end
+
+  test "Draft 7 discovery retains the resource before fragment IDs along a pointer route" do
+    uri = "https://example.com/nested/integer"
+    schema = %{
+      "$ref" => "#/definitions/nested/definitions/anchored",
+      "definitions" => %{
+        "nested" => %{
+          "$id" => "https://example.com/nested/",
+          "$defs" => %{
+            "pick" => %{"definitions" => %{"integer" => %{"$id" => "integer", "type" => "integer"}}}
+          },
+          "definitions" => %{
+            "anchored" => %{
+              "$id" => "#anchor",
+              "allOf" => [%{"$ref" => "#/$defs/pick"}],
+              "$defs" => %{"pick" => %{"$id" => "https://example.com/fragment-decoy", "type" => 42}}
+            }
+          }
+        }
+      }
+    }
+
+    for mode <- ["schema", "document"] do
+      compiled = compile_schema!(schema, mode, draft: "draft7")
+      assert Map.has_key?(compiled.defs, uri)
+      refute Map.has_key?(compiled.defs, "https://example.com/fragment-decoy")
+    end
+  end
+
+  test "Draft 7 selected-entry discovery carries owners across ignored resource ancestors" do
+    poison_uri = "https://example.com/outer-fragment-decoy"
+    document = %{
+      "type" => "object",
+      "$defs" => %{
+        "holder" => %{
+          "$id" => "https://example.com/nested",
+          "entry" => %{"$ref" => "#/$defs/pick"},
+          "$defs" => %{"pick" => true}
+        },
+        "pick" => %{"definitions" => %{"bad" => %{"$id" => poison_uri, "type" => 42}}}
+      }
+    }
+
+    {scopes, refs} = JSONSchex.ScopeScanner.scan_all(document, nil,
+      draft: "draft7", schema_path: ["$defs", "holder", "entry"])
+    refute Map.has_key?(scopes, poison_uri)
+    assert refs == MapSet.new(["#/$defs/pick"])
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+      entry: "#/$defs/holder/entry", draft: "draft7")
+    refute Map.has_key?(compiled.defs, poison_uri)
+  end
+
   defp compile_schema!(schema, mode, opts) do
     result =
       case mode do

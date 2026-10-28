@@ -23,17 +23,29 @@ defmodule JSONSchex.ScopeScanner do
 
   """
 
+  @typedoc "Raw schema resources indexed by resolved URI."
+  @type registry :: %{optional(String.t()) => map()}
+
+  @typedoc "The resource registry and local fragment references from the initial traversal."
+  @type scan_result :: {registry(), MapSet.t(String.t())}
+
   @doc """
   Scans a raw schema and returns a tuple `{registry, refs}` where:
   - `registry` is a map of `{absolute_uri => raw_schema}`.
-  - `refs` is a MapSet of explicitly defined local fragment references.
+  - `refs` is a MapSet of local fragment references found during the initial traversal.
 
   The `:draft` option defaults to `"draft2020_12"`. Use `"draft7"` to ignore
   `$ref` siblings and newer-draft annotations and scan tuple `additionalItems`.
+  Both drafts honor `:base_uri` as the initial URI for resolving resource IDs;
+  omitting it retains the default `nil` base. Draft 7 also expands the registry
+  through explicitly referenced pointer targets within their owning resource,
+  without scanning unrelated ignored content. Additional discovery does not add
+  root-document aliases to `refs`.
   """
+  @spec scan(map() | boolean(), keyword()) :: scan_result()
   def scan(schema, opts \\ []) do
     scanner = scanner(opts)
-    scanner.scan(schema)
+    scanner.scan(schema, opts)
   end
 
   @doc """
@@ -50,14 +62,18 @@ defmodule JSONSchex.ScopeScanner do
   so annotation-only entry schemas do not depend on inference. Draft 7 registers
   `$id` resources and collects `$ref` fragments only; `$anchor`, `$dynamicAnchor`,
   and `$dynamicRef` never contribute metadata, even in unclassified document maps.
+  Draft 7 also discovers resources inside explicitly referenced pointer targets,
+  retaining the containing document or embedded resource as the pointer root.
   Draft 2020-12 scans every map/list node without requiring roles or a selected
   schema path.
   """
+  @spec scan_all(term(), String.t() | nil, keyword()) :: scan_result()
   def scan_all(document, base_uri \\ nil, opts \\ []) do
     scanner = scanner(opts)
     scanner.scan_all(document, base_uri, opts)
   end
 
+  @spec scanner(keyword()) :: module()
   defp scanner(opts) do
     case Keyword.get(opts, :draft, "draft2020_12") do
       "draft7" -> JSONSchex.Draft7.ScopeScanner

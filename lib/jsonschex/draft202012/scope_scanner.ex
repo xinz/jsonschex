@@ -3,7 +3,10 @@ defmodule JSONSchex.Draft202012.ScopeScanner do
 
   alias JSONSchex.{SchemaTraversal, URIUtil}
 
-  def scan(schema), do: do_scan(schema, nil, {%{}, MapSet.new()})
+  def scan(schema, opts \\ []) do
+    base_uri = Keyword.get(opts, :base_uri)
+    do_scan(schema, base_uri, {%{}, MapSet.new()})
+  end
 
   def scan_all(document, base_uri, _opts) do
     do_scan_all(document, base_uri, {%{}, MapSet.new()})

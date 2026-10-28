@@ -24,11 +24,12 @@ defmodule JSONSchex.Test.SchemaTraversal do
 
     assert ScopeScanner.scan(schema) == expected
     assert ScopeScanner.scan(schema, draft: "draft2020_12") == expected
-    assert ScopeScanner.scan(schema, draft: "draft7") == {%{}, MapSet.new(["#/definitions/child"])}
+    assert ScopeScanner.scan(schema, draft: "draft7") == {%{child_uri => child}, MapSet.new(["#/definitions/child"])}
 
     document = %{"entry" => schema}
     assert ScopeScanner.scan_all(document) == expected
     assert ScopeScanner.scan_all(document, nil, draft: "draft2020_12", schema_path: ["entry"]) == expected
+    # The pointer belongs to the containing document, which has no root definitions.
     assert ScopeScanner.scan_all(document, nil, draft: "draft7", schema_path: ["entry"]) ==
              {%{}, MapSet.new(["#/definitions/child"])}
   end
@@ -56,6 +57,52 @@ defmodule JSONSchex.Test.SchemaTraversal do
       assert ScopeScanner.scan(document, draft: draft) == {%{}, MapSet.new()}
       assert ScopeScanner.scan_all(document, base_uri, draft: draft) == {%{uri => child}, MapSet.new()}
     end
+  end
+
+  test "both draft scanners honor the initial base before relative root and nested IDs" do
+    base_uri = "https://example.test/base/document.json"
+    root_uri = "https://example.test/base/schemas/"
+    child_uri = root_uri <> "integer.json"
+    child = %{"$id" => "integer.json", "type" => "integer"}
+    schema = %{"$id" => "schemas/", "definitions" => %{"integer" => child}}
+    expected = {%{root_uri => schema, child_uri => child}, MapSet.new()}
+
+    for draft <- ["draft7", "draft2020_12"] do
+      assert ScopeScanner.scan(schema, draft: draft, base_uri: base_uri) == expected
+      assert ScopeScanner.scan_all(schema, base_uri, draft: draft) == expected
+      assert ScopeScanner.scan(schema, draft: draft) ==
+               ScopeScanner.scan(schema, draft: draft, base_uri: nil)
+    end
+  end
+
+  test "both drafts compile relative embedded resources against the retrieval base" do
+    base_uri = "https://example.test/base/document.json"
+
+    for draft <- ["draft7", "draft2020_12"], root_id <- [nil, "schemas/"] do
+      uri = if root_id, do: "https://example.test/base/schemas/integer.json", else: "https://example.test/base/integer.json"
+      schema = %{
+        "definitions" => %{"integer" => %{"$id" => "integer.json", "type" => "integer"}},
+        "allOf" => [%{"$ref" => uri}]
+      }
+      schema = if root_id, do: Map.put(schema, "$id", root_id), else: schema
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: draft, base_uri: base_uri)
+      assert Map.has_key?(compiled.defs, uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 2020-12 anchors use the retrieval base without a root ID" do
+    base_uri = "https://example.test/base/document.json"
+    schema = %{"$anchor" => "static", "$dynamicAnchor" => "dynamic", "$dynamicRef" => "#dynamic"}
+    expected = {
+      %{base_uri <> "#static" => schema, base_uri <> "#dynamic" => schema},
+      MapSet.new(["#dynamic"])
+    }
+
+    assert ScopeScanner.scan(schema, draft: "draft2020_12", base_uri: base_uri) == expected
+    assert ScopeScanner.scan(schema, draft: "draft7", base_uri: base_uri) == {%{}, MapSet.new()}
   end
 
   test "Draft 7 never registers newer anchors or collects dynamic refs from document metadata" do

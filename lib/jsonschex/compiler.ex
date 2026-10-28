@@ -210,8 +210,8 @@ defmodule JSONSchex.Compiler do
 
   # Modes describe the discovery scope: a schema tree or its containing document.
   # The document path marks the selected schema, not the limit of discovery.
-  defp scan_context(context_document, _base_uri, :schema, draft),
-    do: ScopeScanner.scan(context_document, draft: draft)
+  defp scan_context(context_document, base_uri, :schema, draft),
+    do: ScopeScanner.scan(context_document, draft: draft, base_uri: base_uri)
 
   defp scan_context(context_document, base_uri, {:document, path}, draft),
     do: ScopeScanner.scan_all(context_document, base_uri, draft: draft, schema_path: path)
