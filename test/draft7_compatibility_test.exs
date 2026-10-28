@@ -1052,6 +1052,140 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     assert :ok == JSONSchex.validate(registered_root, "not an integer")
   end
 
+  test "Draft 7 selected fragments resolve absolute pointers against their inherited resource" do
+    resource_uri = "https://example.com/resource"
+    resource = %{
+      "$id" => resource_uri,
+      "definitions" => %{"value" => %{"type" => "integer"}},
+      "entry" => %{"$ref" => resource_uri <> "#/definitions/value"}
+    }
+    loader = fn uri -> flunk("Unexpected external load: #{uri}") end
+
+    # $defs is an unknown annotation in Draft 7. Explicit selection must retain
+    # its ancestor resource even when ordinary discovery does not register it.
+    for keyword <- ["definitions", "$defs"],
+        base_uri <- [nil, "https://example.com/document.json"] do
+      document = %{
+        "type" => "object",
+        "definitions" => %{"value" => %{"type" => "string"}}
+      }
+      document = Map.update(document, keyword, %{"resource" => resource},
+        &Map.put(&1, "resource", resource))
+
+      assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+        entry: "#/" <> keyword <> "/resource/entry", base_uri: base_uri,
+        draft: "draft7", loader: loader)
+
+      # No eager local alias should hide which raw root JIT pointer lookup uses.
+      refute Map.has_key?(compiled.defs, "#/definitions/value")
+      assert compiled.source_id == resource_uri
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+      assert compiled.raw === resource
+    end
+  end
+
+  test "Draft 7 selected fragment pointer roots preserve relative and fragment-only ID scopes" do
+    resource_uri = "https://example.com/base/resource/"
+    entry = %{"$ref" => resource_uri <> "#/definitions/value"}
+
+    # Fragment-only IDs name a location within the resource. A $ref sibling ID
+    # is ignored entirely; neither should replace the resource's pointer root.
+    for {metadata, source_id} <- [
+          {%{}, resource_uri},
+          {%{"$id" => "#named"}, resource_uri <> "#named"},
+          {%{"$ref" => "#/unused", "$id" => "https://wrong.example/"}, resource_uri}
+        ] do
+      holder = Map.put(metadata, "entry", entry)
+      resource = %{
+        "$id" => "../resource/",
+        "definitions" => %{"value" => %{"type" => "integer"}},
+        "holders" => [holder]
+      }
+      document = %{
+        "$id" => "root/",
+        "definitions" => %{
+          "value" => %{"type" => "string"},
+          "resource" => resource
+        }
+      }
+
+      assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+        entry: "#/definitions/resource/holders/00/entry",
+        base_uri: "https://example.com/base/document.json", draft: "draft7")
+
+      refute Map.has_key?(compiled.defs, "#/definitions/value")
+      assert compiled.source_id == source_id
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+      assert compiled.raw === resource
+    end
+  end
+
+  test "Draft 7 fragment-only entry scopes retain their resource without an absolute retrieval base" do
+    for resource_id <- ["resource/", "resource.json"] do
+      document = %{
+        "$id" => resource_id,
+        "type" => "integer",
+        "holders" => [%{"$id" => "#named", "entry" => %{"$ref" => ""}}]
+      }
+
+      assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+        entry: "#/holders/0/entry", draft: "draft7")
+
+      # URI resolution can fall back to the fragment when the base is relative;
+      # that fallback must not turn the holder into a new pointer resource.
+      assert compiled.raw === document
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "Draft 7 selected entry IDs establish their own pointer resource" do
+    entry_uri = "https://example.com/resource/entry/"
+    entry = %{
+      "$id" => "entry/",
+      "definitions" => %{"value" => %{"type" => "integer"}},
+      "allOf" => [%{"$ref" => entry_uri <> "#/definitions/value"}]
+    }
+    document = %{
+      "definitions" => %{
+        "value" => %{"type" => "string"},
+        "resource" => %{"$id" => "https://example.com/resource/", "entry" => entry}
+      }
+    }
+
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+      entry: "#/definitions/resource/entry", draft: "draft7")
+
+    refute Map.has_key?(compiled.defs, "#/definitions/value")
+    assert compiled.source_id == entry_uri
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+             JSONSchex.validate(compiled, "1")
+    assert compiled.raw === entry
+  end
+
+  test "Draft 7 selected fragments without a new resource retain the document pointer root" do
+    document_uri = "https://example.com/document"
+    document = %{
+      "$id" => document_uri,
+      "definitions" => %{"value" => %{"type" => "integer"}},
+      "entry" => %{"$ref" => document_uri <> "#/definitions/value"}
+    }
+
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+      entry: "#/entry", draft: "draft7")
+
+    assert compiled.source_id == document_uri
+    assert compiled.raw === document
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "1")
+  end
+
   test "Draft 7 cross-resource discovery applies relative resource and target IDs once" do
     resource_uri = "https://example.com/b/"
     target_uri = resource_uri <> "selected/"

@@ -64,11 +64,12 @@ defmodule JSONSchex.Compiler do
   end
 
   @doc """
-  Compiles a JSON Schema fragment from a containing document while preserving
-  that document as the reference-resolution context.
+  Compiles a JSON Schema fragment while preserving its surrounding reference context.
 
-  Draft 7 entries inherit ancestor `$id` bases for node compilation, while document
-  discovery and pointer lookup retain the original retrieval base.
+  Draft 7 entries inherit ancestor `$id` bases for node compilation. Discovery
+  retains the containing document and retrieval base, while JSON Pointer lookup
+  uses the entry's owning resource, or the containing document if no new resource
+  is declared.
   """
   @spec compile_fragment(map() | boolean(), keyword()) :: {:ok, Schema.t()} | {:error, Error.t()}
   def compile_fragment(document, opts) when (is_map(document) or is_boolean(document)) and is_list(opts) do
@@ -111,7 +112,7 @@ defmodule JSONSchex.Compiler do
 
   defp compile_root_with_draft(raw_schema, context_document, init_base, scope_mode, ctx) do
     loader = ctx.loader
-    entry_base = entry_base(context_document, init_base, scope_mode, ctx.draft)
+    {entry_base, pointer_root} = entry_context(context_document, init_base, scope_mode, ctx.draft)
 
     with :ok <- validate_required_vocabularies(raw_schema, ctx.draft),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list, ctx.draft),
@@ -119,7 +120,7 @@ defmodule JSONSchex.Compiler do
       {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode, ctx.draft)
       scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
       local_defs = root_compiled.defs
-      root_compiled = %{root_compiled | raw: context_document}
+      root_compiled = %{root_compiled | raw: pointer_root}
 
       full_defs =
         Enum.reduce_while(global_scopes, root_compiled.defs, fn {id, sub_raw}, acc_defs ->
@@ -215,30 +216,43 @@ defmodule JSONSchex.Compiler do
     base
   end
 
-  defp entry_base(context_document, init_base, {:document, [_ | _] = path}, "draft7") do
-    # Traverse decoded tokens directly, apply only ancestor IDs;
-    # compile_schema_node/4 applies the entry's own ID once.
-    {_entry, inherited_base} =
+  defp entry_context(context_document, init_base, {:document, [_ | _] = path}, "draft7") do
+    # Keep the inherited URI and its raw pointer root together while traversing
+    # decoded tokens; document-wide discovery still uses the original document.
+    {entry, {inherited_base, _resource} = context} =
       ExJSONPointer.resolve_while(
         context_document,
         path,
-        init_base,
-        fn value, _token, {parent, base} ->
-          inherited_base =
-            case parent do
-              %{"$ref" => _} -> base
-              %{"$id" => id} when is_binary(id) -> resolve_uri(base, id)
-              _ -> base
-            end
-
-          {:cont, {value, inherited_base}}
+        {init_base, context_document},
+        fn value, _token, {parent, context} ->
+          {:cont, {value, enter_entry_scope(parent, context)}}
         end
       )
 
-    inherited_base
+    # The entry's own ID can establish a pointer root, but node compilation must
+    # receive its parent base so compile_schema_node/4 applies that ID only once.
+    {_entry_base, resource} = enter_entry_scope(entry, context)
+    {inherited_base, resource}
   end
 
-  defp entry_base(_context_document, init_base, _scope_mode, _draft), do: init_base
+  defp entry_context(context_document, init_base, _scope_mode, _draft),
+    do: {init_base, context_document}
+
+  defp enter_entry_scope(%{"$ref" => _}, context), do: context
+  defp enter_entry_scope(%{"$id" => id} = schema, {base, resource}) when is_binary(id) do
+    new_base = resolve_uri(base, id)
+    {id_base, _fragment} = URIUtil.split_fragment(id)
+
+    # IDs without a base stay within the enclosing resource, even when URI
+    # resolution falls back to the child ID for a relative parent base.
+    resource =
+      if id_base == "" or scope_resource_base(new_base) == scope_resource_base(base || ""),
+        do: resource,
+        else: schema
+
+    {new_base, resource}
+  end
+  defp enter_entry_scope(_value, context), do: context
 
   # Modes describe the discovery scope: a schema tree or its containing document.
   # The document path marks the selected schema, not the limit of discovery.

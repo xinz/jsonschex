@@ -10,13 +10,15 @@
     * Embed the canonical Draft 7 meta-schema and cache its compiled reference registry. Both canonical HTTP URI forms, with and without a trailing `#`, resolve without a loader or runtime file access.
     * Make scope discovery draft-aware: ignore `$ref` siblings and newer-draft annotations, skip eager `$defs` compilation, and register resources under tuple `additionalItems`. Preserve explicit JSON Pointer references into annotation content.
     * Discover nested `$id` resources in explicitly referenced Draft 7 pointer targets, including targets under ignored content or in other registered resources, without activating unrelated siblings or loading external schemas. Follow transitive pointers, retry targets when their resource becomes known, preserve fragment-ID pointer roots, and terminate discovery cycles.
-    * Compile selected Draft 7 fragments against their inherited ancestor `$id` base, applying the entry's own ID once while retaining the retrieval base for containing-document discovery and pointer lookup.
+    * Compile selected Draft 7 fragments against their inherited ancestor `$id` base, applying the entry's own ID once. Retain the containing document and retrieval base for discovery, and use the owning resource as the JSON Pointer root without promoting fragment-only IDs or ignored `$ref` sibling IDs to resource roots.
     * Preserve ancestor `$id` scopes during eager and JIT pointer compilation without reapplying the resource root's ID or interpreting ignored `$ref` sibling IDs. Resolve absolute references to the current URN resource as local pointers.
     * Assert standalone `contentEncoding` and `contentMediaType` when `content_assertion: true`, even without `contentSchema`. An ignored Draft 7 `contentSchema` no longer disables these checks; content handling remains annotation-only by default.
     * Run an independent official Draft 7 suite and add compatibility, reference, cache, and compile-time embedding regressions. Both draft suites retain the `optional/cross-draft` exclusion.
     * Upgrade `ex_json_pointer` to `~> 0.9` and pass decoded reference tokens directly to ancestor traversal.
 
   * Honor `:base_uri` consistently during schema scope discovery in both drafts, resolving relative `$id` resources and Draft 2020-12 anchors against the supplied retrieval base instead of registering unqualified identities.
+
+  * Update the optional Decimal requirement to `~> 3.2` (previously `~> 1.0 or ~> 2.0 or ~> 3.0`).
 
 ## v0.10.0 (2026-09-14)
 

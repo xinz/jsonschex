@@ -73,6 +73,10 @@ defmodule JSONSchex do
   must resolve against that containing document rather than against the fragment
   map in isolation.
 
+  Draft 7 entry contexts follow ancestor `$id` resources: pointer lookup uses the
+  owning resource's raw schema, while discovery still scans the containing document.
+  Without a new resource boundary, the containing document remains the pointer root.
+
   ## Options
 
   - `:entry` — JSON Pointer or URI-reference style entrypoint (`#/...`, `/...`, or `path-or-uri#/...`). If it includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution.

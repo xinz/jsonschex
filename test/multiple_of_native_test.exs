@@ -13,7 +13,7 @@ defmodule JSONSchex.Test.MultipleOfNativeTest do
       end
 
       assert error.message =~ "Arithmetic error checking multipleOf"
-      assert error.message =~ ~r/Please add {:decimal, \"~> \d.0\"}/
+      assert error.message =~ ~s(Please add {:decimal, "~> 3.2"})
 
       # Case: 1.0e308 / 0.5 causes overflow (Infinity)
       # Since we removed the heuristic, this must now raise and ask for Decimal
