@@ -4,25 +4,40 @@
 
 ### Bug Fixes and Improvements
 
-  * Add Draft 7 support and official compliance tests.
-    * Support tuple-form `items`, `additionalItems`, and Draft 7 `$ref` sibling semantics alongside Draft 2020-12.
-    * Select the draft from a recognized root `$schema` or the string-valued `:draft` option (`"draft7"` or `"draft2020_12"`), retaining Draft 2020-12 as the fallback. Return structured errors for conflicting declarations or invalid options; compile-time schema macros raise `CompileError`. Fragment compilation uses the containing document's root declaration.
-    * Embed the canonical Draft 7 meta-schema and cache its compiled reference registry by format/content assertion options. Both canonical HTTP URI forms, with and without a trailing `#`, share the appropriate cache variant and resolve without a loader or runtime file access.
-    * Make scope discovery draft-aware: ignore `$ref` siblings and newer-draft annotations, skip eager `$defs` compilation, and register resources under tuple `additionalItems`. Preserve explicit JSON Pointer references into annotation content.
-    * Discover nested `$id` resources in explicitly referenced Draft 7 pointer targets, including targets under ignored content or in other registered resources, without activating unrelated siblings or loading external schemas. Register ancestor resources crossed by explicit pointer and selected-entry routes so targets can refer back to them, keeping those metadata-only registrations lower priority than ordinary discovery regardless of pointer order. Follow transitive pointers, retry targets when their resource becomes known, preserve fragment-ID pointer roots even with relative retrieval bases, and terminate discovery cycles.
-    * Compile selected Draft 7 fragments against their inherited ancestor `$id` base, applying the entry's own ID once. Retain the containing document and retrieval base for discovery, and use the owning resource as the JSON Pointer root without promoting fragment-only IDs or ignored `$ref` sibling IDs to resource roots.
-    * Preserve ancestor `$id` scopes and owning raw resource roots during eager and JIT pointer compilation without reapplying the resource root's ID or interpreting ignored `$ref` sibling IDs. Resolve absolute references to the current URN resource as local pointers.
-    * Assert standalone `contentEncoding` and `contentMediaType` when `content_assertion: true`, even without `contentSchema`. An ignored Draft 7 `contentSchema` no longer disables these checks; content handling remains annotation-only by default.
-    * Run an independent official Draft 7 suite and add compatibility, reference, cache, and compile-time embedding regressions. Both draft suites retain the `optional/cross-draft` exclusion.
-    * Upgrade `ex_json_pointer` to `~> 0.9` and pass decoded reference tokens directly to ancestor traversal.
+#### Draft 7 support and correctness
 
-  * Honor `:base_uri` consistently during schema scope discovery in both drafts, resolving relative `$id` resources and Draft 2020-12 anchors against the supplied retrieval base instead of registering unqualified identities.
+These additions implement Draft 7 behavior; they are separate from the pre-existing shared defects fixed below.
 
-  * Preserve the owning raw resource alongside inherited URI scopes during JIT pointer compilation in both drafts, so subsequent local and absolute references resolve against the resource rather than the selected leaf.
+  * Support tuple-form `items`, `additionalItems`, and Draft 7 `$ref` sibling semantics alongside Draft 2020-12.
+  * Embed the canonical Draft 7 meta-schema and cache its compiled reference registry by format/content assertion options. Both canonical HTTP URI forms, with and without a trailing `#`, share the appropriate cache variant and resolve without a loader or runtime file access.
+  * Make Draft 7 scope discovery ignore `$ref` siblings and newer-draft annotations, skip eager `$defs` compilation, and register resources under tuple `additionalItems`. Preserve explicit JSON Pointer references into annotation content.
+  * Discover nested `$id` resources in explicitly referenced pointer targets, including targets under ignored content or in other registered resources, without activating unrelated siblings or loading external schemas. Follow transitive pointers, retry lookups after resource discovery or promotion, preserve fragment-ID pointer roots even with relative retrieval bases, and terminate discovery cycles.
+  * Register ancestor resources crossed by explicit pointer and selected-entry routes so targets can refer back to them. Keep these metadata-only registrations lower priority than ordinary discovery, including through transitive references and regardless of pointer order.
+  * Compile selected fragments and eager pointer targets against their inherited ancestor `$id` base, applying each resource ID once. Retain the containing document and retrieval base for discovery, and use the owning resource as the JSON Pointer root without promoting fragment-only IDs or ignored `$ref` sibling IDs to resource roots.
+  * Use shared URI normalization to replace inherited fragments in references below Draft 7 named-fragment IDs, so `#` selects the enclosing resource root rather than the ancestor's named subschema.
+  * Ensure an ignored Draft 7 `contentSchema` does not suppress enabled `contentEncoding` and `contentMediaType` assertions.
+  * Refactor the Draft 7 scanner to use named state and owner maps, with focused helpers for scheduling, lookup, visitation, scanning, and merging. Preserve fallback-resource precedence, reference replay, changed-owner detection, and cycle termination.
+  * Run an independent official Draft 7 suite and add compatibility, reference, cache, and compile-time embedding regressions.
 
-  * Resolve empty self-references against the current raw resource without loading an unregistered retrieval URI. Replace inherited URI fragments when resolving `#` references so an empty fragment selects the resource root rather than an ancestor's named subschema.
+#### Shared fixes for Draft 7 and Draft 2020-12
 
-  * Update the optional Decimal requirement to `~> 3.2` (previously `~> 1.0 or ~> 2.0 or ~> 3.0`).
+These fixes correct defects already present in the Draft 2020-12 implementation on `main`, and apply to both drafts. They are not regressions introduced by Draft 7 support.
+
+  * Honor `:base_uri` during schema scope discovery, resolving relative `$id` resources and Draft 2020-12 anchors against the supplied retrieval base instead of registering unqualified identities.
+  * Preserve ancestor `$id` scopes and the owning raw resource during JIT pointer compilation, without reapplying the resource root's ID. Subsequent local and absolute references resolve against the owning resource rather than the selected leaf, fixing embedded-resource raw-root loss.
+  * Resolve empty self-references against the current raw resource without loading an unregistered retrieval URI.
+  * Resolve absolute JSON Pointer references to the current URN resource locally instead of passing the full URN to JSON Pointer lookup.
+  * Assert standalone `contentEncoding` and `contentMediaType` when `content_assertion: true`, even without `contentSchema`. Content handling remains annotation-only by default.
+
+#### Shared infrastructure and maintenance
+
+These changes support both drafts and are not separate fixes for pre-existing `main` defects.
+
+  * Select the draft from a recognized root `$schema` or the string-valued `:draft` option (`"draft7"` or `"draft2020_12"`), retaining Draft 2020-12 as the fallback. Return structured errors for conflicting declarations or invalid options; compile-time schema macros raise `CompileError`. Fragment compilation uses the containing document's root declaration.
+  * Dispatch scope discovery through draft-specific scanners behind the shared scope-scanner interface.
+  * Upgrade `ex_json_pointer` to `~> 0.9` and pass decoded reference tokens directly to ancestor traversal.
+  * Update the optional `decimal` requirement to `~> 3.2` (previously `~> 1.0 or ~> 2.0 or ~> 3.0`).
+  * Expand shared regression coverage and update the README, guides, and changelog. Both official draft suites retain the `optional/cross-draft` exclusion; complete cross-draft support is not claimed.
 
 ## v0.10.0 (2026-09-14)
 
