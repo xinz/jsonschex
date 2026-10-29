@@ -134,6 +134,57 @@ defmodule JSONSchex.Test.ContentVocabulary do
       ~s(Failed to decode as 'application/json': {:invalid_byte, 1, 110}, input: "{not valid json")
   end
 
+  test "content assertions work without contentSchema when enabled" do
+    schema = %{
+      "contentMediaType" => "application/json",
+      "contentEncoding" => "base64"
+    }
+
+    {:ok, compiled} = JSONSchex.compile(schema, content_assertion: true)
+
+    assert :ok == JSONSchex.validate(compiled, Base.encode64(~S({"id":1})))
+
+    assert {:error, [encoding_error]} = JSONSchex.validate(compiled, "%")
+    assert encoding_error.rule == :contentEncoding
+
+    assert {:error, [media_error]} = JSONSchex.validate(compiled, Base.encode64("{:}"))
+    assert media_error.rule == :contentMediaType
+  end
+
+  test "standalone content rules retain specification keyword names in both drafts" do
+    cases = [
+      {%{"contentEncoding" => "base64"}, :contentEncoding, "%", :contentEncoding, Base.encode64("ok")},
+      {%{"contentMediaType" => "application/json"}, :contentMediaType, "not-json", :contentMediaType, "{}"},
+      {%{"contentEncoding" => "base64", "contentMediaType" => "application/json"},
+       :contentMediaType, "%", :contentEncoding, Base.encode64("{}")}
+    ]
+
+    for draft <- ["draft7", "draft2020_12"],
+        {schema, name, invalid, error_rule, valid} <- cases do
+      assert {:ok, annotations} = JSONSchex.compile(schema, draft: draft)
+      assert annotations.rules == []
+      assert :ok == JSONSchex.validate(annotations, invalid)
+
+      assert {:ok, assertions} =
+               JSONSchex.compile(schema, draft: draft, content_assertion: true)
+      assert [%{name: ^name}] = assertions.rules
+      assert :ok == JSONSchex.validate(assertions, valid)
+      assert :ok == JSONSchex.validate(assertions, 123)
+      assert {:error, [%{rule: ^error_rule}]} = JSONSchex.validate(assertions, invalid)
+    end
+  end
+
+  test "contentAssertion remains an unknown input keyword in both drafts" do
+    refute JSONSchex.Draft7.Dialect.keyword?("contentAssertion")
+
+    for draft <- ["draft7", "draft2020_12"] do
+      assert {:ok, compiled} =
+               JSONSchex.compile(%{"contentAssertion" => false}, draft: draft, content_assertion: true)
+      assert compiled.rules == []
+      assert :ok == JSONSchex.validate(compiled, "arbitrary content")
+    end
+  end
+
   test "content keywords do not bypass base type validation" do
     schema = %{
       "type" => "string",

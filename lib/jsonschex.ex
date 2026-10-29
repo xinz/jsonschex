@@ -1,6 +1,6 @@
 defmodule JSONSchex do
   @moduledoc """
-  JSON Schema Draft 2020-12 validator for Elixir.
+  JSON Schema Draft 2020-12 and Draft 7 validator for Elixir.
 
   Compile a schema once, then validate data against it repeatedly:
 
@@ -45,8 +45,9 @@ defmodule JSONSchex do
 
   - `:loader` — `(uri -> {:ok, map()} | {:error, term()})` for remote `$ref` schemas
   - `:base_uri` — Starting base URI for resolving relative references
-  - `:format_assertion` — Enable strict `format` validation (default: `false`)
+  - `:format_assertion` — Explicitly enable `format` validation (default: `false`); an active Draft 2020-12 format-assertion vocabulary also enables it.
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
+  - `:draft` — `"draft7"` or `"draft2020_12"` (strings, not atoms). Recognized root `$schema` URIs select the draft automatically; a conflicting option returns `{:error, %JSONSchex.Types.Error{rule: :draft_conflict}}`. Without either, Draft 2020-12 is the default. Custom `$schema` URIs do not select a draft.
 
   See the [Loader guide](guide/loader.md) and
   [Content and Format guide](guide/content_and_format.md) for details.
@@ -72,13 +73,18 @@ defmodule JSONSchex do
   must resolve against that containing document rather than against the fragment
   map in isolation.
 
+  Draft 7 entry contexts follow ancestor `$id` resources: pointer lookup uses the
+  owning resource's raw schema, while discovery still scans the containing document.
+  Without a new resource boundary, the containing document remains the pointer root.
+
   ## Options
 
   - `:entry` — JSON Pointer or URI-reference style entrypoint (`#/...`, `/...`, or `path-or-uri#/...`). If it includes a base URI/path and `:base_uri` is omitted, that base is used for relative reference resolution.
   - `:base_uri` — optional starting base URI/path for resolving relative references when `:entry` is a document-local pointer
   - `:loader` — optional loader for external resources. It may return `{:ok, schema}` or `{:ok, %{document: schema, base_uri: base_uri}}`; wrapper metadata uses atom keys only.
-  - `:format_assertion` — Enable strict `format` validation (default: `false`)
+  - `:format_assertion` — Explicitly enable `format` validation (default: `false`); an active Draft 2020-12 format-assertion vocabulary also enables it.
   - `:content_assertion` — Enable strict content vocabulary validation (default: `false`)
+  - `:draft` — `"draft7"` or `"draft2020_12"` (strings, not atoms). A recognized `$schema` at the containing document's root selects the draft and must agree with this option. Otherwise the option selects the draft; if neither selects a draft, Draft 2020-12 is the default.
 
   Use a document-local entry such as `"#/components/schemas/User"` when the
   containing document's base is supplied separately with `:base_uri` or when no

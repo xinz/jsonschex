@@ -62,7 +62,7 @@ defmodule JSONSchex.Test.CompilerReuse do
     end
   end
 
-  test "scope registration preserves scanner bases rather than a structurally compiled candidate base" do
+  test "scope registration uses retrieval bases and rejects candidates from different document scopes" do
     child = %{"$id" => "child.json", "$anchor" => "target", "$ref" => "leaf.json"}
     raw = %{"properties" => %{"child" => child}}
     assert {:ok, compiled} = JSONSchex.compile(raw, base_uri: "/api/document.json")
@@ -70,14 +70,16 @@ defmodule JSONSchex.Test.CompilerReuse do
     assert structural.source_id == "/api/child.json"
     assert rule(structural, :ref).params.resolved_uri == "/api/leaf.json"
 
-    # Ordinary scan/1 starts at nil even when node compilation has a base_uri.
-    for key <- ["child.json", "child.json#target"] do
+    # Schema scanning and structural compilation share the supplied retrieval base.
+    for key <- ["/api/child.json", "/api/child.json#target"] do
       registered = Map.fetch!(compiled.defs, key)
       assert registered.raw === child
-      assert registered.source_id == "child.json"
-      assert rule(registered, :ref).params.resolved_uri == "leaf.json"
+      assert registered.source_id == "/api/child.json"
+      assert rule(registered, :ref).params.resolved_uri == "/api/leaf.json"
     end
+    refute Map.has_key?(compiled.defs, "child.json")
 
+    # A containing-document scope can still differ from the structural candidate.
     document = %{"container" => %{"$id" => "nested/container.json", "schema" => raw}}
     assert {:ok, fragment} = JSONSchex.compile_fragment(document,
       entry: "#/container/schema", base_uri: "/api/document.json")

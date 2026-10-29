@@ -1498,6 +1498,20 @@ defmodule JSONSchex.Test.CompileFragment do
              ~s|Failed to compile schema fragment (invalid_entry): input: "not-a-pointer", detail: "Entry must be a JSON Pointer or URI reference string with a fragment"|
   end
 
+  test "invalid pointer escapes return structured fragment errors" do
+    # The pointer resolver can accept literal malformed escapes that path decoding rejects.
+    document = %{"~2" => %{}, "~" => %{}}
+
+    for entry <- ["#/~2", "/~2", "#/~", "/~"], draft <- ["draft7", "draft2020_12"] do
+      assert {:error, %JSONSchex.Types.Error{} = error} =
+               JSONSchex.compile_fragment(document, entry: entry, draft: draft)
+      assert error.rule == :compile_fragment
+      assert error.context.contrast == "invalid_entry"
+      assert error.context.input == entry
+      assert error.context.error_detail == "invalid JSON pointer syntax"
+    end
+  end
+
   test "formats compile_fragment entry-not-found errors" do
     assert {:error, error} = JSONSchex.compile_fragment(%{}, entry: "#/missing")
 

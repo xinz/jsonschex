@@ -3,7 +3,7 @@ defmodule JSONSchex.MixProject do
 
   @source_url "https://github.com/xinz/jsonschex"
   @version "0.10.0"
-  @description "An implementation of the JSON Schema draft 2020-12 and latest specification for Elixir"
+  @description "An implementation of the JSON Schema specification for Elixir"
 
   def project do
     [
@@ -88,6 +88,10 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Draft202012.Vocabulary,
           JSONSchex.Draft202012.Schemas,
           JSONSchex.Draft202012.Dialect,
+        ],
+        Draft7: [
+          JSONSchex.Draft7.Dialect,
+          JSONSchex.Draft7.Schemas
         ]
       ],
       nest_modules_by_prefix: [
@@ -95,7 +99,8 @@ defmodule JSONSchex.MixProject do
         JSONSchex.Compiler,
         JSONSchex.Validator,
         JSONSchex.Formats,
-        JSONSchex.Draft202012
+        JSONSchex.Draft202012,
+        JSONSchex.Draft7
       ]
     ]
   end
@@ -121,9 +126,9 @@ defmodule JSONSchex.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_json_pointer, "~> 0.8"},
+      {:ex_json_pointer, "~> 0.9"},
       {:jason, "~> 1.4", optional: true},
-      {:decimal, "~> 1.0 or ~> 2.0 or ~> 3.0", optional: true},
+      {:decimal, "~> 3.2", optional: true},
       {:idna, "~> 6.0 or ~> 7.1", optional: true},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]

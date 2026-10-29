@@ -225,6 +225,14 @@ defmodule JSONSchex.Validator.Rules do
   end
 
   def apply(
+        %Rule{name: :items, params: %{draft: "draft7", schemas: schemas, additional: additional}},
+        data,
+        {path, _evaluated, root}
+      ) do
+    Keywords.validate_tuple_items(data, schemas, additional, path, root)
+  end
+
+  def apply(
         %Rule{name: :items, params: %{start_index: start_index, schema: compiled_sub}},
         data,
         {path, _evaluated, root}
@@ -318,6 +326,14 @@ defmodule JSONSchex.Validator.Rules do
       {:error, errors} ->
         {:error, errors}
     end
+  end
+
+  def apply(
+        %Rule{name: name, params: %{media_type: media_type, encoding: encoding}},
+        data,
+        {path, _evaluated, _root}
+      ) when name in [:contentEncoding, :contentMediaType] do
+    Keywords.validate_content_assertion(data, media_type, encoding, path)
   end
 
   def apply(%Rule{name: name}, _data, _ctx) do

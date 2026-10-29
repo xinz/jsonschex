@@ -185,6 +185,28 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
+  @doc "Validates Draft 7 tuple-form items and any additional items."
+  def validate_tuple_items(data, schemas, additional, path, root) when is_list(data) do
+    {prefix_errors, prefix_evaluated} =
+      reduce_prefix_items(schemas, data, path, root, 0, {[], []})
+
+    {additional_errors, additional_evaluated} =
+      reduce_items_array(data, additional, length(schemas), path, root, 0, {[], []})
+
+    case prefix_errors ++ additional_errors do
+      [] ->
+        case prefix_evaluated ++ additional_evaluated do
+          [] -> :ok
+          indices -> {:ok, MapSet.new(indices)}
+        end
+
+      errors ->
+        {:error, List.flatten(errors)}
+    end
+  end
+
+  def validate_tuple_items(_, _, _, _, _), do: :ok
+
   @doc """
   Validates unevaluated array items against a schema.
   """
@@ -1509,6 +1531,19 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   def validate_content_schema(_, _, _, _, _, _, _), do: :ok
+
+  @doc "Validates content encoding and media type without applying a content schema."
+  def validate_content_assertion(data, media_type, encoding, path) when is_binary(data) do
+    with {:ok, decoded} <- decode_content(data, normalize_content_encoding(encoding)),
+         {:ok, _content_value} <- parse_content(decoded, normalize_content_media_type(media_type)) do
+      :ok
+    else
+      {:error, {rule, context}} ->
+        {:error, [build_error(path, rule, context, data)]}
+    end
+  end
+
+  def validate_content_assertion(_, _, _, _), do: :ok
 
   defp build_error(path, rule, context, data) do
     %Error{path: path, rule: rule, context: context, value: data}

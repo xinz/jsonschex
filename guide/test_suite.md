@@ -4,10 +4,11 @@ This guide describes how JSONSchex runs the official JSON Schema Test Suites, wh
 
 ## Overview
 
-JSONSchex includes the JSON Schema Test Suite fixtures and runs Draft 2020-12 tests by default, all tests passing.
+JSONSchex includes the JSON Schema Test Suite fixtures and runs Draft 7 and Draft 2020-12 tests by default.
 
-Default suite path:
+Default suite paths:
 
+- `test/fixtures/JSON-Schema-Test-Suite/tests/draft7`
 - `test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12`
 
 ## Default exclusions
@@ -16,7 +17,13 @@ The following test sets are excluded by default:
 
 - `optional/cross-draft`
 
-These exclusions are configured in the test runner and are intended to avoid cross-draft scenarios that are outside the scope of Draft 2020-12.
+Both official test modules exclude this fixture file because cross-draft resolution is outside the current support scope. Passing the included fixtures does not imply complete cross-draft support.
+
+## Draft 7 status
+
+The Draft 7 fixture suite passes `draft: "draft7"` so fixtures without `$schema` use Draft 7. A canonical Draft 7 declaration also selects that draft automatically. Without a recognized declaration or explicit option, compilation defaults to Draft 2020-12; see the [draft-selection rules](dialect_and_vocabulary.md).
+
+Focused regressions live in `test/draft7_compatibility_test.exs`. The runner enables assertion options for optional format and content fixtures; `optional/cross-draft` remains excluded.
 
 ## How official test suites are run
 
@@ -30,9 +37,10 @@ You can run the full test suite with:
 mix test
 ```
 
-The main suite runner is invoked in:
+The suite runner is invoked in separate test files:
 
-- `test/official_jsts_test.exs`
+- `test/official_jsts_test.exs` for Draft 2020-12
+- `test/official_jsts_draft7_test.exs` for Draft 7
 
 ## Running tests
 
@@ -42,12 +50,13 @@ The main suite runner is invoked in:
 mix test
 ```
 
-This executes the entire test suite, including all Draft 2020-12 tests (except exclusions).
+This executes the entire test suite, including Draft 7 and Draft 2020-12 (except exclusions).
 
-### Run a specific test file
+### Run one draft's suite
 
 ```bash
 mix test test/official_jsts_test.exs
+mix test test/official_jsts_draft7_test.exs
 ```
 
 ### Run with verbose output
@@ -73,18 +82,10 @@ To debug a specific test case from the official suite:
 ```elixir
 defmodule JSONSchex.DebugTypeTest do
   use ExUnit.Case
+  use JSONSchex.Test.SuiteRunner
 
-  alias JSONSchex.SuiteRunner
-
-  test "debug type validation" do
-    # Run a specific test file from the suite
-    suite_file = "test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12/type.json"
-    
-    result = SuiteRunner.run_suite(suite_file)
-    
-    # This will show detailed output for debugging
-    assert result.passed == result.total
-  end
+  # This macro generates an ExUnit test for each case in the fixture.
+  run_suite("test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12/type.json")
 end
 ```
 
@@ -92,6 +93,18 @@ end
 
 ```bash
 mix test test/debug_type_test.exs --trace
+```
+
+The single-file macro uses the default draft. On Elixir 1.19 or newer, focus on Draft 7 while preserving its configured options by filtering the existing official test module:
+
+```bash
+mix test test/official_jsts_draft7_test.exs --name-pattern 'JSTS: type -'
+```
+
+The `--name-pattern` option was introduced in Elixir 1.19. On older supported Elixir versions, run the complete Draft 7 module instead:
+
+```bash
+mix test test/official_jsts_draft7_test.exs --trace
 ```
 
 ### Example: Testing a single schema from a suite file
@@ -103,21 +116,12 @@ defmodule JSONSchex.DebugSingleTest do
   use ExUnit.Case
 
   test "debug specific type test case" do
-    # Specific schema from the type.json test file
     schema = %{"type" => "integer"}
-    
-    {:ok, compiled} = JSONSchex.compile(schema)
-    
-    # Test valid data
-    assert :ok = JSONSchex.validate(compiled, 1)
-    
-    # Test invalid data
-    assert {:error, errors} = JSONSchex.validate(compiled, "not an integer")
-    assert length(errors) > 0
-    [error] = errors
-    assert error.rule == :type
-    
-    IO.inspect(error, label: "Validation error")
+    assert {:ok, compiled} = JSONSchex.compile(schema)
+
+    # Check acceptance and the specific rejection rule, not just any error.
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, "not an integer")
   end
 end
 ```
@@ -137,7 +141,7 @@ Then in the IEx session:
 ```elixir
 # Load a schema from a test file
 {:ok, content} = File.read("test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12/type.json")
-{:ok, tests} = Jason.decode(content)
+tests = JSONSchex.JSON.decode!(content)
 
 # Get the first test group
 [first_group | _] = tests
@@ -151,12 +155,9 @@ JSONSchex.validate(compiled, "not a number")
 
 ## Notes on optional vocabularies
 
-Some tests are gated by vocabularies or compile-time options:
+The runner explicitly enables `format_assertion: true` for optional format fixtures and `content_assertion: true` for optional content fixtures. Application code must opt into content assertions separately. Format checks can also be enabled by an active Draft 2020-12 format-assertion vocabulary.
 
-- `format` assertions require `format_assertion: true`
-- `content*` assertions require `content_assertion: true`
-
-If these options are not enabled, tests expecting assertion behavior may not apply.
+Draft 7 ignores `contentSchema`, including when content assertions are enabled. Its supported `contentEncoding` and `contentMediaType` checks still run. See the [content and format guide](content_and_format.md).
 
 ## Best practices
 
