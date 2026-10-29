@@ -4,6 +4,8 @@
 
 ### Bug Fixes and Improvements
 
+Add Draft 7 support, fix pre-existing issues that affect both supported drafts, and improve shared infrastructure and dependencies. ([#14](https://github.com/xinz/jsonschex/pull/14))
+
 #### Draft 7 support and correctness
 
 These additions implement Draft 7 behavior; they are separate from the pre-existing shared defects fixed below.
