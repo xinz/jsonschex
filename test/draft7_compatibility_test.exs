@@ -1319,6 +1319,397 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     end
   end
 
+  for id_kind <- [:absolute, :relative] do
+    @tag :ancestor_resource_registration
+    test "Draft 7 pointer discovery registers crossed #{id_kind} ancestors without scanning siblings" do
+      fixture = crossed_ancestor_resource_fixture(unquote(id_kind))
+
+      {scopes, refs} = JSONSchex.ScopeScanner.scan(fixture.schema,
+        draft: "draft7", base_uri: fixture.base_uri)
+
+      assert refs == MapSet.new(["#/definitions/a/definitions/b"])
+      assert Map.fetch!(scopes, fixture.entry_uri) === fixture.entry
+      for uri <- fixture.ignored_uris, do: refute(Map.has_key?(scopes, uri))
+      assert Map.has_key?(scopes, fixture.ancestor_uri)
+      assert Map.fetch!(scopes, fixture.ancestor_uri) === fixture.ancestor
+    end
+
+    @tag :ancestor_resource_registration
+    test "Draft 7 pointer targets can refer back to crossed #{id_kind} ancestor resources" do
+      fixture = crossed_ancestor_resource_fixture(unquote(id_kind))
+
+      assert {:ok, compiled} = JSONSchex.compile(fixture.schema,
+        draft: "draft7", base_uri: fixture.base_uri)
+
+      for uri <- fixture.ignored_uris, do: refute(Map.has_key?(compiled.defs, uri))
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+    end
+
+    @tag :ancestor_resource_registration
+    test "Draft 7 selected-entry discovery registers #{id_kind} ancestors beneath ignored annotations" do
+      fixture = crossed_ancestor_resource_fixture(unquote(id_kind))
+
+      {scopes, refs} = JSONSchex.ScopeScanner.scan_all(fixture.document, fixture.base_uri,
+        draft: "draft7", schema_path: ["$defs", "a", "definitions", "b"])
+
+      assert refs == MapSet.new()
+      assert Map.fetch!(scopes, fixture.entry_uri) === fixture.entry
+      for uri <- fixture.ignored_uris, do: refute(Map.has_key?(scopes, uri))
+      assert Map.has_key?(scopes, fixture.ancestor_uri)
+      assert Map.fetch!(scopes, fixture.ancestor_uri) === fixture.ancestor
+    end
+
+    @tag :ancestor_resource_registration
+    test "Draft 7 selected entries can refer back to #{id_kind} ancestors beneath ignored annotations" do
+      fixture = crossed_ancestor_resource_fixture(unquote(id_kind))
+
+      assert {:ok, compiled} = JSONSchex.compile_fragment(fixture.document,
+        entry: "#/$defs/a/definitions/b", draft: "draft7", base_uri: fixture.base_uri)
+
+      assert compiled.source_id == fixture.entry_uri
+      for uri <- fixture.ignored_uris, do: refute(Map.has_key?(compiled.defs, uri))
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  @tag :ancestor_resource_registration
+  test "Draft 7 ancestor metadata registration preserves ordinary resource precedence" do
+    fixture = crossed_ancestor_resource_fixture(:absolute)
+    ordinary = %{
+      "$id" => fixture.ancestor_uri,
+      "definitions" => %{"n" => %{"type" => "string"}}
+    }
+    schema = %{
+      "definitions" => %{"ordinary" => ordinary},
+      "$defs" => %{"a" => fixture.ancestor},
+      "allOf" => [%{"$ref" => "#/$defs/a/definitions/b"}]
+    }
+
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+    assert Map.fetch!(scopes, fixture.ancestor_uri) === ordinary
+    for uri <- fixture.ignored_uris, do: refute(Map.has_key?(scopes, uri))
+
+    assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+    assert Map.fetch!(compiled.defs, fixture.ancestor_uri).raw === ordinary
+    assert :ok == JSONSchex.validate(compiled, "text")
+    assert {:error, [%{rule: :type, context: %{contrast: "string"}}]} =
+             JSONSchex.validate(compiled, 1)
+  end
+
+  @tag :ancestor_resource_registration
+  test "Draft 7 retries deferred pointers when only ancestor metadata grows the registry" do
+    fixture = crossed_ancestor_resource_fixture(:absolute)
+    reached_uri = "https://example.com/retried-ancestor-target"
+    reached = %{"$id" => reached_uri, "type" => "integer"}
+    ancestor = put_in(fixture.ancestor, ["custom", "reached"], reached)
+    schema = %{
+      "definitions" => %{"already_registered" => fixture.entry},
+      "allOf" => [
+        %{"$ref" => "#/$defs/a/definitions/b"},
+        %{"$ref" => fixture.ancestor_uri <> "#/custom/reached"}
+      ],
+      "$defs" => %{"a" => ancestor}
+    }
+
+    # The back-reference is deferred before the pointer crosses A. B is already
+    # registered, so adding A's metadata alone must trigger another worklist pass.
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+
+    assert Map.get(scopes, reached_uri) === reached
+    assert Map.fetch!(scopes, fixture.ancestor_uri) === ancestor
+    assert Map.fetch!(scopes, fixture.entry_uri) === fixture.entry
+    for uri <- fixture.ignored_uris, do: refute(Map.has_key?(scopes, uri))
+  end
+
+  for order <- [:target_first, :metadata_first] do
+    @tag :ancestor_metadata_precedence
+    test "Draft 7 ordinary pointer targets override ancestor metadata with #{order} order" do
+      {schema, uri, target} = competing_ancestor_metadata_fixture(unquote(order))
+
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+
+      assert Map.fetch!(scopes, uri) === target
+    end
+
+    @tag :ancestor_metadata_precedence
+    test "Draft 7 validation uses the ordinary resource with #{order} ancestor pointer order" do
+      {schema, uri, target} = competing_ancestor_metadata_fixture(unquote(order))
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+      assert Map.fetch!(compiled.defs, uri).raw === target
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, errors} = JSONSchex.validate(compiled, "text")
+      assert Enum.all?(errors, &(&1.rule == :type and &1.context.contrast == "integer"))
+    end
+  end
+
+  @tag :ancestor_metadata_precedence
+  test "Draft 7 selected-route metadata cannot shadow a later ordinary pointer target" do
+    {document, uri, target, ignored_uri} = selected_ancestor_metadata_fixture()
+
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan_all(document, nil,
+      draft: "draft7", schema_path: ["$defs", "metadata", "selected"])
+
+    assert Map.fetch!(scopes, uri) === target
+    refute Map.has_key?(scopes, ignored_uri)
+  end
+
+  @tag :ancestor_metadata_precedence
+  test "Draft 7 selected-entry validation uses the later ordinary resource instead of metadata" do
+    {document, uri, target, ignored_uri} = selected_ancestor_metadata_fixture()
+
+    assert {:ok, compiled} = JSONSchex.compile_fragment(document,
+      entry: "#/$defs/metadata/selected", draft: "draft7")
+
+    assert Map.fetch!(compiled.defs, uri).raw === target
+    refute Map.has_key?(compiled.defs, ignored_uri)
+    assert :ok == JSONSchex.validate(compiled, 1)
+    assert {:error, errors} = JSONSchex.validate(compiled, "text")
+    assert Enum.all?(errors, &(&1.rule == :type and &1.context.contrast == "integer"))
+  end
+
+  @tag :ancestor_metadata_precedence
+  test "Draft 7 revisits a fallback pointer after an ordinary resource replaces its raw root" do
+    uri = "https://example.com/replaced-metadata"
+    fallback_hit = %{"$id" => "https://example.com/fallback-hit"}
+    ordinary_hit = %{"$id" => "https://example.com/ordinary-hit"}
+    metadata = %{"$id" => uri, "selected" => true, "custom" => %{"reached" => fallback_hit}}
+    target = %{"$id" => uri, "custom" => %{"reached" => ordinary_hit}}
+    schema = %{
+      "$defs" => %{"metadata" => metadata, "target" => target},
+      "allOf" => Enum.map([
+        "#/$defs/target", uri <> "#/custom/reached", "#/$defs/metadata/selected"
+      ], &%{"$ref" => &1})
+    }
+
+    # Reverse queue order resolves the URI through metadata before finding the
+    # ordinary root. The same pointer must then be resolved against that new root.
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+
+    assert Map.fetch!(scopes, uri) === target
+    assert Map.get(scopes, ordinary_hit["$id"]) === ordinary_hit
+  end
+
+  @tag :ancestor_metadata_precedence
+  test "Draft 7 ordinary pointer duplicates retain their existing worklist precedence" do
+    uri = "https://example.com/ordinary-duplicates"
+    first = %{"$id" => uri, "const" => "first"}
+    second = %{"$id" => uri, "const" => "second"}
+
+    for {names, winner} <- [{["first", "second"], second}, {["second", "first"], first}] do
+      schema = %{
+        "$defs" => %{"first" => first, "second" => second},
+        "allOf" => Enum.map(names, &%{"$ref" => "#/$defs/" <> &1})
+      }
+
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      assert Map.fetch!(scopes, uri) === winner
+    end
+  end
+
+  for order <- [
+        ~w(target lookup metadata), ~w(target metadata lookup),
+        ~w(lookup target metadata), ~w(lookup metadata target),
+        ~w(metadata target lookup), ~w(metadata lookup target)
+      ], mode <- ["schema", "document"] do
+    @tag :fallback_discovery_provenance
+    test "Draft 7 #{mode} shared child discovery prefers ordinary provenance with #{Enum.join(order, "-")} order" do
+      fixture = shared_fallback_child_fixture(unquote(order))
+      {scopes, _refs} =
+        case unquote(mode) do
+          "schema" -> JSONSchex.ScopeScanner.scan(fixture.schema, draft: "draft7")
+          "document" -> JSONSchex.ScopeScanner.scan_all(fixture.schema, nil,
+            draft: "draft7", schema_path: [])
+        end
+
+      assert Map.fetch!(scopes, fixture.uri) === fixture.target
+      assert Map.fetch!(scopes, fixture.shared_uri) === fixture.ordinary_hit
+      refute Map.has_key?(scopes, fixture.ignored_uri)
+    end
+
+    @tag :fallback_discovery_provenance
+    test "Draft 7 #{mode} shared child validation uses ordinary provenance with #{Enum.join(order, "-")} order" do
+      fixture = shared_fallback_child_fixture(unquote(order))
+      compiled = compile_schema!(fixture.schema, unquote(mode), draft: "draft7")
+
+      assert Map.fetch!(compiled.defs, fixture.shared_uri).raw === fixture.ordinary_hit
+      refute Map.has_key?(compiled.defs, fixture.ignored_uri)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, errors} = JSONSchex.validate(compiled, "text")
+      assert Enum.all?(errors, &(&1.rule == :type and &1.context.contrast == "integer"))
+    end
+  end
+
+  for mode <- ["schema", "document"] do
+    @tag :fallback_discovery_provenance
+    test "Draft 7 #{mode} fallback-derived references stay weak through local and ordinary-resource hops" do
+      parent_uri = "https://example.com/transitive-fallback-parent"
+      derived_uri = "https://example.com/transitive-fallback-derived"
+      bridge_uri = "https://example.com/transitive-ordinary-bridge"
+      shared_uri = "https://example.com/transitive-shared-hit"
+      ignored_uri = "https://example.com/transitive-ignored"
+      fallback_hit = %{"$id" => shared_uri, "type" => "string"}
+      ordinary_hit = %{"$id" => shared_uri, "type" => "integer"}
+      derived = %{
+        "$id" => derived_uri,
+        "allOf" => [%{"$ref" => "#/custom/forward"}],
+        "custom" => %{"forward" => %{"$ref" => bridge_uri <> "#/custom/fallback"}}
+      }
+      metadata = %{
+        "$id" => parent_uri,
+        "selected" => true,
+        "custom" => %{"reached" => derived}
+      }
+      bridge = %{
+        "$id" => bridge_uri,
+        "custom" => %{
+          "fallback" => fallback_hit,
+          "ordinary" => ordinary_hit,
+          "ignored" => %{"$id" => ignored_uri, "type" => 42}
+        }
+      }
+      schema = %{
+        "$defs" => %{"metadata" => metadata, "bridge" => bridge},
+        "allOf" => Enum.map([
+          bridge_uri <> "#/custom/ordinary", parent_uri <> "#/custom/reached",
+          "#/$defs/metadata/selected", "#/$defs/bridge", shared_uri
+        ], &%{"$ref" => &1})
+      }
+
+      # The bridge is ordinary before fallback work reaches it, but that lookup
+      # must not launder the derived reference into an ordinary discovery.
+      {scopes, _refs} =
+        case unquote(mode) do
+          "schema" -> JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+          "document" -> JSONSchex.ScopeScanner.scan_all(schema, nil,
+            draft: "draft7", schema_path: [])
+        end
+
+      assert Map.fetch!(scopes, bridge_uri) === bridge
+      assert Map.fetch!(scopes, derived_uri) === derived
+      assert Map.fetch!(scopes, shared_uri) === ordinary_hit
+      refute Map.has_key?(scopes, ignored_uri)
+    end
+  end
+
+  defp shared_fallback_child_fixture(order) do
+    uri = "https://example.com/shared-child-parent"
+    shared_uri = "https://example.com/shared-hit"
+    ignored_uri = "https://example.com/shared-child-ignored"
+    fallback_hit = %{"$id" => shared_uri, "type" => "string"}
+    ordinary_hit = %{"$id" => shared_uri, "type" => "integer"}
+    metadata = %{"$id" => uri, "selected" => true, "custom" => %{"reached" => fallback_hit}}
+    target = %{"$id" => uri, "custom" => %{"reached" => ordinary_hit}}
+    refs = %{
+      "target" => "#/$defs/target",
+      "lookup" => uri <> "#/custom/reached",
+      "metadata" => "#/$defs/metadata/selected",
+      "shared" => shared_uri
+    }
+    schema = %{
+      "$defs" => %{
+        "metadata" => metadata,
+        "target" => target,
+        "ignored" => %{"$id" => ignored_uri, "type" => 42}
+      },
+      "allOf" => Enum.map(order ++ ["shared"], &%{"$ref" => Map.fetch!(refs, &1)})
+    }
+
+    %{schema: schema, uri: uri, target: target, shared_uri: shared_uri,
+      ordinary_hit: ordinary_hit, ignored_uri: ignored_uri}
+  end
+
+  defp competing_ancestor_metadata_fixture(order) do
+    uri = "https://example.com/duplicate"
+    metadata = %{"$id" => uri, "type" => "string", "selected" => true}
+    target = %{"$id" => uri, "type" => "integer"}
+    refs = ["#/$defs/target", "#/$defs/metadata/selected"]
+    refs = if order == :metadata_first, do: Enum.reverse(refs), else: refs
+    schema = %{
+      "$defs" => %{"metadata" => metadata, "target" => target},
+      "allOf" => Enum.map(refs ++ [uri], &%{"$ref" => &1})
+    }
+
+    {schema, uri, target}
+  end
+
+  defp selected_ancestor_metadata_fixture do
+    uri = "https://example.com/selected-route-duplicate"
+    document_uri = "https://example.com/selected-route-document"
+    ignored_uri = "https://example.com/ignored-selected-route-sibling"
+    target = %{"$id" => uri, "type" => "integer"}
+    metadata = %{
+      "$id" => uri,
+      "type" => "string",
+      "selected" => %{
+        "$id" => "https://example.com/selected-route-entry",
+        "allOf" => [%{"$ref" => document_uri <> "#/$defs/target"}, %{"$ref" => uri}]
+      }
+    }
+    document = %{
+      "$id" => document_uri,
+      "type" => "object",
+      "$defs" => %{
+        "metadata" => metadata,
+        "target" => target,
+        "ignored" => %{"$id" => ignored_uri, "type" => 42}
+      }
+    }
+
+    {document, uri, target, ignored_uri}
+  end
+
+  defp crossed_ancestor_resource_fixture(id_kind) do
+    {base_uri, ancestor_uri} =
+      case id_kind do
+        :absolute -> {nil, "https://example.com/a/"}
+        :relative -> {"https://example.com/base/input.json", "https://example.com/base/a/"}
+      end
+
+    entry_uri = ancestor_uri <> "b/"
+    ancestor_id = if id_kind == :relative, do: "a/", else: ancestor_uri
+    entry_id = if id_kind == :relative, do: "b/", else: entry_uri
+    hidden_uri = "https://example.com/hidden-ancestor-annotation"
+    unused_uri = "https://example.com/unused-ancestor-sibling"
+    outside_uri = "https://example.com/outside-selected-route"
+    ignored_root_uri = "https://example.com/ignored-ref-sibling/"
+    entry = %{
+      "$id" => entry_id,
+      "allOf" => [%{"$ref" => ancestor_uri <> "#/definitions/n"}]
+    }
+    ancestor = %{
+      "$id" => ancestor_id,
+      "definitions" => %{
+        "n" => %{"type" => "integer"},
+        "b" => entry,
+        "unused" => %{"$id" => unused_uri, "type" => 42}
+      },
+      "custom" => %{"hidden" => %{"$id" => hidden_uri, "type" => 42}}
+    }
+    outside = %{"$id" => outside_uri, "type" => 42}
+
+    %{
+      schema: %{
+        "$ref" => "#/definitions/a/definitions/b",
+        "$id" => ignored_root_uri,
+        "definitions" => %{"a" => ancestor, "outside" => outside}
+      },
+      # $defs is unknown in Draft 7. The root's type establishes a schema boundary,
+      # and only the selected route may cross that ignored annotation.
+      document: %{"type" => "object", "$defs" => %{"a" => ancestor, "outside" => outside}},
+      ancestor: ancestor,
+      entry: entry,
+      ancestor_uri: ancestor_uri,
+      entry_uri: entry_uri,
+      base_uri: base_uri,
+      ignored_uris: [hidden_uri, unused_uri, outside_uri, ignored_root_uri]
+    }
+  end
+
   defp registered_resource_pointer_schema(ref) do
     resource_uri = "https://example.com/b"
     integer_uri = "https://example.com/integer"

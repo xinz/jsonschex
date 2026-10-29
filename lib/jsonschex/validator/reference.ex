@@ -83,6 +83,12 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
+  # A retrieval base need not be registered by $id. An empty reference still
+  # belongs to the current raw root, rather than an external load or URI pointer.
+  defp resolve_missing_ref(data, "", path, validation_context, evaluated) do
+    resolve_and_validate_jit(data, validation_context.raw, "", path, validation_context, evaluated)
+  end
+
   defp resolve_missing_ref(data, ref_string, path, validation_context, evaluated) do
     uri_to_load = resolve_relative_uri(validation_context.source_id, ref_string)
 
@@ -179,6 +185,7 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   defp uri_to_resolve(base_uri, "#" <> _ = ref) when base_uri != nil do
+    {base_uri, _fragment} = URIUtil.split_fragment(base_uri)
     URIUtil.with_fragment(base_uri, URIUtil.fragment(ref))
   end
   defp uri_to_resolve(base_uri, ref) when base_uri != nil do

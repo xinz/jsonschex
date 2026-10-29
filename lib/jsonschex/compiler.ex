@@ -326,19 +326,21 @@ defmodule JSONSchex.Compiler do
     ExJSONPointer.batch_resolve_reduce(raw_schema, refs, %{}, fn ref, result, acc ->
       case result do
         {:ok, fragment} ->
-          parent_base =
+          {parent_base, resource} =
             if ctx.draft == "draft7" do
               case ResourceContext.resolve(raw_schema, base_uri, URIUtil.fragment(ref), draft: ctx.draft) do
-                {:ok, %{inherited_base: inherited_base}} -> inherited_base
-                :error -> base_uri
+                {:ok, %{inherited_base: inherited_base, resource: resource}} -> {inherited_base, resource}
+                :error -> {base_uri, fragment}
               end
             else
-              base_uri
+              {base_uri, fragment}
             end
 
           case compile_ref_target(fragment, ref, parent_base, vocabs, ctx, local_defs) do
             {:ok, compiled_sub} ->
-              compiled_sub = %{compiled_sub | raw: fragment}
+              # Eager targets need the same URI/raw-root pairing as JIT targets;
+              # entering a compiled leaf must not discard its owning resource.
+              compiled_sub = %{compiled_sub | raw: resource}
 
               Map.put(acc, ref, compiled_sub)
 

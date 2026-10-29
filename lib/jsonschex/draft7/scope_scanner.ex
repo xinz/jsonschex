@@ -16,6 +16,10 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     minLength maxLength minItems maxItems minProperties maxProperties
   )
 
+  @list_value_keywords ~w(required enum examples)
+  @boolean_value_keywords ~w(uniqueItems readOnly writeOnly)
+  @unrestricted_value_keywords ~w(const default)
+
   # These newer-draft names are only used to prune ignored schema annotations,
   # not to register anchors or execute their reference semantics.
   @ignored_scope_keywords ~w(
@@ -24,34 +28,45 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     contentSchema unevaluatedItems unevaluatedProperties minContains maxContains deprecated
   )
 
+
   def scan(schema, opts \\ []) do
     base_uri = Keyword.get(opts, :base_uri)
-    owner = {:document, schema, base_uri}
-    schema |> do_scan(base_uri, {%{}, MapSet.new(), []}, owner) |> finish()
+    owner = document_owner(schema, base_uri)
+    schema |> do_scan(base_uri, new_state(), owner) |> finish()
   end
 
   def scan_all(document, base_uri, opts) do
     path = Keyword.get(opts, :schema_path)
-    owner = {:document, document, base_uri}
-    document |> do_scan_all(base_uri, {%{}, MapSet.new(), []}, :document, path, owner) |> finish()
+    owner = document_owner(document, base_uri)
+    document |> do_scan_all(base_uri, new_state(), :document, path, owner) |> finish()
   end
 
-  defp do_scan(raw_schema, base_uri, {registry, refs, pending}, owner) when is_map(raw_schema) do
+
+  defp new_state(fallback_resources \\ %{}) do
+    %{resources: %{}, fallback_resources: fallback_resources, refs: MapSet.new(), pending: []}
+  end
+
+
+  defp document_owner(document, base_uri) do
+    %{key: :document, raw: document, base_uri: base_uri, priority: :ordinary}
+  end
+
+  defp do_scan(raw_schema, base_uri, state, owner) when is_map(raw_schema) do
     schema = scope_schema(raw_schema)
     current_id = Map.get(schema, "$id")
     new_base_uri = URIUtil.resolve(base_uri, current_id) || ""
 
-    registry =
+    resources =
       if current_id do
-        Map.put(registry, new_base_uri, raw_schema)
+        Map.put(state.resources, new_base_uri, raw_schema)
       else
-        registry
+        state.resources
       end
 
     owner = resource_owner(raw_schema, base_uri, owner)
-    acc = collect_refs(schema, {registry, refs, pending}, owner)
+    state = collect_refs(schema, %{state | resources: resources}, owner)
 
-    SchemaTraversal.reduce_scope_subschemas(schema, acc, fn subschema, acc ->
+    SchemaTraversal.reduce_scope_subschemas(schema, state, fn subschema, acc ->
       do_scan(subschema, new_base_uri, acc, owner)
     end, "draft7")
   end
@@ -66,24 +81,24 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     end)
   end
 
-  defp do_scan_all(raw_schema, base_uri, {registry, refs, pending}, role, path, owner) when is_map(raw_schema) do
+  defp do_scan_all(raw_schema, base_uri, state, role, path, owner) when is_map(raw_schema) do
     schema_context? = role == :schema or path == [] or schema_candidate?(raw_schema)
     schema = if schema_context?, do: scope_schema(raw_schema), else: raw_schema
     current_id = Map.get(schema, "$id")
     new_base_uri = if is_binary(current_id), do: URIUtil.resolve(base_uri, current_id), else: base_uri
     new_base_uri = new_base_uri || ""
 
-    registry =
+    resources =
       if is_binary(current_id) do
-        Map.put(registry, new_base_uri, raw_schema)
+        Map.put(state.resources, new_base_uri, raw_schema)
       else
-        registry
+        state.resources
       end
 
     owner = resource_owner(raw_schema, base_uri, owner)
-    acc = collect_refs(schema, {registry, refs, pending}, owner)
+    state = collect_refs(schema, %{state | resources: resources}, owner)
 
-    acc = Enum.reduce(schema, acc, fn {key, value}, acc ->
+    state = Enum.reduce(schema, state, fn {key, value}, acc ->
       child_role = if schema_context?, do: schema_child_role(key), else: :document
       do_scan_all(value, new_base_uri, acc, child_role, child_path(path, key), owner)
     end)
@@ -92,9 +107,9 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     # route, without resurrecting its sibling resources or reference annotations.
     case path do
       [key | rest] when not is_map_key(schema, key) ->
-        scan_selected_route(Map.get(raw_schema, key), new_base_uri, acc, rest, owner)
+        scan_selected_route(Map.get(raw_schema, key), new_base_uri, state, rest, owner)
       _ ->
-        acc
+        state
     end
   end
 
@@ -132,11 +147,13 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   defp scan_selected_route(value, base_uri, acc, [], owner) do
     do_scan_all(value, base_uri, acc, :schema, [], owner)
   end
-  defp scan_selected_route(map, base_uri, acc, [key | rest], owner) when is_map(map) do
+  defp scan_selected_route(map, base_uri, state, [key | rest], owner) when is_map(map) do
     owner = resource_owner(map, base_uri, owner)
-    id = Map.get(scope_schema(map), "$id")
+    id = scope_id(map)
     next_base = if is_binary(id), do: URIUtil.resolve(base_uri, id), else: base_uri
-    scan_selected_route(Map.get(map, key), next_base, acc, rest, owner)
+    fallbacks = register_fallback_resource(map, base_uri, state.fallback_resources)
+    state = %{state | fallback_resources: fallbacks}
+    scan_selected_route(Map.get(map, key), next_base, state, rest, owner)
   end
   defp scan_selected_route(list, base_uri, acc, [token | rest], owner) when is_list(list) do
     case Integer.parse(token) do
@@ -146,8 +163,8 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   end
   defp scan_selected_route(_value, _base_uri, acc, _path, _owner), do: acc
 
-  # Resource ownership carries the base before its own $id, so pointer resolution
-  # and scanning a reached target each apply that target's $id exactly once.
+  # The base precedes the raw root's own $id, so pointer resolution and scanning
+  # a reached target each apply that ID once. Priority is inherited independently.
   defp resource_owner(%{"$ref" => _}, _base_uri, owner), do: owner
   defp resource_owner(%{"$id" => id} = raw_schema, base_uri, owner) when is_binary(id) do
     {id_base, _fragment} = URIUtil.split_fragment(id)
@@ -155,58 +172,111 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     {base, _fragment} = URIUtil.split_fragment(uri)
     {owner_base, _fragment} = URIUtil.split_fragment(resource_uri(owner))
 
-    # Fragment IDs name subschemas within a resource; they do not change the raw
-    # root against which that resource's JSON Pointers are resolved, even when
-    # URI resolution falls back to the child ID for a relative parent base.
-    if id_base == "" or base == owner_base, do: owner, else: {{:id, uri}, raw_schema, base_uri}
+    # Fragment IDs stay within the raw resource, even when URI resolution falls
+    # back to the child ID for a relative parent base.
+    if id_base == "" or base == owner_base,
+      do: owner,
+      else: %{owner | key: {:id, uri}, raw: raw_schema, base_uri: base_uri}
   end
   defp resource_owner(_raw_schema, _base_uri, owner), do: owner
 
-  defp resource_uri({{:id, uri}, _resource, _base_uri}), do: uri
-  defp resource_uri({:document, _resource, base_uri}), do: base_uri || ""
+  defp resource_uri(%{key: {:id, uri}}), do: uri
+  defp resource_uri(%{key: :document, base_uri: base_uri}), do: base_uri || ""
 
-  defp finish({registry, refs, pending}) do
-    # Additional pointers drive discovery only. Publishing them as root-document
-    # aliases would resolve embedded resources' local pointers against the wrong root.
-    {follow_refs(pending, [], MapSet.new(), registry, false), refs}
+  # Crossed ancestors contribute fallback identities, never traversal of siblings.
+  defp register_fallback_resource(%{"$ref" => _}, _base_uri, fallbacks), do: fallbacks
+  defp register_fallback_resource(%{"$id" => id} = raw_schema, base_uri, fallbacks) when is_binary(id) do
+    Map.put_new(fallbacks, URIUtil.resolve(base_uri, id) || "", raw_schema)
+  end
+  defp register_fallback_resource(_raw_schema, _base_uri, fallbacks), do: fallbacks
+
+  defp finish(state) do
+    discovered = follow_refs(state.pending, [], %{}, %{state | pending: []}, false)
+
+    # Discovery-only refs must not become aliases against the root document.
+    {Map.merge(discovered.fallback_resources, discovered.resources), state.refs}
   end
 
-  # A pointer may name a resource discovered by a later work item. Retry unresolved
-  # owners only when the registry grows; genuinely external references never load.
-  defp follow_refs([], deferred, seen, registry, true) when deferred != [] do
-    follow_refs(Enum.reverse(deferred), [], seen, registry, false)
+  # Growth includes fallback identities and promotion to ordinary resources.
+  # Replay attempted lookups too: their resource may now have a different raw root.
+  defp follow_refs([], replay_candidates, seen, state, true) when replay_candidates != [] do
+    follow_refs(Enum.reverse(replay_candidates), [], seen, state, false)
   end
-  defp follow_refs([], _deferred, _seen, registry, _grew?), do: registry
+  defp follow_refs([], _replay_candidates, _seen, state, _grew?), do: state
 
-  defp follow_refs([{owner, ref} = item | pending], deferred, seen, registry, grew?) do
-    with {:ok, {resource_key, resource, base_uri} = target_resource, pointer} <-
-           pointer_owner(ref, owner, registry),
-         false <- MapSet.member?(seen, {resource_key, pointer}) do
-      seen = MapSet.put(seen, {resource_key, pointer})
+  defp follow_refs([{owner, ref} = item | pending], replay_candidates, seen, state, grew?) do
+    {more, state, seen, changed?} = discover_reference(owner, ref, state, seen)
+    follow_refs(more ++ pending, [item | replay_candidates], seen, state, grew? or changed?)
+  end
 
-      case ResourceContext.resolve(resource, base_uri, pointer, draft: "draft7") do
-        {:ok, context} ->
-          target_owner = Enum.reduce(context.resources, target_resource, fn {raw, parent_base}, owner ->
-            resource_owner(raw, parent_base, owner)
-          end)
-          {discovered, _refs, more} =
-            do_scan(context.target, context.inherited_base, {%{}, MapSet.new(), []}, target_owner)
 
-          # Ordinary traversal keeps its existing duplicate-identity precedence.
-          expanded = Map.merge(discovered, registry)
-          grew? = grew? or map_size(expanded) > map_size(registry)
-          follow_refs(more ++ pending, deferred, seen, expanded, grew?)
-
-        :error ->
-          follow_refs(pending, deferred, seen, registry, grew?)
-      end
+  defp discover_reference(owner, ref, state, seen) do
+    with {:ok, target_owner, pointer} <- pointer_owner(ref, owner, state),
+         {:unseen, seen} <- visit_owner(target_owner, pointer, seen) do
+      discover_target(target_owner, pointer, state, seen)
     else
-      :unknown_resource -> follow_refs(pending, [item | deferred], seen, registry, grew?)
-      _ -> follow_refs(pending, deferred, seen, registry, grew?)
+      _ -> {[], state, seen, false}
     end
   end
 
-  defp pointer_owner(ref, owner, registry) do
+
+  defp visit_owner(owner, pointer, seen) do
+    # Hash only stable identity/priority fields. Strict owner comparison handles
+    # changed raw roots without hashing entire schemas for every pointer.
+    key = {owner.priority, owner.key, pointer}
+    owners = Map.get(seen, key, [])
+
+    if Enum.any?(owners, &(&1 === owner)),
+      do: :seen,
+      else: {:unseen, Map.put(seen, key, [owner | owners])}
+  end
+
+
+  defp discover_target(owner, pointer, state, seen) do
+    case ResourceContext.resolve(owner.raw, owner.base_uri, pointer, draft: "draft7") do
+      {:ok, context} ->
+        discovered = scan_reached_target(context, owner, state.fallback_resources)
+        updated = merge_discovery(state, discovered, owner.priority, context.resources)
+        {discovered.pending, updated, seen, resources_grew?(state, updated)}
+      :error ->
+        {[], state, seen, false}
+    end
+  end
+
+
+  defp scan_reached_target(context, owner, fallbacks) do
+    owner = Enum.reduce(context.resources, owner, fn {raw, parent_base}, acc ->
+      resource_owner(raw, parent_base, acc)
+    end)
+
+    do_scan(context.target, context.inherited_base, new_state(fallbacks), owner)
+  end
+
+
+  defp merge_discovery(state, discovered, priority, ancestors) do
+    # Weak paths stay weak through new IDs and references to ordinary resources.
+    # Existing ordinary discoveries retain their original duplicate precedence.
+    {resources, fallbacks} =
+      case priority do
+        :fallback -> {state.resources, Map.merge(discovered.resources, discovered.fallback_resources)}
+        :ordinary -> {Map.merge(discovered.resources, state.resources), discovered.fallback_resources}
+      end
+
+    fallbacks = Enum.reduce(ancestors, fallbacks, fn {raw, parent_base}, acc ->
+      register_fallback_resource(raw, parent_base, acc)
+    end)
+
+    %{state | resources: resources, fallback_resources: fallbacks}
+  end
+
+
+  defp resources_grew?(before, updated) do
+    map_size(updated.resources) > map_size(before.resources) or
+      map_size(updated.fallback_resources) > map_size(before.fallback_resources)
+  end
+
+
+  defp pointer_owner(ref, owner, state) do
     case URIUtil.split_fragment(ref) do
       {"", pointer} ->
         {:ok, owner, pointer}
@@ -216,20 +286,30 @@ defmodule JSONSchex.Draft7.ScopeScanner do
         {resource_base, _fragment} = URIUtil.split_fragment(uri)
         {ref_base, pointer} = URIUtil.split_fragment(URIUtil.resolve(uri, ref))
 
-        if ref_base == resource_base do
-          {:ok, owner, pointer}
-        else
-          case Map.fetch(registry, ref_base) do
-            {:ok, resource} when is_map(resource) ->
-              # This URI already includes the resource's own $id. Normalize only
-              # the resolution copy, keeping the registered raw schema intact.
-              target_resource = {{:id, ref_base}, Map.delete(resource, "$id"), ref_base}
-              {:ok, target_resource, pointer}
+        if ref_base == resource_base,
+          do: {:ok, owner, pointer},
+          else: lookup_pointer_owner(ref_base, pointer, owner.priority, state)
+    end
+  end
 
-            _ ->
-              :unknown_resource
-          end
-        end
+
+  defp lookup_pointer_owner(base_uri, pointer, priority, state) do
+    # Entering an ordinary resource cannot promote a fallback-derived reference.
+    {resource, priority} =
+      case Map.fetch(state.resources, base_uri) do
+        {:ok, resource} -> {resource, priority}
+        :error -> {Map.get(state.fallback_resources, base_uri), :fallback}
+      end
+
+    case resource do
+      resource when is_map(resource) ->
+        # The URI already includes the root's ID. Normalize only this resolution
+        # copy, retaining the original raw schema in both resource registries.
+        owner = %{key: {:id, base_uri}, raw: Map.delete(resource, "$id"),
+                  base_uri: base_uri, priority: priority}
+        {:ok, owner, pointer}
+      _ ->
+        :unknown_resource
     end
   end
 
@@ -249,15 +329,15 @@ defmodule JSONSchex.Draft7.ScopeScanner do
         is_binary(value) or (key == "type" and is_list(value))
       {key, value} when key in @schema_map_keywords ->
         schema_map_candidate?(key, value)
-      {key, value} when key in @schema_list_keywords or key in ~w(required enum examples) ->
+      {key, value} when key in @schema_list_keywords or key in @list_value_keywords ->
         is_list(value)
       {key, value} when key in @single_schema_keywords ->
         is_map(value) or is_boolean(value) or (key == "items" and is_list(value))
       {key, value} when key in @numeric_value_keywords ->
         is_number(value)
-      {key, value} when key in ~w(uniqueItems readOnly writeOnly) ->
+      {key, value} when key in @boolean_value_keywords ->
         is_boolean(value)
-      {key, _value} when key in ~w(const default) ->
+      {key, _value} when key in @unrestricted_value_keywords ->
         true
       _ ->
         false
@@ -273,6 +353,12 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   end
   defp schema_map_candidate?(_keyword, _value), do: false
 
+  # Selected routes need only the $ref sibling rule, not full schema filtering.
+  # Keep the raw ID value so the caller's binary guard remains authoritative.
+
+  defp scope_id(%{"$ref" => _}), do: nil
+  defp scope_id(schema), do: Map.get(schema, "$id")
+
   # Filter discovery only; registry entries retain raw content for explicit pointers.
   defp scope_schema(%{"$ref" => _} = schema), do: Map.take(schema, ["$ref"])
 
@@ -282,13 +368,13 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     if is_list(Map.get(schema, "items")), do: schema, else: Map.delete(schema, "additionalItems")
   end
 
-  defp collect_refs(schema, {registry, refs, pending} = acc, owner) do
+  defp collect_refs(schema, state, owner) do
     case Map.get(schema, "$ref") do
       ref when is_binary(ref) ->
-        refs = if String.starts_with?(ref, "#"), do: MapSet.put(refs, ref), else: refs
-        {registry, refs, [{owner, ref} | pending]}
+        refs = if String.starts_with?(ref, "#"), do: MapSet.put(state.refs, ref), else: state.refs
+        %{state | refs: refs, pending: [{owner, ref} | state.pending]}
       _ ->
-        acc
+        state
     end
   end
 end

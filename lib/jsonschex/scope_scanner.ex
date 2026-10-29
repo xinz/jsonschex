@@ -39,8 +39,10 @@ defmodule JSONSchex.ScopeScanner do
   Both drafts honor `:base_uri` as the initial URI for resolving resource IDs;
   omitting it retains the default `nil` base. Draft 7 also expands the registry
   through explicitly referenced pointer targets, including targets in other
-  registered resources, without scanning unrelated ignored content or loading
-  external schemas. Pointers awaiting a newly discovered resource are retried only
+  registered resources. Ancestor `$id` resources crossed by those pointers are
+  registered as fallback identities without traversing their unrelated siblings or
+  annotations. Ordinary discovery retains precedence, and no external schemas are
+  loaded. Pointers awaiting a newly discovered resource are retried only
   when the registry grows. Additional discovery does not add root-document aliases
   to `refs`.
   """
@@ -66,6 +68,8 @@ defmodule JSONSchex.ScopeScanner do
   and `$dynamicRef` never contribute metadata, even in unclassified document maps.
   Draft 7 also discovers resources inside explicitly referenced pointer targets,
   retaining the containing document or embedded resource as the pointer root.
+  Ancestor resource identities on explicit pointer or selected-entry routes remain
+  addressable without traversing unrelated ignored siblings.
   Draft 2020-12 scans every map/list node without requiring roles or a selected
   schema path.
   """
