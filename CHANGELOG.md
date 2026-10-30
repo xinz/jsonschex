@@ -4,18 +4,18 @@
 
 ### Bug Fixes and Improvements
 
-Fix isolate resouce-local JSON Pointer aliases, and some improvements ([#15](https://github.com/xinz/jsonschex/pull/15))
+Fix resource-local JSON Pointer alias collisions and some improvements and fixing as below. ([#15](https://github.com/xinz/jsonschex/pull/15))
 
-  * Fix eager JSON Pointer alias ownership in both Draft 7 and Draft 2020-12, preventing caller-local aliases from shadowing remote, embedded-resource, or built-in targets. Preserve same-resource eager reuse, selected-fragment pointer roots, escaped definition names, and finalized caches when retrieval and canonical resource URIs differ.
-  * Add `JSONSchex.URIUtil.base/1` to extract fragment-free URI bases, preserving `nil` for a missing URI. Reuse it across compilation, scope discovery, reference resolution, and bundling while retaining caller-specific empty-base handling.
-  * Rename `JSONSchex.URIUtil.with_fragment/2` to `join_fragment/2` to clarify its concatenation-only behavior. 
+  * Isolate eagerly compiled JSON Pointer aliases by resource in both Draft 7 and Draft 2020-12, preventing caller-local aliases from shadowing remote, embedded-resource, or built-in targets. Preserve same-resource cache reuse, selected-fragment pointer roots, escaped definition names, and finalized caches across retrieval and canonical URIs.
+  * Add `JSONSchex.URIUtil.base/1` for fragment-free URI extraction, distinguishing missing (`nil`) from empty (`""`) bases. Reuse it across compilation, scope discovery, reference resolution, and bundling.
+  * Rename `JSONSchex.URIUtil.with_fragment/2` to `join_fragment/2` to clarify its concatenation-only behavior. Retain `with_fragment/2` as a deprecated compatibility alias; joining behavior is unchanged.
   * Simplify `JSONSchex.URIUtil.split_fragment/1` with `:binary.split/3`, preserving first-delimiter splitting and empty-fragment normalization.
 
 Add Draft 7 support, fix pre-existing issues that affect both supported drafts, and improve shared infrastructure and dependencies. ([#14](https://github.com/xinz/jsonschex/pull/14))
 
 #### Draft 7 support and correctness
 
-These additions implement Draft 7 behavior; they are separate from the pre-existing shared defects fixed below.
+These changes implement Draft 7 behavior. Fixes for pre-existing shared defects are listed separately below.
 
   * Support tuple-form `items`, `additionalItems`, and Draft 7 `$ref` sibling semantics alongside Draft 2020-12.
   * Embed the canonical Draft 7 meta-schema and cache its compiled reference registry by format/content assertion options. Both canonical HTTP URI forms, with and without a trailing `#`, share the appropriate cache variant and resolve without a loader or runtime file access.
@@ -23,24 +23,24 @@ These additions implement Draft 7 behavior; they are separate from the pre-exist
   * Discover nested `$id` resources in explicitly referenced pointer targets, including targets under ignored content or in other registered resources, without activating unrelated siblings or loading external schemas. Follow transitive pointers, retry lookups after resource discovery or promotion, preserve fragment-ID pointer roots even with relative retrieval bases, and terminate discovery cycles.
   * Register ancestor resources crossed by explicit pointer and selected-entry routes so targets can refer back to them. Keep these metadata-only registrations lower priority than ordinary discovery, including through transitive references and regardless of pointer order.
   * Compile selected fragments and eager pointer targets against their inherited ancestor `$id` base, applying each resource ID once. Retain the containing document and retrieval base for discovery, and use the owning resource as the JSON Pointer root without promoting fragment-only IDs or ignored `$ref` sibling IDs to resource roots.
-  * Use shared URI normalization to replace inherited fragments in references below Draft 7 named-fragment IDs, so `#` selects the enclosing resource root rather than the ancestor's named subschema.
+  * Replace inherited URI fragments in references beneath Draft 7 named-fragment IDs, so `#` selects the enclosing resource root rather than an ancestor's named subschema.
   * Ensure an ignored Draft 7 `contentSchema` does not suppress enabled `contentEncoding` and `contentMediaType` assertions.
-  * Refactor the Draft 7 scanner to use named state and owner maps, with focused helpers for scheduling, lookup, visitation, scanning, and merging. Preserve fallback-resource precedence, reference replay, changed-owner detection, and cycle termination.
+  * Refactor Draft 7 scope scanning to use named state and owner maps with focused traversal and merging helpers. Preserve fallback-resource precedence, reference replay, owner-change detection, and cycle termination.
   * Run an independent official Draft 7 suite and add compatibility, reference, cache, and compile-time embedding regressions.
 
 #### Shared fixes for Draft 7 and Draft 2020-12
 
-These fixes correct defects already present in the Draft 2020-12 implementation on `main`, and apply to both drafts. They are not regressions introduced by Draft 7 support.
+These fixes apply to both drafts and address defects already present in the Draft 2020-12 implementation on `main`. They are not regressions introduced by Draft 7 support.
 
   * Honor `:base_uri` during schema scope discovery, resolving relative `$id` resources and Draft 2020-12 anchors against the supplied retrieval base instead of registering unqualified identities.
-  * Preserve ancestor `$id` scopes and the owning raw resource during JIT pointer compilation, without reapplying the resource root's ID. Subsequent local and absolute references resolve against the owning resource rather than the selected leaf, fixing embedded-resource raw-root loss.
+  * Preserve ancestor `$id` scopes and the owning raw resource during JIT pointer compilation without reapplying the resource root's ID. Subsequent local and absolute references resolve against that resource rather than the selected leaf, fixing reference resolution within embedded resources.
   * Resolve empty self-references against the current raw resource without loading an unregistered retrieval URI.
   * Resolve absolute JSON Pointer references to the current URN resource locally instead of passing the full URN to JSON Pointer lookup.
   * Assert standalone `contentEncoding` and `contentMediaType` when `content_assertion: true`, even without `contentSchema`. Content handling remains annotation-only by default.
 
 #### Shared infrastructure and maintenance
 
-These changes support both drafts and are not separate fixes for pre-existing `main` defects.
+These changes support both drafts; they are infrastructure and maintenance updates rather than fixes for pre-existing defects on `main`.
 
   * Select the draft from a recognized root `$schema` or the string-valued `:draft` option (`"draft7"` or `"draft2020_12"`), retaining Draft 2020-12 as the fallback. Return structured errors for conflicting declarations or invalid options; compile-time schema macros raise `CompileError`. Fragment compilation uses the containing document's root declaration.
   * Dispatch scope discovery through draft-specific scanners behind the shared scope-scanner interface.
