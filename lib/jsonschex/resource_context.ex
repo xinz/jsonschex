@@ -90,9 +90,9 @@ defmodule JSONSchex.ResourceContext do
   # URI establishes a new raw root for JSON Pointer lookup.
   defp enter_resource(value, id, base, resource, resource_base) do
     new_base = URIUtil.resolve(base, id)
-    {id_base, _fragment} = URIUtil.split_fragment(id)
-    {parent_uri, _fragment} = URIUtil.split_fragment(base || "")
-    {resource_uri, _fragment} = URIUtil.split_fragment(new_base)
+    id_base = URIUtil.base(id)
+    parent_uri = URIUtil.base(base || "")
+    resource_uri = URIUtil.base(new_base)
 
     if id_base == "" or resource_uri == parent_uri,
       do: {new_base, resource, resource_base},

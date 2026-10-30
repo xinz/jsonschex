@@ -6,11 +6,13 @@ defmodule JSONSchex.Types do
   defmodule Schema do
     @moduledoc """
     A compiled JSON Schema, containing executable validation rules and a
-    definition registry for reference resolution.
+    definition registry for reference resolution. `local_refs` caches unqualified
+    pointers owned by `raw`, separately from the shared definition registry.
     """
     @type t :: %__MODULE__{
             rules: list(JSONSchex.Types.Rule.t()),
             defs: map() | nil,
+            local_refs: map(),
             # Used for error reporting context
             source_id: String.t() | nil,
             raw: map() | nil,
@@ -30,6 +32,7 @@ defmodule JSONSchex.Types do
       :source_id,
       :raw,
       :loader,
+      local_refs: %{},
       format_assertion: false,
       content_assertion: false,
       draft: "draft2020_12"
@@ -41,19 +44,21 @@ defmodule JSONSchex.Types do
     Lightweight runtime context threaded through validation.
 
     Holds a reference to the immutable root `Schema` and carries per-scope
-    state (scope stack, current source ID, raw schema) that changes as
-    validation descends through `$id` boundaries.
+    state (scope stack, current source ID, raw schema, and resource-local pointer
+    cache) that changes as validation descends through `$id` boundaries.
     """
     @type t :: %__MODULE__{
             root_schema: JSONSchex.Types.Schema.t(),
             scope_stack: list(String.t()),
             source_id: String.t() | nil,
-            raw: map() | nil
+            raw: map() | nil,
+            local_refs: map()
           }
     defstruct [
       :root_schema,
       :source_id,
       :raw,
+      local_refs: %{},
       scope_stack: []
     ]
   end

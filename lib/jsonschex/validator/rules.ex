@@ -407,9 +407,10 @@ defmodule JSONSchex.Validator.Rules do
          resolved_uri,
          {path, evaluated, validation_context} = context
        ) do
-    case Map.get(validation_context.root_schema.defs, resolved_uri) do
+    case Reference.lookup_ref(resolved_uri, validation_context) do
       %Schema{} = schema ->
-        Validator.validate_entry(schema, data, path, validation_context, evaluated)
+        # Preserve local-reference ownership just as the resolver's slow path does.
+        Validator.validate_reference_entry(schema, data, path, validation_context, evaluated, ref_string)
 
       _ ->
         Reference.validate_ref(data, ref_string, context)
