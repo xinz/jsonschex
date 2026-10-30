@@ -4,12 +4,11 @@
 
 ### Bug Fixes and Improvements
 
+Fix isolate resouce-local JSON Pointer aliases, and some improvements ([#15](https://github.com/xinz/jsonschex/pull/15))
+
   * Fix eager JSON Pointer alias ownership in both Draft 7 and Draft 2020-12, preventing caller-local aliases from shadowing remote, embedded-resource, or built-in targets. Preserve same-resource eager reuse, selected-fragment pointer roots, escaped definition names, and finalized caches when retrieval and canonical resource URIs differ.
-
   * Add `JSONSchex.URIUtil.base/1` to extract fragment-free URI bases, preserving `nil` for a missing URI. Reuse it across compilation, scope discovery, reference resolution, and bundling while retaining caller-specific empty-base handling.
-
   * Rename `JSONSchex.URIUtil.with_fragment/2` to `join_fragment/2` to clarify its concatenation-only behavior. 
-
   * Simplify `JSONSchex.URIUtil.split_fragment/1` with `:binary.split/3`, preserving first-delimiter splitting and empty-fragment normalization.
 
 Add Draft 7 support, fix pre-existing issues that affect both supported drafts, and improve shared infrastructure and dependencies. ([#14](https://github.com/xinz/jsonschex/pull/14))
