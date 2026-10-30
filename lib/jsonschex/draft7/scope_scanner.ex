@@ -166,11 +166,12 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   # The base precedes the raw root's own $id, so pointer resolution and scanning
   # a reached target each apply that ID once. Priority is inherited independently.
   defp resource_owner(%{"$ref" => _}, _base_uri, owner), do: owner
+  defp resource_owner(%{"$id" => ""} = _raw_schema, _base_uri, owner), do: owner
   defp resource_owner(%{"$id" => id} = raw_schema, base_uri, owner) when is_binary(id) do
-    {id_base, _fragment} = URIUtil.split_fragment(id)
+    id_base = URIUtil.base(id)
     uri = URIUtil.resolve(base_uri, id) || ""
-    {base, _fragment} = URIUtil.split_fragment(uri)
-    {owner_base, _fragment} = URIUtil.split_fragment(resource_uri(owner))
+    base = URIUtil.base(uri)
+    owner_base = URIUtil.base(resource_uri(owner))
 
     # Fragment IDs stay within the raw resource, even when URI resolution falls
     # back to the child ID for a relative parent base.
@@ -283,7 +284,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
 
       _ ->
         uri = resource_uri(owner)
-        {resource_base, _fragment} = URIUtil.split_fragment(uri)
+        resource_base = URIUtil.base(uri)
         {ref_base, pointer} = URIUtil.split_fragment(URIUtil.resolve(uri, ref))
 
         if ref_base == resource_base,

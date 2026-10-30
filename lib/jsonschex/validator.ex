@@ -19,7 +19,8 @@ defmodule JSONSchex.Validator do
   """
 
   alias JSONSchex.Types.{Error, Rule, Schema, ValidationContext}
-  alias JSONSchex.Validator.Rules
+  alias JSONSchex.URIUtil
+  alias JSONSchex.Validator.{Reference, Rules}
 
   @empty_mapset MapSet.new()
 
@@ -48,7 +49,8 @@ defmodule JSONSchex.Validator do
       root_schema: root_schema,
       scope_stack: initial_stack,
       source_id: id,
-      raw: root_schema.raw
+      raw: root_schema.raw,
+      local_refs: root_schema.local_refs
     }
 
     case validate_entry(root_schema, data, [], ctx) do
@@ -197,6 +199,19 @@ defmodule JSONSchex.Validator do
     current_context = update_context_if_needed(current_schema, root_context)
     initial_ctx = {path, initial_evaluated, current_context}
     run_rules(rules, data, path, current_context, initial_evaluated, initial_ctx, [])
+  end
+
+  @doc false
+  def validate_reference_entry(schema, data, path, context, evaluated, ref \\ nil) do
+    entry_mode =
+      case ref do
+        "#" <> _ -> :local_reference
+        "" -> :local_reference
+        _ -> :reference
+      end
+
+    context = update_context_if_needed(schema, context, entry_mode)
+    validate_entry(schema, data, path, context, evaluated)
   end
 
   defp to_error_entry(errs, _path, _rule_name, _data) when is_list(errs), do: errs
@@ -611,26 +626,52 @@ defmodule JSONSchex.Validator do
     end
   end
 
-  defp update_context_if_needed(%{source_id: nil}, %ValidationContext{} = root_context) do
+  defp update_context_if_needed(schema, context, entry_mode \\ :structural)
+
+  defp update_context_if_needed(%{source_id: nil}, %ValidationContext{} = root_context, _entry_mode) do
     root_context
   end
 
   defp update_context_if_needed(
          %{source_id: id},
-         %ValidationContext{source_id: id} = root_context
+         %ValidationContext{source_id: id} = root_context,
+         _entry_mode
        ) do
     root_context
   end
 
   defp update_context_if_needed(
          %{source_id: source_id} = current_schema,
-         %ValidationContext{} = root_context
+         %ValidationContext{} = root_context,
+         entry_mode
        ) do
+    base = URIUtil.base(source_id)
+    current_base = URIUtil.base(root_context.source_id || "")
+    # Empty URI bases do not identify separately loaded resources. Only local
+    # descent/reference or an identical raw owner can preserve that context.
+    same_base? = base == current_base and
+      (base != "" or entry_mode != :reference or current_schema.raw === root_context.raw)
+    same_resource? = same_base? or
+      (entry_mode == :structural and fragment_only_id?(current_schema, root_context.source_id, source_id))
+
+    # Structural fragment-only IDs keep the enclosing owner even when relative
+    # URI merging falls back. Reference entry must honor the explicitly selected
+    # resource instead. Both paths retain their dynamic scope-stack transition.
     %{
       root_context
       | source_id: source_id,
-        raw: current_schema.raw,
+        raw: if(same_resource?, do: root_context.raw, else: current_schema.raw),
+        local_refs: if(same_resource?,
+          do: root_context.local_refs,
+          else: Reference.local_refs_for(current_schema, root_context.root_schema)),
         scope_stack: [source_id | root_context.scope_stack]
     }
   end
+
+  defp fragment_only_id?(%{raw: %{"$id" => id}}, parent_base, source_id) when is_binary(id) do
+    # URI resolution can fall back to the child fragment for a relative parent.
+    # Check the original ID and its inherited resolution before changing owners.
+    URIUtil.base(id) == "" and URIUtil.resolve(parent_base, id) == source_id
+  end
+  defp fragment_only_id?(_schema, _parent_base, _source_id), do: false
 end

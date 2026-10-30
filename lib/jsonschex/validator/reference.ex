@@ -20,7 +20,7 @@ defmodule JSONSchex.Validator.Reference do
   def validate_dynamic_ref(data, ref_string, {path, evaluated, validation_context} = context) do
     anchor = URIUtil.fragment(ref_string)
 
-    static_match = resolve_scoped_ref(validation_context.source_id, ref_string, validation_context.root_schema.defs)
+    static_match = resolve_scoped_ref(ref_string, validation_context)
 
     is_dynamic_candidate =
       anchor && static_match && is_map(static_match.raw) && Map.get(static_match.raw, "$dynamicAnchor") == anchor
@@ -30,7 +30,7 @@ defmodule JSONSchex.Validator.Reference do
         validation_context.scope_stack
         |> Enum.reverse()
         |> Enum.find_value(fn base_uri ->
-          candidate_uri = URIUtil.with_fragment(base_uri, anchor)
+          candidate_uri = URIUtil.join_fragment(base_uri, anchor)
 
           case Map.get(validation_context.root_schema.defs, candidate_uri) do
             %{raw: raw} = schema when is_map(raw) ->
@@ -45,9 +45,9 @@ defmodule JSONSchex.Validator.Reference do
         end)
 
       if dynamic_match do
-        Validator.validate_entry(dynamic_match, data, path, validation_context, evaluated)
+        Validator.validate_reference_entry(dynamic_match, data, path, validation_context, evaluated)
       else
-        Validator.validate_entry(static_match, data, path, validation_context, evaluated)
+        Validator.validate_reference_entry(static_match, data, path, validation_context, evaluated, ref_string)
       end
     else
       validate_ref(data, ref_string, context)
@@ -64,12 +64,12 @@ defmodule JSONSchex.Validator.Reference do
   def validate_ref(data, ref_string, {path, evaluated, validation_context}) do
     effective_context = effective_context_for_ref(validation_context, ref_string)
 
-    case resolve_scoped_ref(effective_context.source_id, ref_string, effective_context.root_schema.defs) do
+    case resolve_scoped_ref(ref_string, effective_context) do
       nil ->
         resolve_missing_ref(data, ref_string, path, effective_context, evaluated)
 
       schema ->
-        Validator.validate_entry(schema, data, path, effective_context, evaluated)
+        Validator.validate_reference_entry(schema, data, path, effective_context, evaluated, ref_string)
     end
   end
 
@@ -122,7 +122,7 @@ defmodule JSONSchex.Validator.Reference do
       updated_context = merge_defs_into_context(validation_context, base_schema.defs)
 
       # Compile the pointer target against the matched resource base, but keep
-      # the current validation context so validate_entry/5 records the resource
+      # the current validation context so reference entry records the resource
       # transition and preserves dynamic scope semantics.
       resolve_and_validate_jit(
         data,
@@ -165,8 +165,7 @@ defmodule JSONSchex.Validator.Reference do
   defp built_in_defs_for_ref(_, nil, _schema), do: nil
   defp built_in_defs_for_ref(base_uri, ref, schema) do
     uri = uri_to_resolve(base_uri, ref)
-    {base, _fragment} = URIUtil.split_fragment(uri)
-    builtin_compiled_defs(base, schema)
+    builtin_compiled_defs(URIUtil.base(uri), schema)
   end
 
   defp builtin_compiled_defs(base, %{draft: "draft7"} = schema) do
@@ -176,17 +175,40 @@ defmodule JSONSchex.Validator.Reference do
   end
   defp builtin_compiled_defs(base, %{draft: "draft2020_12"}), do: Draft202012Schemas.compiled_defs(base)
 
-  defp resolve_scoped_ref(base_uri, ref, registry) when base_uri == ref do
-    Map.get(registry, ref)
+  @doc false
+  def lookup_ref("#/" <> _ = ref, context), do: Map.get(context.local_refs, ref)
+  def lookup_ref("#", context), do: Map.get(context.local_refs, "#")
+  def lookup_ref("#" <> fragment = ref, context) do
+    case URI.decode(fragment) do
+      "/" <> _ -> Map.get(context.local_refs, ref)
+      _ -> Map.get(context.root_schema.defs, uri_to_resolve(context.source_id, ref))
+    end
   end
-  defp resolve_scoped_ref(base_uri, ref, registry) do
-    uri = uri_to_resolve(base_uri, ref)
-    Map.get(registry, uri) || Map.get(registry, ref)
+  def lookup_ref(uri, context), do: Map.get(context.root_schema.defs, uri)
+
+  @doc false
+  def local_refs_for(schema, root_schema) do
+    # The root self-entry predates eager pointer compilation. Preserve those
+    # targets' inherited dialect instead of recompiling with default vocabularies.
+    if URIUtil.base(schema.source_id) == URIUtil.base(root_schema.source_id) and
+         schema.raw === root_schema.raw do
+      root_schema.local_refs
+    else
+      schema.local_refs
+    end
+  end
+
+  defp resolve_scoped_ref(ref, context) do
+    uri = if context.source_id == ref, do: ref, else: uri_to_resolve(context.source_id, ref)
+
+    # Bare pointers in the merged registry have no resource ownership. Reuse
+    # only the active raw root's aliases, including for normalized URN pointers.
+    lookup_ref(uri, context) || Map.get(context.local_refs, ref)
   end
 
   defp uri_to_resolve(base_uri, "#" <> _ = ref) when base_uri != nil do
-    {base_uri, _fragment} = URIUtil.split_fragment(base_uri)
-    URIUtil.with_fragment(base_uri, URIUtil.fragment(ref))
+    base_uri = URIUtil.base(base_uri)
+    URIUtil.join_fragment(base_uri, URIUtil.fragment(ref))
   end
   defp uri_to_resolve(base_uri, ref) when base_uri != nil do
     resolve_relative_uri(base_uri, ref)
@@ -247,7 +269,8 @@ defmodule JSONSchex.Validator.Reference do
       loaded_schema ->
         updated_context = %{validation_context |
           source_id: loaded_schema.source_id,
-          raw: loaded_schema.raw
+          raw: loaded_schema.raw,
+          local_refs: local_refs_for(loaded_schema, validation_context.root_schema)
         }
 
         validate_ref(data, URIUtil.local_ref(fragment), {current_path, evaluated, updated_context})
@@ -290,6 +313,16 @@ defmodule JSONSchex.Validator.Reference do
       {:ok, compiled_remote} ->
         merged_defs = Map.put(compiled_remote.defs || %{}, base, compiled_remote)
 
+        # The canonical self-entry predates eager pointer compilation. Publish the
+        # finalized cache under both retrieval and canonical resource identities.
+        merged_defs =
+          case URIUtil.base(compiled_remote.source_id) do
+            canonical when is_binary(canonical) and canonical != "" ->
+              Map.put(merged_defs, canonical, compiled_remote)
+            _ ->
+              merged_defs
+          end
+
         merged_context = merge_defs_into_context(validation_context, merged_defs)
         {:ok, compiled_remote, merged_context}
 
@@ -311,7 +344,7 @@ defmodule JSONSchex.Validator.Reference do
     if fragment != nil do
       validate_ref(data, URIUtil.local_ref(fragment), {current_path, evaluated, updated_context})
     else
-      Validator.validate_entry(compiled_schema, data, current_path, updated_context, evaluated)
+      Validator.validate_reference_entry(compiled_schema, data, current_path, updated_context, evaluated)
     end
   end
 
@@ -326,7 +359,8 @@ defmodule JSONSchex.Validator.Reference do
     %{validation_context |
       scope_stack: new_stack,
       source_id: compiled_schema.source_id,
-      raw: compiled_schema.raw
+      raw: compiled_schema.raw,
+      local_refs: local_refs_for(compiled_schema, validation_context.root_schema)
     }
   end
 
@@ -358,8 +392,9 @@ defmodule JSONSchex.Validator.Reference do
           {:ok, compiled_fragment} ->
             # A source transition must carry the owning resource, not the selected
             # leaf, so subsequent pointers resolve against the same URI and raw root.
-            compiled_fragment = %{compiled_fragment | raw: resource}
-            Validator.validate_entry(compiled_fragment, data, current_path, validation_context, evaluated)
+            local_refs = if compiled_fragment.raw === resource, do: compiled_fragment.local_refs, else: %{}
+            compiled_fragment = %{compiled_fragment | raw: resource, local_refs: local_refs}
+            Validator.validate_reference_entry(compiled_fragment, data, current_path, validation_context, evaluated)
 
           {:error, error} ->
             {:error, %ErrorContext{contrast: "invalid_schema", input: pointer, error_detail: error}}
