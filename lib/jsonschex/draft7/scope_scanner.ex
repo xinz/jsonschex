@@ -32,13 +32,13 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   def scan(schema, opts \\ []) do
     base_uri = Keyword.get(opts, :base_uri)
     owner = document_owner(schema, base_uri)
-    schema |> do_scan(base_uri, new_state(), owner) |> finish()
+    schema |> do_scan(base_uri, new_state(), owner) |> finish(opts)
   end
 
   def scan_all(document, base_uri, opts) do
     path = Keyword.get(opts, :schema_path)
     owner = document_owner(document, base_uri)
-    document |> do_scan_all(base_uri, new_state(), :document, path, owner) |> finish()
+    document |> do_scan_all(base_uri, new_state(), :document, path, owner) |> finish(opts)
   end
 
 
@@ -48,7 +48,8 @@ defmodule JSONSchex.Draft7.ScopeScanner do
 
 
   defp document_owner(document, base_uri) do
-    %{key: :document, raw: document, base_uri: base_uri, priority: :ordinary}
+    %{key: :document, raw: document, base_uri: base_uri, priority: :ordinary,
+      resource: %{raw: document, source_id: base_uri}}
   end
 
   defp do_scan(raw_schema, base_uri, state, owner) when is_map(raw_schema) do
@@ -56,14 +57,13 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     current_id = Map.get(schema, "$id")
     new_base_uri = URIUtil.resolve(base_uri, current_id) || ""
 
+    owner = resource_owner(raw_schema, base_uri, owner)
     resources =
       if current_id do
-        Map.put(state.resources, new_base_uri, raw_schema)
+        Map.put(state.resources, new_base_uri, scope_entry(raw_schema, owner))
       else
         state.resources
       end
-
-    owner = resource_owner(raw_schema, base_uri, owner)
     state = collect_refs(schema, %{state | resources: resources}, owner)
 
     SchemaTraversal.reduce_scope_subschemas(schema, state, fn subschema, acc ->
@@ -88,14 +88,13 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     new_base_uri = if is_binary(current_id), do: URIUtil.resolve(base_uri, current_id), else: base_uri
     new_base_uri = new_base_uri || ""
 
+    owner = resource_owner(raw_schema, base_uri, owner)
     resources =
       if is_binary(current_id) do
-        Map.put(state.resources, new_base_uri, raw_schema)
+        Map.put(state.resources, new_base_uri, scope_entry(raw_schema, owner))
       else
         state.resources
       end
-
-    owner = resource_owner(raw_schema, base_uri, owner)
     state = collect_refs(schema, %{state | resources: resources}, owner)
 
     state = Enum.reduce(schema, state, fn {key, value}, acc ->
@@ -151,7 +150,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     owner = resource_owner(map, base_uri, owner)
     id = scope_id(map)
     next_base = if is_binary(id), do: URIUtil.resolve(base_uri, id), else: base_uri
-    fallbacks = register_fallback_resource(map, base_uri, state.fallback_resources)
+    fallbacks = register_fallback_resource(map, base_uri, owner, state.fallback_resources)
     state = %{state | fallback_resources: fallbacks}
     scan_selected_route(Map.get(map, key), next_base, state, rest, owner)
   end
@@ -177,7 +176,8 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     # back to the child ID for a relative parent base.
     if id_base == "" or base == owner_base,
       do: owner,
-      else: %{owner | key: {:id, uri}, raw: raw_schema, base_uri: base_uri}
+      else: %{owner | key: {:id, uri}, raw: raw_schema, base_uri: base_uri,
+                     resource: %{raw: raw_schema, source_id: base}}
   end
   defp resource_owner(_raw_schema, _base_uri, owner), do: owner
 
@@ -185,17 +185,26 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   defp resource_uri(%{key: :document, base_uri: base_uri}), do: base_uri || ""
 
   # Crossed ancestors contribute fallback identities, never traversal of siblings.
-  defp register_fallback_resource(%{"$ref" => _}, _base_uri, fallbacks), do: fallbacks
-  defp register_fallback_resource(%{"$id" => id} = raw_schema, base_uri, fallbacks) when is_binary(id) do
-    Map.put_new(fallbacks, URIUtil.resolve(base_uri, id) || "", raw_schema)
+  defp register_fallback_resource(%{"$ref" => _}, _base_uri, _owner, fallbacks), do: fallbacks
+  defp register_fallback_resource(%{"$id" => id} = raw_schema, base_uri, owner, fallbacks) when is_binary(id) do
+    Map.put_new(fallbacks, URIUtil.resolve(base_uri, id) || "", scope_entry(raw_schema, owner))
   end
-  defp register_fallback_resource(_raw_schema, _base_uri, fallbacks), do: fallbacks
+  defp register_fallback_resource(_raw_schema, _base_uri, _owner, fallbacks), do: fallbacks
 
-  defp finish(state) do
+  defp scope_entry(schema, owner), do: %{schema: schema, resource: owner.resource}
+
+  defp finish(state, opts) do
     discovered = follow_refs(state.pending, [], %{}, %{state | pending: []}, false)
+    entries = Map.merge(discovered.fallback_resources, discovered.resources)
+    registry = Map.new(entries, fn {id, entry} -> {id, entry.schema} end)
 
     # Discovery-only refs must not become aliases against the root document.
-    {Map.merge(discovered.fallback_resources, discovered.resources), state.refs}
+    if Keyword.get(opts, :with_resource_contexts, false) == true do
+      resources = Map.new(entries, fn {id, entry} -> {id, entry.resource} end)
+      {registry, state.refs, resources}
+    else
+      {registry, state.refs}
+    end
   end
 
   # Growth includes fallback identities and promotion to ordinary resources.
@@ -237,7 +246,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     case ResourceContext.resolve(owner.raw, owner.base_uri, pointer, draft: "draft7") do
       {:ok, context} ->
         discovered = scan_reached_target(context, owner, state.fallback_resources)
-        updated = merge_discovery(state, discovered, owner.priority, context.resources)
+        updated = merge_discovery(state, discovered, owner, context.resources)
         {discovered.pending, updated, seen, resources_grew?(state, updated)}
       :error ->
         {[], state, seen, false}
@@ -254,17 +263,18 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   end
 
 
-  defp merge_discovery(state, discovered, priority, ancestors) do
+  defp merge_discovery(state, discovered, owner, ancestors) do
     # Weak paths stay weak through new IDs and references to ordinary resources.
     # Existing ordinary discoveries retain their original duplicate precedence.
     {resources, fallbacks} =
-      case priority do
+      case owner.priority do
         :fallback -> {state.resources, Map.merge(discovered.resources, discovered.fallback_resources)}
         :ordinary -> {Map.merge(discovered.resources, state.resources), discovered.fallback_resources}
       end
 
-    fallbacks = Enum.reduce(ancestors, fallbacks, fn {raw, parent_base}, acc ->
-      register_fallback_resource(raw, parent_base, acc)
+    {fallbacks, _owner} = Enum.reduce(ancestors, {fallbacks, owner}, fn {raw, parent_base}, {acc, parent_owner} ->
+      current_owner = resource_owner(raw, parent_base, parent_owner)
+      {register_fallback_resource(raw, parent_base, current_owner, acc), current_owner}
     end)
 
     %{state | resources: resources, fallback_resources: fallbacks}
@@ -303,11 +313,10 @@ defmodule JSONSchex.Draft7.ScopeScanner do
       end
 
     case resource do
-      resource when is_map(resource) ->
-        # The URI already includes the root's ID. Normalize only this resolution
-        # copy, retaining the original raw schema in both resource registries.
+      %{schema: resource, resource: resource_context} when is_map(resource) ->
+        # Normalize only the resolution copy; the reference owner retains its ID.
         owner = %{key: {:id, base_uri}, raw: Map.delete(resource, "$id"),
-                  base_uri: base_uri, priority: priority}
+                  base_uri: base_uri, priority: priority, resource: resource_context}
         {:ok, owner, pointer}
       _ ->
         :unknown_resource

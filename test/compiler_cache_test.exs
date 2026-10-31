@@ -125,10 +125,10 @@ defmodule JSONSchex.Test.CompilerReuse do
         entry: "#/schema", base_uri: "/api/document.json")
       assert compiled.raw === document
 
-      # The scope entry retains the selected schema's original raw and local defs,
-      # not the containing document or the subsequently merged runtime definitions.
+      # The scope keeps the selected node's compiled defs, but references resolve
+      # against the containing document rather than the selected node's raw map.
       anchored = Map.fetch!(compiled.defs, "/api/document.json#entry")
-      assert anchored.raw === entry
+      assert anchored.raw === document
       assert anchored.defs["#/$defs/Value"].raw === local
 
       resolved = Map.fetch!(compiled.defs, "#/$defs/Value")
@@ -206,7 +206,9 @@ defmodule JSONSchex.Test.CompilerReuse do
       assert rule(candidate, :minimum).params === 1
 
       registered = Map.fetch!(compiled.defs, @root <> "#shared")
-      assert registered.raw === selected
+      assert registered.raw === raw
+      expected_anchor = if selected_keyword == "$dynamicAnchor", do: "shared", else: nil
+      assert registered.dynamic_anchor === expected_anchor
       assert registered.source_id === @root
       assert rule(registered, :minimum).params === minimum
       refute registered.rules === candidate.rules
@@ -239,8 +241,10 @@ defmodule JSONSchex.Test.CompilerReuse do
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, %{"child" => "1"})
 
     collision = %{"$id" => "#/$defs/Existing", "$schema" => @custom, "type" => "integer"}
-    assert {:ok, skipped} = JSONSchex.compile(%{"$defs" => %{"Existing" => collision}}, loader: loader)
-    assert skipped.defs["#/$defs/Existing"].raw === collision
+    document = %{"$defs" => %{"Existing" => collision}}
+    assert {:ok, skipped} = JSONSchex.compile(document, loader: loader)
+    assert skipped.defs["#/$defs/Existing"].raw === document
+    assert rule(skipped.defs["#/$defs/Existing"], :type).params === "integer"
     refute_received {:loaded, _}
   end
 

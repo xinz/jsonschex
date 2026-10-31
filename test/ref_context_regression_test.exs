@@ -187,6 +187,59 @@ defmodule JSONSchex.Test.RefContextRegression do
                JSONSchex.validate(compiled, "remote")
     end
 
+    test "cross-resource anchor entry retains its enclosing pointer root (#{draft})" do
+      root_uri = "https://example.com/root"
+      remote_uri = "https://example.com/remote"
+      keyword = if @draft == "draft7", do: "definitions", else: "$defs"
+      anchor = if @draft == "draft7", do: %{"$id" => "#entry"}, else: %{"$anchor" => "entry"}
+      entry = Map.merge(anchor, %{
+        keyword => %{"x" => %{"const" => "decoy"}},
+        "allOf" => [%{"$ref" => "#/" <> keyword <> "/x"}]
+      })
+      schema = %{
+        "$id" => root_uri,
+        "allOf" => [%{"$ref" => remote_uri}],
+        keyword => %{"x" => %{"const" => "correct"}, "entry" => entry}
+      }
+      loader = fn ^remote_uri -> {:ok, %{"$ref" => root_uri <> "#entry"}} end
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: @draft, loader: loader)
+      # Neither a named fragment ID nor an anchor creates a new pointer root.
+      assert :ok == JSONSchex.validate(compiled, "correct")
+      assert {:error, [%{rule: :const, context: %{contrast: "correct"}}]} =
+               JSONSchex.validate(compiled, "decoy")
+    end
+
+    test "cross-resource anchors use an embedded resource rather than the outer root (#{draft})" do
+      root_uri = "https://example.com/root"
+      remote_uri = "https://example.com/remote"
+      nested_uri = "https://example.com/nested/"
+      keyword = if @draft == "draft7", do: "definitions", else: "$defs"
+      anchor = if @draft == "draft7", do: %{"$id" => "#entry"}, else: %{"$anchor" => "entry"}
+      entry = Map.merge(anchor, %{
+        keyword => %{"x" => %{"const" => "decoy"}},
+        "allOf" => [%{"$ref" => "#/" <> keyword <> "/x"}]
+      })
+      resource = %{
+        "$id" => "nested/",
+        keyword => %{"x" => %{"const" => "inner"}, "entry" => entry}
+      }
+      schema = %{
+        "$id" => root_uri,
+        keyword => %{"x" => %{"const" => "outer"}, "holder" => resource},
+        "allOf" => [%{"$ref" => remote_uri}],
+        "properties" => %{"unused" => %{"$ref" => "#/" <> keyword <> "/x"}}
+      }
+      loader = fn ^remote_uri -> {:ok, %{"$ref" => nested_uri <> "#entry"}} end
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: @draft, loader: loader)
+      assert :ok == JSONSchex.validate(compiled, "inner")
+      for invalid <- ["outer", "decoy"] do
+        assert {:error, [%{rule: :const, context: %{contrast: "inner"}}]} =
+                 JSONSchex.validate(compiled, invalid)
+      end
+    end
+
     test "non-root resource re-entry resolves local pointers in its own document (#{draft})" do
       caller_uri = "https://example.com/caller.json"
       a_uri = "https://example.com/a.json"
@@ -269,6 +322,29 @@ defmodule JSONSchex.Test.RefContextRegression do
       end
     end
 
+    test "local pointers can enter an embedded resource (#{draft})" do
+      for pointer <- ["#/definitions/inner", "#/definitions/%69nner"] do
+        schema = %{
+          "$id" => "https://example.com/root",
+          "definitions" => %{
+            "x" => %{"const" => "outer"},
+            "inner" => %{
+              "$id" => "nested/",
+              "definitions" => %{"x" => %{"const" => "inner"}},
+              "properties" => %{"value" => %{"$ref" => "#/definitions/x"}}
+            }
+          },
+          "allOf" => [%{"$ref" => pointer}],
+          "properties" => %{"unused" => %{"$ref" => "#/definitions/x"}}
+        }
+
+        assert {:ok, compiled} = JSONSchex.compile(schema, draft: @draft)
+        assert :ok == JSONSchex.validate(compiled, %{"value" => "inner"})
+        assert {:error, [%{rule: :const, context: %{contrast: "inner"}}]} =
+                 JSONSchex.validate(compiled, %{"value" => "outer"})
+      end
+    end
+
     test "JIT local pointer retains its embedded resource root (#{draft})" do
       remote_uri = "https://example.com/remote.json"
       remote = %{
@@ -293,6 +369,45 @@ defmodule JSONSchex.Test.RefContextRegression do
       assert :ok == JSONSchex.validate(compiled, 1)
       assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
                JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "JIT dynamic references distinguish nested dynamic anchors from static anchors" do
+    root_uri = "https://example.com/root"
+    remote_uri = "https://example.com/remote"
+
+    for {anchor_keyword, accepted, rejected} <- [
+          {"$dynamicAnchor", "outer", "remote"},
+          {"$anchor", "remote", "outer"}
+        ] do
+      remote = %{
+        "$defs" => %{
+          "value" => %{"const" => "remote"},
+          "node" => %{
+            anchor_keyword => "node",
+            "properties" => %{"value" => %{"$ref" => "#/$defs/value"}}
+          }
+        },
+        "entry" => %{"properties" => %{"child" => %{"$dynamicRef" => "#node"}}}
+      }
+      schema = %{
+        "$id" => root_uri,
+        "$defs" => %{
+          "value" => %{"const" => "outer"},
+          "override" => %{
+            "$dynamicAnchor" => "node",
+            "properties" => %{"value" => %{"$ref" => "#/$defs/value"}}
+          }
+        },
+        "$ref" => remote_uri <> "#/entry"
+      }
+      loader = fn ^remote_uri -> {:ok, remote} end
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft2020_12", loader: loader)
+      # Neither resource root is dynamic; eligibility belongs to the selected node.
+      assert :ok == JSONSchex.validate(compiled, %{"child" => %{"value" => accepted}})
+      assert {:error, [%{rule: :const, context: %{contrast: ^accepted}}]} =
+               JSONSchex.validate(compiled, %{"child" => %{"value" => rejected}})
     end
   end
 
@@ -338,6 +453,117 @@ defmodule JSONSchex.Test.RefContextRegression do
     assert :ok == JSONSchex.validate(compiled, data)
     assert {:error, [%{rule: :const, context: %{contrast: "remote"}}]} =
              JSONSchex.validate(compiled, put_in(data, ["next", "value"], "caller"))
+  end
+
+  test "anonymous dynamic re-entry preserves the root's inherited vocabulary" do
+    remote_uri = "https://example.com/remote"
+    dialect_uri = "https://example.com/core-and-applicator"
+    dialect = %{
+      "$vocabulary" => %{
+        "https://json-schema.org/draft/2020-12/vocab/core" => true,
+        "https://json-schema.org/draft/2020-12/vocab/applicator" => true
+      }
+    }
+    remote = %{
+      "$dynamicAnchor" => "node",
+      "properties" => %{
+        "value" => %{"const" => "remote"},
+        "back" => %{"$dynamicRef" => "#node"}
+      }
+    }
+    schema = %{
+      "$schema" => dialect_uri,
+      "$dynamicAnchor" => "node",
+      "definitions" => %{
+        "value" => %{"const" => "ignored"},
+        "forward" => %{"$anchor" => "forward", "$ref" => remote_uri}
+      },
+      "properties" => %{
+        "value" => %{"$ref" => "#/definitions/value"},
+        "next" => %{"$ref" => "#forward"}
+      }
+    }
+    loader = fn
+      ^dialect_uri -> {:ok, dialect}
+      ^remote_uri -> {:ok, remote}
+      uri -> flunk("Unexpected external load: #{uri}")
+    end
+    data = %{
+      "value" => "caller",
+      "next" => %{"value" => "remote", "back" => %{"value" => "caller"}}
+    }
+
+    for base_uri <- [nil, ""] do
+      assert {:ok, compiled} = JSONSchex.compile(schema,
+        draft: "draft2020_12", loader: loader, base_uri: base_uri)
+      assert :ok == JSONSchex.validate(compiled, %{"value" => "caller"})
+      assert :ok == JSONSchex.validate(compiled, data)
+      assert {:error, [%{rule: :const, context: %{contrast: "remote"}}]} =
+               JSONSchex.validate(compiled, put_in(data, ["next", "value"], "caller"))
+    end
+  end
+
+  test "an anchor retains its resource snapshot after its canonical URI is replaced" do
+    a_uri = "https://example.com/a.json"
+    b_uri = "https://example.com/b.json"
+    canonical_uri = "https://example.com/shared.json"
+    resource_a = %{
+      "$id" => canonical_uri,
+      "$defs" => %{
+        "x" => %{"const" => "A"},
+        "entry" => %{"$anchor" => "entry", "$ref" => "#/$defs/x"}
+      },
+      "allOf" => [%{"$ref" => b_uri}]
+    }
+    resource_b = %{
+      "$id" => canonical_uri,
+      "$defs" => %{"x" => %{"const" => "B"}},
+      "$ref" => canonical_uri <> "#entry"
+    }
+    loader = fn
+      ^a_uri -> {:ok, resource_a}
+      ^b_uri -> {:ok, resource_b}
+      uri -> flunk("Unexpected external load: #{uri}")
+    end
+
+    assert {:ok, compiled} = JSONSchex.compile(%{"$ref" => a_uri},
+      draft: "draft2020_12", loader: loader)
+    # B replaces the canonical resource, but does not replace A's registered anchor.
+    assert :ok == JSONSchex.validate(compiled, "A")
+    assert {:error, [%{rule: :const, context: %{contrast: "A"}}]} =
+             JSONSchex.validate(compiled, "B")
+  end
+
+  test "a pointer-shaped Draft 7 ID retains its registered resource snapshot" do
+    a_uri = "https://example.com/a.json"
+    b_uri = "https://example.com/b.json"
+    canonical_uri = "https://example.com/shared.json"
+    resource_a = %{
+      "$id" => canonical_uri,
+      "definitions" => %{
+        "x" => %{"const" => "A"},
+        "entry" => %{
+          "$id" => "#/definitions/entry",
+          "allOf" => [%{"$ref" => "#/definitions/x"}]
+        }
+      },
+      "allOf" => [%{"$ref" => b_uri}]
+    }
+    resource_b = %{
+      "$id" => canonical_uri,
+      "definitions" => %{"x" => %{"const" => "B"}},
+      "allOf" => [%{"$ref" => canonical_uri <> "#/definitions/entry"}]
+    }
+    loader = fn
+      ^a_uri -> {:ok, resource_a}
+      ^b_uri -> {:ok, resource_b}
+      uri -> flunk("Unexpected external load: #{uri}")
+    end
+
+    assert {:ok, compiled} = JSONSchex.compile(%{"$ref" => a_uri}, draft: "draft7", loader: loader)
+    assert :ok == JSONSchex.validate(compiled, "A")
+    assert {:error, [%{rule: :const, context: %{contrast: "A"}}]} =
+             JSONSchex.validate(compiled, "B")
   end
 
   test "canonical resource recovery preserves finalized pointer aliases" do

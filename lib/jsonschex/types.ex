@@ -5,17 +5,22 @@ defmodule JSONSchex.Types do
 
   defmodule Schema do
     @moduledoc """
-    A compiled JSON Schema, containing executable validation rules and a
-    definition registry for reference resolution. `local_refs` caches unqualified
-    pointers owned by `raw`, separately from the shared definition registry.
+    A compiled JSON Schema containing executable rules and reference metadata.
+
+    For registered reference targets, `raw` and `local_refs` describe the owning
+    resource's JSON Pointer root and cache, not necessarily the selected node.
+    Structural children inherit that reference context during validation.
+    `dynamic_anchor` retains the selected node's own `$dynamicAnchor` name,
+    independently of its owning resource.
     """
     @type t :: %__MODULE__{
             rules: list(JSONSchex.Types.Rule.t()),
             defs: map() | nil,
             local_refs: map(),
+            dynamic_anchor: String.t() | nil,
             # Used for error reporting context
             source_id: String.t() | nil,
-            raw: map() | nil,
+            raw: map() | boolean() | nil,
             loader:
               (String.t() ->
                  {:ok, map() | boolean()}
@@ -31,6 +36,7 @@ defmodule JSONSchex.Types do
       :defs,
       :source_id,
       :raw,
+      :dynamic_anchor,
       :loader,
       local_refs: %{},
       format_assertion: false,

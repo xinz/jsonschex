@@ -28,6 +28,8 @@ defmodule JSONSchex.ScopeScanner do
 
   @typedoc "The resource registry and local fragment references from the initial traversal."
   @type scan_result :: {registry(), MapSet.t(String.t())}
+  @type resource_contexts :: %{optional(String.t()) => %{raw: term(), source_id: String.t() | nil}}
+  @type contextual_scan_result :: {registry(), MapSet.t(String.t()), resource_contexts()}
 
   @doc """
   Scans a raw schema and returns a tuple `{registry, refs}` where:
@@ -45,8 +47,13 @@ defmodule JSONSchex.ScopeScanner do
   loaded. Pointers awaiting a newly discovered resource are retried only
   when the registry grows. Additional discovery does not add root-document aliases
   to `refs`.
+
+  The compiler's `:with_resource_contexts` option adds a third tuple element
+  mapping each registered target to its lexical resource root and source ID.
+  This provenance is retained during discovery rather than inferred from a
+  potentially overwritten canonical URI later.
   """
-  @spec scan(map() | boolean(), keyword()) :: scan_result()
+  @spec scan(map() | boolean(), keyword()) :: scan_result() | contextual_scan_result()
   def scan(schema, opts \\ []) do
     scanner = scanner(opts)
     scanner.scan(schema, opts)
@@ -71,9 +78,10 @@ defmodule JSONSchex.ScopeScanner do
   Ancestor resource identities on explicit pointer or selected-entry routes remain
   addressable without traversing unrelated ignored siblings.
   Draft 2020-12 scans every map/list node without requiring roles or a selected
-  schema path.
+  schema path. The compiler's `:with_resource_contexts` option has the same
+  three-element result as `scan/2`.
   """
-  @spec scan_all(term(), String.t() | nil, keyword()) :: scan_result()
+  @spec scan_all(term(), String.t() | nil, keyword()) :: scan_result() | contextual_scan_result()
   def scan_all(document, base_uri \\ nil, opts \\ []) do
     scanner = scanner(opts)
     scanner.scan_all(document, base_uri, opts)

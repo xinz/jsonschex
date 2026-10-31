@@ -117,7 +117,7 @@ defmodule JSONSchex.Compiler do
     with :ok <- validate_required_vocabularies(raw_schema, ctx.draft),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list, ctx.draft),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, entry_base, root_vocabs, ctx) do
-      {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode, ctx.draft)
+      {global_scopes, explicit_refs, resources} = scan_context(context_document, init_base, scope_mode, ctx.draft)
       scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
       local_defs = root_compiled.defs
       local_refs = if pointer_root === raw_schema, do: root_compiled.local_refs, else: %{}
@@ -174,7 +174,37 @@ defmodule JSONSchex.Compiler do
               do: Map.merge(root_compiled.local_refs, resolved_runtime_defs),
               else: root_compiled.local_refs
 
-          {:ok, %{root_compiled | defs: defs, local_refs: local_refs, loader: loader}}
+          root_compiled = %{root_compiled | defs: defs, local_refs: local_refs, loader: loader}
+          defs = bind_reference_roots(defs, resources, root_compiled)
+          {:ok, %{root_compiled | defs: defs}}
+      end
+    end
+  end
+
+  # Bind pointers to the lexical owner before another registry can replace its
+  # canonical URI. The target's compiled dynamic_anchor remains unchanged.
+  defp bind_reference_roots(defs, resources, root_schema) do
+    Map.new(defs, fn {id, schema} ->
+      case Map.get(resources, id) do
+        %{raw: raw} = resource when raw !== schema.raw ->
+          refs = resource_local_refs(resource, root_schema, defs)
+          {id, %{schema | raw: raw, local_refs: refs}}
+
+        _ ->
+          {id, schema}
+      end
+    end)
+  end
+
+  defp resource_local_refs(%{raw: raw, source_id: source_id}, root_schema, defs) do
+    base = URIUtil.base(source_id || "")
+
+    if raw === root_schema.raw and base == URIUtil.base(root_schema.source_id || "") do
+      root_schema.local_refs
+    else
+      case Map.get(defs, base) do
+        %{raw: ^raw, local_refs: refs} -> refs
+        _ -> %{}
       end
     end
   end
@@ -261,10 +291,10 @@ defmodule JSONSchex.Compiler do
   # Modes describe the discovery scope: a schema tree or its containing document.
   # The document path marks the selected schema, not the limit of discovery.
   defp scan_context(context_document, base_uri, :schema, draft),
-    do: ScopeScanner.scan(context_document, draft: draft, base_uri: base_uri)
+    do: ScopeScanner.scan(context_document, draft: draft, base_uri: base_uri, with_resource_contexts: true)
 
   defp scan_context(context_document, base_uri, {:document, path}, draft),
-    do: ScopeScanner.scan_all(context_document, base_uri, draft: draft, schema_path: path)
+    do: ScopeScanner.scan_all(context_document, base_uri, draft: draft, schema_path: path, with_resource_contexts: true)
 
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
@@ -415,6 +445,7 @@ defmodule JSONSchex.Compiler do
       end
 
     base = resolve_uri(parent_base, Map.get(effective_schema, "$id"))
+    dynamic_anchor = Map.get(effective_schema, "$dynamicAnchor")
 
     with {:ok, compiled_defs, local_refs} <- compile_local_defs(effective_schema, base, vocabs, ctx),
          {:ok, standard_rules} <- compile_standard_keywords(effective_schema, base, vocabs, ctx) do
@@ -432,6 +463,7 @@ defmodule JSONSchex.Compiler do
          local_refs: local_refs,
          source_id: base,
          raw: schema,
+         dynamic_anchor: if(ctx.draft == "draft2020_12" and is_binary(dynamic_anchor), do: dynamic_anchor),
          loader: ctx.loader,
          format_assertion: ctx.format_assertion,
          content_assertion: ctx.content_assertion,

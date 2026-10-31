@@ -10,7 +10,8 @@ defmodule JSONSchex.Draft7.Schemas do
   alias JSONSchex.Draft7.Dialect
   @base_uri Dialect.base_uri()
   @schema_uri Dialect.schema_uri()
-  @compiled_defs_cache_key {__MODULE__, :compiled_defs}
+  @compiled_defs_cache_version 2
+  @compiled_defs_cache_key {__MODULE__, :compiled_defs, @compiled_defs_cache_version}
 
   @schema %{
     "$schema" => @schema_uri,
@@ -165,11 +166,11 @@ defmodule JSONSchex.Draft7.Schemas do
 
   def compiled_defs(_uri, _opts), do: nil
 
-  # Keep the default registry compatible with cache entries created by compiled_defs/1.
+  # Version every assertion variant when the compiled-schema layout changes.
   defp compiled_defs_cache_key(false, false), do: @compiled_defs_cache_key
 
   defp compiled_defs_cache_key(format_assertion, content_assertion) do
-    {__MODULE__, :compiled_defs, format_assertion, content_assertion}
+    {__MODULE__, :compiled_defs, @compiled_defs_cache_version, format_assertion, content_assertion}
   end
 
   defp build_compiled_defs(format_assertion, content_assertion) do

@@ -1,7 +1,8 @@
 defmodule JSONSchex.Validator.Reference do
   @moduledoc """
   Resolves `$ref` and `$dynamicRef` during validation, including remote schema
-  loading and JIT compilation of JSON Pointer references.
+  loading and JIT compilation of JSON Pointer references. Prepares resource-local
+  validation contexts for structural descent and resolved reference targets.
   """
 
   alias JSONSchex.Validator
@@ -10,7 +11,7 @@ defmodule JSONSchex.Validator.Reference do
   alias JSONSchex.ResourceContext
   alias JSONSchex.Draft202012.Schemas, as: Draft202012Schemas
   alias JSONSchex.Draft7.Schemas, as: Draft7Schemas
-  alias JSONSchex.Types.ErrorContext
+  alias JSONSchex.Types.{ErrorContext, Schema, ValidationContext}
 
   @doc """
   Resolves a `$dynamicRef` by checking if the static target has a matching
@@ -20,10 +21,13 @@ defmodule JSONSchex.Validator.Reference do
   def validate_dynamic_ref(data, ref_string, {path, evaluated, validation_context} = context) do
     anchor = URIUtil.fragment(ref_string)
 
-    static_match = resolve_scoped_ref(ref_string, validation_context)
+    static_entry = resolve_scoped_ref(ref_string, validation_context)
 
     is_dynamic_candidate =
-      anchor && static_match && is_map(static_match.raw) && Map.get(static_match.raw, "$dynamicAnchor") == anchor
+      case static_entry do
+        {%Schema{dynamic_anchor: ^anchor}, _origin} when is_binary(anchor) -> true
+        _ -> false
+      end
 
     if is_dynamic_candidate do
       dynamic_match =
@@ -33,24 +37,31 @@ defmodule JSONSchex.Validator.Reference do
           candidate_uri = URIUtil.join_fragment(base_uri, anchor)
 
           case Map.get(validation_context.root_schema.defs, candidate_uri) do
-            %{raw: raw} = schema when is_map(raw) ->
-              if Map.get(raw, "$dynamicAnchor") == anchor do
-                schema
-              else
-                nil
-              end
+            %{dynamic_anchor: ^anchor} = schema ->
+              schema
             _ ->
               nil
           end
         end)
 
       if dynamic_match do
-        Validator.validate_reference_entry(dynamic_match, data, path, validation_context, evaluated)
+        validate_resolved({dynamic_match, :registry}, data, path, validation_context, evaluated)
       else
-        Validator.validate_reference_entry(static_match, data, path, validation_context, evaluated, ref_string)
+        validate_resolved(static_entry, data, path, validation_context, evaluated)
       end
     else
       validate_ref(data, ref_string, context)
+    end
+  end
+
+  @doc false
+  def validate_ref(data, ref_string, resolved_uri, {path, evaluated, validation_context} = context) do
+    case lookup_ref(resolved_uri, validation_context) do
+      {_schema, _origin} = entry ->
+        validate_resolved(entry, data, path, validation_context, evaluated)
+
+      nil ->
+        validate_ref(data, ref_string, context)
     end
   end
 
@@ -68,10 +79,81 @@ defmodule JSONSchex.Validator.Reference do
       nil ->
         resolve_missing_ref(data, ref_string, path, effective_context, evaluated)
 
-      schema ->
-        Validator.validate_reference_entry(schema, data, path, effective_context, evaluated, ref_string)
+      {_schema, _origin} = entry ->
+        validate_resolved(entry, data, path, effective_context, evaluated)
     end
   end
+
+  @doc false
+  @spec context_for_child(Schema.t(), ValidationContext.t()) :: ValidationContext.t()
+  def context_for_child(%{source_id: nil}, context), do: context
+  def context_for_child(%{source_id: id}, %ValidationContext{source_id: id} = context), do: context
+  def context_for_child(schema, context) do
+    # Structural fragment IDs can inherit a relative base even when URI.merge/2
+    # falls back to the fragment. Pointer-cache entries do not use this exception.
+    if fragment_only_id?(schema, context.source_id, schema.source_id) do
+      advance_scope(schema, context)
+    else
+      context_for_local_target(schema, context)
+    end
+  end
+
+  defp validate_resolved({schema, :local}, data, path, context, evaluated) do
+    context = context_for_local_target(schema, context)
+    Validator.validate_entry(schema, data, path, context, evaluated)
+  end
+
+  defp validate_resolved({schema, :registry}, data, path, context, evaluated) do
+    context = context_for_registered_target(schema, context)
+    Validator.validate_entry(schema, data, path, context, evaluated)
+  end
+
+  defp context_for_local_target(%{source_id: nil}, context), do: context
+  defp context_for_local_target(%{source_id: id}, %ValidationContext{source_id: id} = context), do: context
+  defp context_for_local_target(schema, context) do
+    if same_base?(schema.source_id, context.source_id) do
+      advance_scope(schema, context)
+    else
+      replace_owner(schema, context)
+    end
+  end
+
+  defp context_for_registered_target(%{source_id: nil}, context), do: context
+  defp context_for_registered_target(
+         %{source_id: id, raw: raw},
+         %ValidationContext{source_id: id, raw: current_raw} = context
+       ) when raw === current_raw, do: context
+  defp context_for_registered_target(schema, context) do
+    if same_owner?(schema, context) do
+      advance_scope(schema, context)
+    else
+      replace_owner(schema, context)
+    end
+  end
+
+  defp advance_scope(schema, context) do
+    %{context | source_id: schema.source_id, scope_stack: [schema.source_id | context.scope_stack]}
+  end
+
+  defp replace_owner(schema, context) do
+    %{context |
+      source_id: schema.source_id,
+      raw: schema.raw,
+      local_refs: local_refs_for(schema, context.root_schema),
+      scope_stack: [schema.source_id | context.scope_stack]
+    }
+  end
+
+  defp same_base?(left, right), do: URIUtil.base(left || "") == URIUtil.base(right || "")
+
+  defp same_owner?(schema, context) do
+    same_base?(schema.source_id, context.source_id) and schema.raw === context.raw
+  end
+
+  defp fragment_only_id?(%{raw: %{"$id" => id}}, parent_base, source_id) when is_binary(id) do
+    URIUtil.base(id) == "" and URIUtil.resolve(parent_base, id) == source_id
+  end
+  defp fragment_only_id?(_schema, _parent_base, _source_id), do: false
 
   defp effective_context_for_ref(validation_context, ref_string) do
     case built_in_defs_for_ref(validation_context.source_id, ref_string, validation_context.root_schema) do
@@ -175,23 +257,29 @@ defmodule JSONSchex.Validator.Reference do
   end
   defp builtin_compiled_defs(base, %{draft: "draft2020_12"}), do: Draft202012Schemas.compiled_defs(base)
 
-  @doc false
-  def lookup_ref("#/" <> _ = ref, context), do: Map.get(context.local_refs, ref)
-  def lookup_ref("#", context), do: Map.get(context.local_refs, "#")
-  def lookup_ref("#" <> fragment = ref, context) do
+  defp lookup_ref("#/" <> _ = ref, context), do: lookup_entry(context.local_refs, ref, :local)
+  defp lookup_ref("#", context), do: lookup_entry(context.local_refs, "#", :local)
+  defp lookup_ref("#" <> fragment = ref, context) do
     case URI.decode(fragment) do
-      "/" <> _ -> Map.get(context.local_refs, ref)
-      _ -> Map.get(context.root_schema.defs, uri_to_resolve(context.source_id, ref))
+      "/" <> _ -> lookup_entry(context.local_refs, ref, :local)
+      _ -> lookup_entry(context.root_schema.defs, uri_to_resolve(context.source_id, ref), :registry)
     end
   end
-  def lookup_ref(uri, context), do: Map.get(context.root_schema.defs, uri)
+  defp lookup_ref(uri, context), do: lookup_entry(context.root_schema.defs, uri, :registry)
 
-  @doc false
-  def local_refs_for(schema, root_schema) do
-    # The root self-entry predates eager pointer compilation. Preserve those
-    # targets' inherited dialect instead of recompiling with default vocabularies.
-    if URIUtil.base(schema.source_id) == URIUtil.base(root_schema.source_id) and
-         schema.raw === root_schema.raw do
+  # A registry hit carries a bound resource root, even when its ID looks like a
+  # pointer. Only aliases from the active owner's cache inherit that context.
+  defp lookup_entry(entries, ref, origin) do
+    case Map.get(entries, ref) do
+      %Schema{} = schema -> {schema, origin}
+      _ -> nil
+    end
+  end
+
+  defp local_refs_for(schema, root_schema) do
+    # The root self-entry predates eager pointer compilation. Normalize anonymous
+    # base representations only after retaining the raw-owner identity check.
+    if same_owner?(schema, root_schema) do
       root_schema.local_refs
     else
       schema.local_refs
@@ -203,7 +291,7 @@ defmodule JSONSchex.Validator.Reference do
 
     # Bare pointers in the merged registry have no resource ownership. Reuse
     # only the active raw root's aliases, including for normalized URN pointers.
-    lookup_ref(uri, context) || Map.get(context.local_refs, ref)
+    lookup_ref(uri, context) || lookup_entry(context.local_refs, ref, :local)
   end
 
   defp uri_to_resolve(base_uri, "#" <> _ = ref) when base_uri != nil do
@@ -344,7 +432,7 @@ defmodule JSONSchex.Validator.Reference do
     if fragment != nil do
       validate_ref(data, URIUtil.local_ref(fragment), {current_path, evaluated, updated_context})
     else
-      Validator.validate_reference_entry(compiled_schema, data, current_path, updated_context, evaluated)
+      Validator.validate_entry(compiled_schema, data, current_path, updated_context, evaluated)
     end
   end
 
@@ -394,7 +482,7 @@ defmodule JSONSchex.Validator.Reference do
             # leaf, so subsequent pointers resolve against the same URI and raw root.
             local_refs = if compiled_fragment.raw === resource, do: compiled_fragment.local_refs, else: %{}
             compiled_fragment = %{compiled_fragment | raw: resource, local_refs: local_refs}
-            Validator.validate_reference_entry(compiled_fragment, data, current_path, validation_context, evaluated)
+            validate_resolved({compiled_fragment, :registry}, data, current_path, validation_context, evaluated)
 
           {:error, error} ->
             {:error, %ErrorContext{contrast: "invalid_schema", input: pointer, error_detail: error}}
