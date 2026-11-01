@@ -8,6 +8,7 @@ Fix resource-local reference ownership, and simplify URI and validation context 
 
   * Isolate eagerly compiled JSON Pointer aliases by resource in both Draft 7 and Draft 2020-12, preventing caller-local aliases from shadowing remote, embedded-resource, or built-in targets. Preserve same-resource cache reuse, selected-fragment pointer roots, escaped definition names, and finalized caches across retrieval and canonical URIs.
   * Preserve enclosing pointer roots and resource-owned caches when references enter named-fragment IDs or anchors, including embedded resources and anchors retained from older snapshots sharing a canonical URI.
+  * Resolve Draft 7 plain-name fragment IDs under anonymous or relative bases without resolving compiled registry keys twice, including loaded fragments and retained resource snapshots. Keep JSON Pointer lookups scoped to the active resource; `$id` does not define virtual pointer paths.
   * Preserve inherited vocabulary behavior when `$dynamicRef` re-enters an anonymous root, recognizing its `nil` and `""` base representations only when raw ownership matches.
   * Simplify compiled reference metadata: keep registered targets' pointer roots and caches in `raw` and `local_refs`, and retain each target's own `$dynamicAnchor` name in `dynamic_anchor`.
   * Centralize reference lookup, resource ownership, and context preparation in `JSONSchex.Validator.Reference`, removing reference-entry flags from `JSONSchex.Validator` while preserving structural and dynamic-scope transitions.

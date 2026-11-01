@@ -534,7 +534,104 @@ defmodule JSONSchex.Test.RefContextRegression do
              JSONSchex.validate(compiled, "B")
   end
 
-  test "a pointer-shaped Draft 7 ID retains its registered resource snapshot" do
+  test "Draft 7 plain-name IDs do not create virtual JSON Pointer paths" do
+    definitions = %{"target" => %{"$id" => "#virtual", "const" => "target"}}
+
+    for ref <- ["#virtual", "#/definitions/target"] do
+      schema = %{"definitions" => definitions, "allOf" => [%{"$ref" => ref}]}
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+      assert :ok == JSONSchex.validate(compiled, "target")
+      assert {:error, [%{rule: :const, context: %{contrast: "target"}}]} =
+               JSONSchex.validate(compiled, "other")
+    end
+
+    schema = %{"definitions" => definitions, "allOf" => [%{"$ref" => "#/virtual"}]}
+    assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+    assert {:error, [%{rule: :ref, context: %{contrast: "ref_not_found", input: "#/virtual"}}]} =
+             JSONSchex.validate(compiled, "target")
+  end
+
+  test "Draft 7 named fragment IDs keep their compiled registry keys under relative bases" do
+    for root_id <- [nil, "", "resource/", "resource.json", "https://example.com/root"] do
+      schema = %{
+        "definitions" => %{
+          "target" => %{"$id" => "#named", "const" => "target"}
+        },
+        "allOf" => [%{"$ref" => "#named"}]
+      }
+      schema = if root_id, do: Map.put(schema, "$id", root_id), else: schema
+
+      assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
+      assert :ok == JSONSchex.validate(compiled, "target")
+      assert {:error, [%{rule: :const, context: %{contrast: "target"}}]} =
+               JSONSchex.validate(compiled, "other")
+    end
+  end
+
+  test "loaded Draft 7 named fragment IDs resolve with relative retrieval and canonical bases" do
+    for root_id <- [nil, "", "#root", "shared.json"] do
+      remote = %{
+        "definitions" => %{
+          "target" => %{"$id" => "#named", "const" => "remote"}
+        }
+      }
+      remote = if root_id, do: Map.put(remote, "$id", root_id), else: remote
+      loader = fn "remote.json" -> {:ok, remote} end
+
+      assert {:ok, compiled} = JSONSchex.compile(%{"$ref" => "remote.json#named"},
+        draft: "draft7", loader: loader)
+      assert :ok == JSONSchex.validate(compiled, "remote")
+      assert {:error, [%{rule: :const, context: %{contrast: "remote"}}]} =
+               JSONSchex.validate(compiled, "other")
+    end
+  end
+
+  test "caller eager aliases do not shadow uncached remote pointers under relative bases" do
+    pointer = "#/definitions/value"
+
+    for root_id <- [nil, "#root", "remote-root.json"] do
+      remote = %{"definitions" => %{"value" => %{"const" => "remote"}}}
+      remote = if root_id, do: Map.put(remote, "$id", root_id), else: remote
+      caller = %{
+        "definitions" => %{"value" => %{"const" => "caller"}},
+        "allOf" => [%{"$ref" => "remote.json" <> pointer}],
+        "properties" => %{"unused" => %{"$ref" => pointer}}
+      }
+      loader = fn "remote.json" -> {:ok, remote} end
+
+      assert {:ok, compiled} = JSONSchex.compile(caller, draft: "draft7", loader: loader)
+      assert :ok == JSONSchex.validate(compiled, "remote")
+      assert {:error, [%{rule: :const, context: %{contrast: "remote"}}]} =
+               JSONSchex.validate(compiled, "caller")
+    end
+  end
+
+  test "retained Draft 7 named fragment IDs keep their owners under relative canonical bases" do
+    resource_a = %{
+      "$id" => "shared.json",
+      "definitions" => %{
+        "target" => %{"$id" => "#entry", "const" => "A"}
+      },
+      "allOf" => [%{"$ref" => "b.json"}]
+    }
+    resource_b = %{
+      "$id" => "shared.json",
+      "allOf" => [%{"$ref" => "#entry"}]
+    }
+    loader = fn
+      "a.json" -> {:ok, resource_a}
+      "b.json" -> {:ok, resource_b}
+    end
+
+    assert {:ok, compiled} = JSONSchex.compile(%{"$ref" => "a.json"},
+      draft: "draft7", loader: loader)
+    assert :ok == JSONSchex.validate(compiled, "A")
+    assert {:error, [%{rule: :const, context: %{contrast: "A"}}]} =
+             JSONSchex.validate(compiled, "B")
+  end
+
+  test "a Draft 7 named fragment ID retains its registered resource snapshot" do
     a_uri = "https://example.com/a.json"
     b_uri = "https://example.com/b.json"
     canonical_uri = "https://example.com/shared.json"
@@ -543,7 +640,7 @@ defmodule JSONSchex.Test.RefContextRegression do
       "definitions" => %{
         "x" => %{"const" => "A"},
         "entry" => %{
-          "$id" => "#/definitions/entry",
+          "$id" => "#entry",
           "allOf" => [%{"$ref" => "#/definitions/x"}]
         }
       },
@@ -552,7 +649,7 @@ defmodule JSONSchex.Test.RefContextRegression do
     resource_b = %{
       "$id" => canonical_uri,
       "definitions" => %{"x" => %{"const" => "B"}},
-      "allOf" => [%{"$ref" => canonical_uri <> "#/definitions/entry"}]
+      "allOf" => [%{"$ref" => canonical_uri <> "#entry"}]
     }
     loader = fn
       ^a_uri -> {:ok, resource_a}

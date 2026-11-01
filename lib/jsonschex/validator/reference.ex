@@ -257,18 +257,20 @@ defmodule JSONSchex.Validator.Reference do
   end
   defp builtin_compiled_defs(base, %{draft: "draft2020_12"}), do: Draft202012Schemas.compiled_defs(base)
 
+  # Inputs are already resolved registry keys; resolving a fragment again can
+  # change a key retained by URI resolution's relative-base fallback.
   defp lookup_ref("#/" <> _ = ref, context), do: lookup_entry(context.local_refs, ref, :local)
   defp lookup_ref("#", context), do: lookup_entry(context.local_refs, "#", :local)
   defp lookup_ref("#" <> fragment = ref, context) do
     case URI.decode(fragment) do
       "/" <> _ -> lookup_entry(context.local_refs, ref, :local)
-      _ -> lookup_entry(context.root_schema.defs, uri_to_resolve(context.source_id, ref), :registry)
+      _ -> lookup_entry(context.root_schema.defs, ref, :registry)
     end
   end
   defp lookup_ref(uri, context), do: lookup_entry(context.root_schema.defs, uri, :registry)
 
-  # A registry hit carries a bound resource root, even when its ID looks like a
-  # pointer. Only aliases from the active owner's cache inherit that context.
+  # Registered targets carry a bound resource root. Only aliases from the active
+  # owner's pointer cache inherit the current reference context.
   defp lookup_entry(entries, ref, origin) do
     case Map.get(entries, ref) do
       %Schema{} = schema -> {schema, origin}
@@ -291,8 +293,16 @@ defmodule JSONSchex.Validator.Reference do
 
     # Bare pointers in the merged registry have no resource ownership. Reuse
     # only the active raw root's aliases, including for normalized URN pointers.
-    lookup_ref(uri, context) || lookup_entry(context.local_refs, ref, :local)
+    lookup_ref(uri, context) || lookup_entry(context.local_refs, ref, :local) ||
+      lookup_unmerged_fragment(ref, context)
   end
+
+  defp lookup_unmerged_fragment("#" <> _ = ref, context) do
+    # Match the compiler's fallback only when URI resolution leaves the fragment
+    # unmerged. An absolute base must not reuse another document's bare entries.
+    if URIUtil.resolve(context.source_id, ref) == ref, do: lookup_ref(ref, context)
+  end
+  defp lookup_unmerged_fragment(_ref, _context), do: nil
 
   defp uri_to_resolve(base_uri, "#" <> _ = ref) when base_uri != nil do
     base_uri = URIUtil.base(base_uri)

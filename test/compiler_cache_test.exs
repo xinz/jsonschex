@@ -217,7 +217,7 @@ defmodule JSONSchex.Test.CompilerReuse do
     end
   end
 
-  test "matching custom vocabularies retain loader calls per scope and existing defs and root skips" do
+  test "matching custom vocabularies retain loader calls per scope and root skips" do
     parent = self()
     loader = fn uri ->
       send(parent, {:loaded, uri})
@@ -239,13 +239,6 @@ defmodule JSONSchex.Test.CompilerReuse do
     assert compiled.defs[@root].defs == %{}
     assert :ok == JSONSchex.validate(compiled, %{"child" => 1})
     assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, %{"child" => "1"})
-
-    collision = %{"$id" => "#/$defs/Existing", "$schema" => @custom, "type" => "integer"}
-    document = %{"$defs" => %{"Existing" => collision}}
-    assert {:ok, skipped} = JSONSchex.compile(document, loader: loader)
-    assert skipped.defs["#/$defs/Existing"].raw === document
-    assert rule(skipped.defs["#/$defs/Existing"], :type).params === "integer"
-    refute_received {:loaded, _}
   end
 
   test "scope candidates do not bypass dialect loader errors or required vocabulary checks" do
