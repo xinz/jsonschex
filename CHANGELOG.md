@@ -12,7 +12,6 @@ Fix resource-local reference ownership, and simplify URI and validation context 
   * Preserve inherited vocabulary behavior when `$dynamicRef` re-enters an anonymous root, recognizing its `nil` and `""` base representations only when raw ownership matches.
   * Simplify compiled reference metadata: keep registered targets' pointer roots and caches in `raw` and `local_refs`, and retain each target's own `$dynamicAnchor` name in `dynamic_anchor`.
   * Centralize reference lookup, resource ownership, and context preparation in `JSONSchex.Validator.Reference`, removing reference-entry flags from `JSONSchex.Validator` while preserving structural and dynamic-scope transitions.
-  * Version built-in registry caches to avoid reusing older compiled-schema layouts, preserving Draft 7 format and content assertion variants.
   * Add `JSONSchex.URIUtil.base/1` for fragment-free URI extraction, distinguishing missing (`nil`) from empty (`""`) bases. Reuse it across compilation, scope discovery, reference resolution, and bundling.
   * Rename `JSONSchex.URIUtil.with_fragment/2` to `join_fragment/2` to clarify its concatenation-only behavior. Retain `with_fragment/2` as a deprecated compatibility alias; joining behavior is unchanged.
   * Simplify `JSONSchex.URIUtil.split_fragment/1` with `:binary.split/3`, preserving first-delimiter splitting and empty-fragment normalization.

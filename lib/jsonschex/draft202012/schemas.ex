@@ -17,8 +17,7 @@ defmodule JSONSchex.Draft202012.Schemas do
   alias JSONSchex.Compiler
   alias JSONSchex.Draft202012.Dialect
 
-  # Do not reuse registries built with the previous compiled-schema layout.
-  @compiled_defs_cache_key {__MODULE__, :draft2020_12_compiled_defs, 2}
+  @compiled_defs_cache_key {__MODULE__, :draft2020_12_compiled_defs}
 
   @draft2020_12_base_uri Dialect.base_uri()
   @draft2020_12_schema_uri Dialect.builtin_schema_uri()
