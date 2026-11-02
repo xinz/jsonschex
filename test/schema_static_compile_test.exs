@@ -206,6 +206,28 @@ defmodule JSONSchex.Test.SchemaStaticCompile do
     assert error.line == 4
   end
 
+  test "compile!/2 rejects non-string references in both drafts" do
+    for draft <- ["draft7", "draft2020_12"] do
+      module = Module.concat(__MODULE__, "NonStringRef_" <> draft)
+      error =
+        compile_error!(
+          """
+          defmodule #{inspect(module)} do
+            require JSONSchex.Schema
+
+            @schema JSONSchex.Schema.compile!(%{"$ref" => 123}, draft: #{inspect(draft)})
+            def schema, do: @schema
+          end
+          """,
+          "test/support/non_string_ref_compile_error.exs"
+        )
+
+      assert error.description =~ "Keyword '$ref' must be a string, got: 123"
+      assert error.file == "test/support/non_string_ref_compile_error.exs"
+      assert error.line == 4
+    end
+  end
+
   test "compile!/2 surfaces schema compilation errors during compilation" do
     error =
       compile_error!(

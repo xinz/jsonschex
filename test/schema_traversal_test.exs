@@ -47,6 +47,48 @@ defmodule JSONSchex.Test.SchemaTraversal do
     end
   end
 
+  test "optional resource contexts preserve lexical owners and duplicate precedence in both scan modes" do
+    base_uri = "https://example.test/base/document.json"
+    resource_uri = "https://example.test/base/shared.json"
+
+    for id <- ["", "shared.json", resource_uri] do
+      properties = Map.new(1..40, fn index ->
+        leaf = %{
+          "$id" => id,
+          "$anchor" => "static",
+          "$dynamicAnchor" => "dynamic",
+          "$ref" => "#/$defs/Value",
+          "const" => index
+        }
+        {"property-#{index}", %{"$id" => "shared.json", "$defs" => %{"Value" => leaf}}}
+      end)
+      schema = %{"$anchor" => "root", "properties" => properties}
+      schema_owner = properties |> Map.values() |> List.last()
+      document_owner = Enum.reduce(properties, nil, fn {_key, owner}, _previous -> owner end)
+      modes = [
+        {fn opts -> ScopeScanner.scan_schema(schema, [base_uri: base_uri] ++ opts) end, schema_owner},
+        {fn opts -> ScopeScanner.scan_document(schema, base_uri, opts) end, document_owner}
+      ]
+
+      for {scan, expected_owner} <- modes do
+        {registry, refs} = scan.([])
+        assert {^registry, ^refs, contexts} = scan.([with_resource_contexts: true])
+        assert scan.([with_resource_contexts: false]) === {registry, refs}
+        assert scan.([with_resource_contexts: :truthy]) === {registry, refs}
+        assert refs == MapSet.new(["#/$defs/Value"])
+        assert Enum.sort(Map.keys(contexts)) == Enum.sort(Map.keys(registry))
+        assert contexts[base_uri <> "#root"] === %{raw: schema, source_id: base_uri}
+
+        leaf_uri = JSONSchex.URIUtil.resolve(resource_uri, id)
+        expected_leaf = expected_owner["$defs"]["Value"]
+        for suffix <- ["", "#static", "#dynamic"] do
+          assert registry[leaf_uri <> suffix] === expected_leaf
+          assert contexts[leaf_uri <> suffix] === %{raw: expected_owner, source_id: resource_uri}
+        end
+      end
+    end
+  end
+
   test "document scanning remains broader than schema scanning and resolves the document base" do
     base_uri = "https://example.test/document.json"
     uri = "https://example.test/child"

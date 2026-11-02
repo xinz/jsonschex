@@ -162,6 +162,31 @@ defmodule JSONSchex.Test.CompilerReuse do
     end
   end
 
+  test "local refs preserve canonical escaped names when legacy spellings collide" do
+    keys = ["", "plain", "A_z-09.", "a/b", "a~1b", "a~01b", "a%2Fb", "percent%",
+            "hash#", "space name", "你好😀", "a?b", "a:b", "a+b", "!$'()*+,;=@"]
+    defs = keys |> Enum.with_index() |> Map.new(fn {key, index} -> {key, %{"const" => index}} end)
+    raw = %{"$defs" => defs}
+
+    assert {:ok, compiled} = JSONSchex.compile(raw)
+    for {key, target} <- defs do
+      pointer = ExJSONPointer.encode_path(["$defs", key], format: "uri_fragment")
+      assert Map.fetch!(compiled.defs, "#/$defs/" <> key).raw === target
+      assert Map.fetch!(compiled.local_refs, pointer).raw === target
+    end
+    assert map_size(compiled.local_refs) == map_size(defs)
+
+    properties = Map.new(defs, fn {key, _target} ->
+      {key, %{"$ref" => ExJSONPointer.encode_path(["$defs", key], format: "uri_fragment")}}
+    end)
+    data = Map.new(defs, fn {key, %{"const" => value}} -> {key, value} end)
+    assert {:ok, referenced} = JSONSchex.compile(Map.put(raw, "properties", properties))
+    assert :ok == JSONSchex.validate(referenced, data)
+    for key <- keys do
+      assert {:error, [%{rule: :const}]} = JSONSchex.validate(referenced, %{key => :wrong})
+    end
+  end
+
   test "duplicate identities use scanner-selected raw with strict numeric equality" do
     first = %{"$id" => "https://example.test/duplicate", "minimum" => 1}
     for minimum <- [1.0, 2] do

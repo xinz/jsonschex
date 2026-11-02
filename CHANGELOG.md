@@ -4,6 +4,14 @@
 
 ### Bug Fixes and Improvements
 
+Reduce compilation, scope-scanning, and reference-validation overhead while preserving resource ownership and URI semantics.
+
+  * Skip empty definition-compilation work when `$defs` is absent, avoid generic pointer encoding for plain ASCII definition names, and share identical definition and local-reference maps. Preserve canonical escaping and collisions between escaped and legacy definition keys.
+  * Store Draft 2020-12 scanner registry entries directly, tracking lexical resource contexts only when requested and avoiding intermediate entry wrappers and registry conversions. Preserve discovery order and duplicate-identity precedence.
+  * Avoid redundant URI-base extraction when reference owners differ or source IDs already match, retaining strict raw-owner and resource-base checks.
+  * Fast-path compiled references with resolved registry keys, avoiding intermediate lookup tuples and binary-prefix match allocations while preserving fragment-only lookup, resource ownership, dynamic scope, and missing-target fallback.
+  * Reject non-string `$ref` values during schema compilation with structured `invalid_keyword_value` errors, including nested schemas, selected fragments, and compile-time macros. Keep empty-string references valid and make compiled reference keys explicitly binary-only.
+
 Fix resource-local reference ownership, and simplify URI and validation context handling. ([#15](https://github.com/xinz/jsonschex/pull/15))
 
   * Isolate eagerly compiled JSON Pointer aliases by resource in both Draft 7 and Draft 2020-12, preventing caller-local aliases from shadowing remote, embedded-resource, or built-in targets. Preserve same-resource cache reuse, selected-fragment pointer roots, escaped definition names, and finalized caches across retrieval and canonical URIs.

@@ -2,6 +2,91 @@ defmodule JSONSchex.Test.CompilerErrorTest do
   use ExUnit.Case
   alias JSONSchex.Types.Error
 
+  describe "$ref keyword errors" do
+    test "rejects non-string references in both drafts with or without a base URI" do
+      values = [nil, true, false, 123, 1.5, [], ["target.json"], %{}, %{"target" => "schema"}]
+
+      for draft <- ["draft7", "draft2020_12"],
+          base_uri <- [nil, "https://example.test/root.json"],
+          value <- values do
+        assert {:error, %Error{} = error} = JSONSchex.compile(%{"$ref" => value},
+          draft: draft, base_uri: base_uri)
+        assert error.rule == :invalid_keyword_value
+        assert error.path == ["$ref"]
+        assert error.value === value
+        assert error.context.contrast == "string"
+        assert error.context.input === value
+      end
+    end
+
+    test "compiled references retain binary resolved keys, including empty references" do
+      for draft <- ["draft7", "draft2020_12"],
+          base_uri <- [nil, "https://example.test/root.json"],
+          ref <- ["", "#", "#/definitions/Value", "child.json", "https://example.test/target", "urn:example:target"] do
+        raw = %{"$ref" => ref, "definitions" => %{"Value" => %{"type" => "string"}}}
+        assert {:ok, compiled} = JSONSchex.compile(raw, draft: draft, base_uri: base_uri)
+        assert %{name: :ref, params: %{ref: ^ref, resolved_uri: resolved_uri}} = hd(compiled.rules)
+        assert is_binary(resolved_uri)
+        if ref == "" and base_uri == nil, do: assert(resolved_uri == "")
+      end
+    end
+
+    test "rejects non-string references in nested schemas" do
+      for draft <- ["draft7", "draft2020_12"] do
+        raw = %{"properties" => %{"value" => %{"$ref" => false}}}
+        assert {:error, %Error{} = error} = JSONSchex.compile(raw, draft: draft)
+        assert error.rule == :invalid_keyword_value
+        assert error.path == ["$ref"]
+        assert error.value === false
+      end
+    end
+
+    test "reference errors in eagerly compiled definitions retain their schema path" do
+      raw = %{"$defs" => %{"Value" => %{"$ref" => nil}}}
+      assert {:error, %Error{} = error} = JSONSchex.compile(raw)
+      assert error.rule == :invalid_keyword_value
+      assert error.path == ["$defs", "Value", "$ref"]
+      assert error.value === nil
+    end
+
+    test "selected fragments reject non-string references" do
+      for draft <- ["draft7", "draft2020_12"] do
+        document = %{"schemas" => %{"Value" => %{"$ref" => 123}}}
+        assert {:error, %Error{} = error} = JSONSchex.compile_fragment(document,
+          entry: "#/schemas/Value", draft: draft)
+        assert error.rule == :invalid_keyword_value
+        assert error.path == ["$ref"]
+        assert error.value === 123
+      end
+    end
+
+    test "empty references still validate against the current resource" do
+      for draft <- ["draft7", "draft2020_12"], base_uri <- [nil, "https://example.test/root.json"] do
+        raw = %{"type" => "object", "properties" => %{"child" => %{"$ref" => ""}}}
+        assert {:ok, compiled} = JSONSchex.compile(raw, draft: draft, base_uri: base_uri)
+        assert :ok == JSONSchex.validate(compiled, %{"child" => %{}})
+        assert {:error, [%{rule: :type}]} = JSONSchex.validate(compiled, %{"child" => "invalid"})
+      end
+    end
+
+    test "Draft 7 still ignores invalid reference values inside ref siblings" do
+      raw = %{
+        "$ref" => "#/definitions/Value",
+        "definitions" => %{"Value" => %{"const" => "ok"}},
+        "properties" => %{"ignored" => %{"$ref" => nil}}
+      }
+      assert {:ok, compiled} = JSONSchex.compile(raw, draft: "draft7")
+      assert :ok == JSONSchex.validate(compiled, "ok")
+      assert {:error, [%{rule: :const}]} = JSONSchex.validate(compiled, "other")
+      assert {:error, %Error{rule: :invalid_keyword_value, path: ["$ref"], value: nil}} = JSONSchex.compile(raw)
+    end
+
+    test "formats a non-string reference error" do
+      assert {:error, error} = JSONSchex.compile(%{"$ref" => nil})
+      assert JSONSchex.format_error(error) == "Keyword '$ref' must be a string, got: nil"
+    end
+  end
+
   describe "type keyword errors" do
     test "rejects an unknown type string" do
       assert {:error, %Error{} = error} = JSONSchex.compile(%{"type" => "1"})

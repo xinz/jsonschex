@@ -54,13 +54,34 @@ defmodule JSONSchex.Validator.Reference do
     end
   end
 
-  @doc false
-  def validate_ref(data, ref_string, resolved_uri, {path, evaluated, validation_context} = context) do
+  @doc """
+  Validates a compiled `$ref` using its pre-resolved lookup key.
+
+  `ref_string` is the original reference; `resolved_uri` is the binary key computed
+  during compilation and is looked up without resolving it again. Fragment-only
+  keys distinguish resource-local pointer aliases from registered anchors; other
+  keys are looked up directly in the shared `defs` registry. Cache hits prepare
+  the target's resource context before validation.
+
+  On a cache miss, falls back to `validate_ref/3` with the original reference,
+  allowing built-in schema loading, remote loading, and JIT JSON Pointer resolution.
+  """
+  def validate_ref(data, ref_string, <<?#, _::binary>> = resolved_uri, {path, evaluated, validation_context} = context) do
     case lookup_ref(resolved_uri, validation_context) do
       {_schema, _origin} = entry ->
         validate_resolved(entry, data, path, validation_context, evaluated)
 
       nil ->
+        validate_ref(data, ref_string, context)
+    end
+  end
+  def validate_ref(data, ref_string, resolved_uri, {path, evaluated, validation_context} = context) do
+    case Map.get(validation_context.root_schema.defs, resolved_uri) do
+      %Schema{} = schema ->
+        target_context = context_for_registered_target(schema, validation_context)
+        Validator.validate_entry(schema, data, path, target_context, evaluated)
+
+      _ ->
         validate_ref(data, ref_string, context)
     end
   end
@@ -144,11 +165,16 @@ defmodule JSONSchex.Validator.Reference do
     }
   end
 
+  defp same_base?(uri, uri), do: true
   defp same_base?(left, right), do: URIUtil.base(left || "") == URIUtil.base(right || "")
 
   defp same_owner?(schema, context) do
-    same_base?(schema.source_id, context.source_id) and schema.raw === context.raw
+    schema.raw === context.raw and same_base?(schema.source_id, context.source_id)
   end
+  #defp same_owner?(%{raw: raw, source_id: schema_source_id}, %{raw: raw, source_id: context_source_id}) do
+  #  same_base?(schema_source_id, context_source_id)
+  #end
+  #defp same_owner?(_, _), do: false
 
   defp fragment_only_id?(%{raw: %{"$id" => id}}, parent_base, source_id) when is_binary(id) do
     URIUtil.base(id) == "" and URIUtil.resolve(parent_base, id) == source_id
