@@ -5,15 +5,22 @@ defmodule JSONSchex.Types do
 
   defmodule Schema do
     @moduledoc """
-    A compiled JSON Schema, containing executable validation rules and a
-    definition registry for reference resolution.
+    A compiled JSON Schema containing executable rules and reference metadata.
+
+    For registered reference targets, `raw` and `local_refs` describe the owning
+    resource's JSON Pointer root and cache, not necessarily the selected node.
+    Structural children inherit that reference context during validation.
+    `dynamic_anchor` retains the selected node's own `$dynamicAnchor` name,
+    independently of its owning resource.
     """
     @type t :: %__MODULE__{
             rules: list(JSONSchex.Types.Rule.t()),
             defs: map() | nil,
+            local_refs: map(),
+            dynamic_anchor: String.t() | nil,
             # Used for error reporting context
             source_id: String.t() | nil,
-            raw: map() | nil,
+            raw: map() | boolean() | nil,
             loader:
               (String.t() ->
                  {:ok, map() | boolean()}
@@ -29,7 +36,9 @@ defmodule JSONSchex.Types do
       :defs,
       :source_id,
       :raw,
+      :dynamic_anchor,
       :loader,
+      local_refs: %{},
       format_assertion: false,
       content_assertion: false,
       draft: "draft2020_12"
@@ -41,19 +50,21 @@ defmodule JSONSchex.Types do
     Lightweight runtime context threaded through validation.
 
     Holds a reference to the immutable root `Schema` and carries per-scope
-    state (scope stack, current source ID, raw schema) that changes as
-    validation descends through `$id` boundaries.
+    state (scope stack, current source ID, raw schema, and resource-local pointer
+    cache) that changes as validation descends through `$id` boundaries.
     """
     @type t :: %__MODULE__{
             root_schema: JSONSchex.Types.Schema.t(),
             scope_stack: list(String.t()),
             source_id: String.t() | nil,
-            raw: map() | nil
+            raw: map() | nil,
+            local_refs: map()
           }
     defstruct [
       :root_schema,
       :source_id,
       :raw,
+      local_refs: %{},
       scope_stack: []
     ]
   end

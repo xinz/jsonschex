@@ -1,6 +1,45 @@
 defmodule JSONSchex.Test.BundlePerformanceRegression do
   use ExUnit.Case, async: true
 
+  test "anonymous resource keys resolve local pointers with omitted, nil, and empty bases" do
+    document = %{
+      "$defs" => %{"Value" => %{"type" => "integer"}},
+      "schema" => %{"$ref" => "#/$defs/Value"}
+    }
+    loader = fn uri -> flunk("Unexpected external load: #{inspect(uri)}") end
+
+    for base_opts <- [[], [base_uri: nil], [base_uri: ""]] do
+      opts = [entry: "#/schema", loader: loader] ++ base_opts
+      assert {:ok, bundle} = JSONSchex.bundle_fragment(document, opts)
+
+      # An absent base must not manufacture an explicit empty $id in the output.
+      if Keyword.get(base_opts, :base_uri) == nil, do: refute(Map.has_key?(bundle, "$id"))
+
+      assert {:ok, compiled} = JSONSchex.compile(bundle, loader: loader)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
+    end
+  end
+
+  test "anonymous resource keys preserve recursive dynamic anchors" do
+    document = %{
+      "$dynamicAnchor" => "node",
+      "type" => "object",
+      "properties" => %{"next" => %{"$dynamicRef" => "#node"}}
+    }
+    loader = fn uri -> flunk("Unexpected external load: #{inspect(uri)}") end
+
+    for base_opts <- [[], [base_uri: nil], [base_uri: ""]] do
+      opts = [entry: "#", loader: loader] ++ base_opts
+      assert {:ok, bundle} = JSONSchex.bundle_fragment(document, opts)
+      assert {:ok, compiled} = JSONSchex.compile(bundle, loader: loader)
+      assert :ok == JSONSchex.validate(compiled, %{"next" => %{"next" => %{}}})
+      assert {:error, [%{rule: :type, context: %{contrast: "object"}}]} =
+               JSONSchex.validate(compiled, %{"next" => 1})
+    end
+  end
+
   test "structural depth scales approximately linearly in reductions" do
     small = chain(100)
     large = chain(400)

@@ -384,7 +384,7 @@ defmodule JSONSchex.Ref do
   defp resolve_ref_uri(ref, _path, current_base_uri), do: {:ok, URIUtil.resolve(current_base_uri, ref)}
 
   defp relative_external_ref?(ref) do
-    {base, _fragment} = URIUtil.split_fragment(ref)
+    base = URIUtil.base(ref)
 
     cond do
       base == "" -> false
@@ -414,7 +414,7 @@ defmodule JSONSchex.Ref do
       end
     else
       with {:ok, external_document, external_base_uri, state} <- load_external(base, ref, resolved_uri, path, state),
-           {:ok, target} <- resolve_pointer(external_document, ref, URIUtil.with_fragment(external_base_uri, fragment), fragment, path) do
+           {:ok, target} <- resolve_pointer(external_document, ref, URIUtil.join_fragment(external_base_uri, fragment), fragment, path) do
         {target_document, target_resource_base, target_base} =
           pointer_resource_context(external_document, external_base_uri, fragment)
 
@@ -492,10 +492,10 @@ defmodule JSONSchex.Ref do
   end
 
   defp put_canonical_document_base(cache, %{"$id" => id}, effective_base, entry) when is_binary(id) do
-    {canonical_base, _} =
+    canonical_base =
       effective_base
       |> URIUtil.resolve(id)
-      |> URIUtil.split_fragment()
+      |> URIUtil.base()
 
     Map.put(cache, canonical_base, entry)
   end
@@ -507,7 +507,7 @@ defmodule JSONSchex.Ref do
 
   defp target_uri(nil, resolved_uri, _fragment), do: resolved_uri
   defp target_uri(target_base_uri, _resolved_uri, fragment) do
-    URIUtil.with_fragment(target_base_uri, fragment)
+    URIUtil.join_fragment(target_base_uri, fragment)
   end
 
   defp check_cycle(uri, ref, path, stack) do

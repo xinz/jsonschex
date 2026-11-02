@@ -1512,9 +1512,18 @@ run_optimization_bench.("optimization_scan_p13_wide_properties_1024", fn ->
       end)
   }
 
+  # Baselines may predate the scanner API rename; resolve both captures before timing.
+  baseline_scan_function =
+    if function_exported?(JSONSchexBaseline.ScopeScanner, :scan_schema, 1),
+      do: :scan_schema,
+      else: :scan
+
+  baseline_scanner = Function.capture(JSONSchexBaseline.ScopeScanner, baseline_scan_function, 1)
+  current_scanner = &JSONSchex.ScopeScanner.scan_schema/1
+
   prepare_pair.(
-    fn -> JSONSchexBaseline.ScopeScanner.scan(schema) end,
-    fn -> JSONSchex.ScopeScanner.scan(schema) end,
+    fn -> baseline_scanner.(schema) end,
+    fn -> current_scanner.(schema) end,
     fn before_result, after_result ->
       unless before_result === after_result do
         raise "P13 scope-scanner output differs between Before and After"

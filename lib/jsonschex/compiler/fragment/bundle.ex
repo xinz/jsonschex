@@ -227,9 +227,11 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
     %{state | fallback_anchors: candidates}
   end
 
+  defp resource_base_or_empty_string(uri), do: URIUtil.base(uri) || ""
+
   defp put_resource_root(state, uri, document, inherited_base) do
-    key = resource_key(uri)
-    roots = Map.put_new(state.resource_roots, key, {document, inherited_base})
+    # Anonymous resources use the empty URI key matched by local references.
+    roots = Map.put_new(state.resource_roots, resource_base_or_empty_string(uri), {document, inherited_base})
     %{state | resource_roots: roots}
   end
 
@@ -244,12 +246,6 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
   end
 
   defp maybe_put_dynamic_anchor(state, _keyword, _base_uri, _anchor), do: state
-
-  defp resource_key(nil), do: ""
-  defp resource_key(uri) when is_binary(uri) do
-    {base, _fragment} = URIUtil.split_fragment(uri)
-    base
-  end
 
   # Entry and reference targets may come from arbitrary document locations, so
   # index their metadata before walking. Structural children are already covered
@@ -272,7 +268,7 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
 
   defp walk_indexed_reachable(schema, current_base, dynamic_scope, state) when is_map(schema) do
     new_base = resolve_base_from_id(schema, current_base)
-    dynamic_scope = put_dynamic_scope(dynamic_scope, resource_key(new_base))
+    dynamic_scope = put_dynamic_scope(dynamic_scope, resource_base_or_empty_string(new_base))
 
     with {:ok, state} <- follow_schema_refs(schema, new_base, dynamic_scope, state) do
       schema
@@ -339,7 +335,7 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
 
   defp winning_dynamic_anchor_uri({stack, _members}, anchor, state) when is_binary(anchor) do
     Enum.reduce(stack, nil, fn base, winner ->
-      uri = URIUtil.with_fragment(base, anchor)
+      uri = URIUtil.join_fragment(base, anchor)
       if Map.get(state.dynamic_anchors, uri) == anchor, do: uri, else: winner
     end)
   end
@@ -448,7 +444,7 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
   end
 
   defp find_resource_target(_resource, _inherited_base, effective_base, fragment, state) do
-    anchor_uri = URIUtil.with_fragment(effective_base, fragment)
+    anchor_uri = URIUtil.join_fragment(effective_base, fragment)
 
     case Map.get(state.anchors, anchor_uri) do
       nil -> find_fallback_anchor(anchor_uri, state)
@@ -501,20 +497,16 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
   end
 
   defp document_resource_base(document, fallback_base) when is_map(document) do
-    document
-    |> Map.get("$id", fallback_base)
-    |> resource_key()
+    resource_base_or_empty_string(Map.get(document, "$id", fallback_base))
   end
 
-  defp document_resource_base(_document, fallback_base), do: resource_key(fallback_base)
+  defp document_resource_base(_document, fallback_base), do: resource_base_or_empty_string(fallback_base)
 
   defp canonical_ref_uri(nil, _base_aliases), do: nil
   defp canonical_ref_uri(uri, base_aliases) do
     {base, fragment} = URIUtil.split_fragment(uri)
-    URIUtil.with_fragment(Map.get(base_aliases, base, base), fragment)
+    URIUtil.join_fragment(Map.get(base_aliases, base, base), fragment)
   end
-
-
 
   defp entry_resource_context(document, entry, base_uri) do
     case entry_pointer_fragment(entry) do
@@ -593,7 +585,7 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
     case Map.get(base_aliases, base) do
       nil -> ref
       ^base -> ref
-      aliased_base -> URIUtil.with_fragment(aliased_base, fragment)
+      aliased_base -> URIUtil.join_fragment(aliased_base, fragment)
     end
   end
 

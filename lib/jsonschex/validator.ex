@@ -19,7 +19,8 @@ defmodule JSONSchex.Validator do
   """
 
   alias JSONSchex.Types.{Error, Rule, Schema, ValidationContext}
-  alias JSONSchex.Validator.Rules
+
+  alias JSONSchex.Validator.{Reference, Rules}
 
   @empty_mapset MapSet.new()
 
@@ -48,7 +49,8 @@ defmodule JSONSchex.Validator do
       root_schema: root_schema,
       scope_stack: initial_stack,
       source_id: id,
-      raw: root_schema.raw
+      raw: root_schema.raw,
+      local_refs: root_schema.local_refs
     }
 
     case validate_entry(root_schema, data, [], ctx) do
@@ -194,10 +196,11 @@ defmodule JSONSchex.Validator do
         %ValidationContext{} = root_context,
         initial_evaluated
       ) do
-    current_context = update_context_if_needed(current_schema, root_context)
+    current_context = Reference.context_for_child(current_schema, root_context)
     initial_ctx = {path, initial_evaluated, current_context}
     run_rules(rules, data, path, current_context, initial_evaluated, initial_ctx, [])
   end
+
 
   defp to_error_entry(errs, _path, _rule_name, _data) when is_list(errs), do: errs
 
@@ -611,26 +614,5 @@ defmodule JSONSchex.Validator do
     end
   end
 
-  defp update_context_if_needed(%{source_id: nil}, %ValidationContext{} = root_context) do
-    root_context
-  end
 
-  defp update_context_if_needed(
-         %{source_id: id},
-         %ValidationContext{source_id: id} = root_context
-       ) do
-    root_context
-  end
-
-  defp update_context_if_needed(
-         %{source_id: source_id} = current_schema,
-         %ValidationContext{} = root_context
-       ) do
-    %{
-      root_context
-      | source_id: source_id,
-        raw: current_schema.raw,
-        scope_stack: [source_id | root_context.scope_stack]
-    }
-  end
 end

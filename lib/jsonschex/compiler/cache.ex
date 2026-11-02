@@ -38,7 +38,7 @@ defmodule JSONSchex.Compiler.Cache do
     index = Enum.reduce(["$anchor", "$dynamicAnchor"], index, fn keyword, acc ->
       case Map.get(raw, keyword) do
         anchor when is_binary(anchor) ->
-          Map.put_new(acc, URIUtil.with_fragment(schema.source_id || "", anchor), schema)
+          Map.put_new(acc, URIUtil.join_fragment(schema.source_id || "", anchor), schema)
         _ ->
           acc
       end

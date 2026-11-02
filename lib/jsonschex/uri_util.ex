@@ -42,8 +42,9 @@ defmodule JSONSchex.URIUtil do
   @doc """
   Splits a URI or reference into `{base, fragment}`.
 
-  The fragment is returned without the leading `#`. If no fragment is present,
-  the second element is `nil`. An empty fragment (`"#"`) is also normalized to `nil`.
+  Only the first literal `#` separates the base from the fragment. The fragment
+  is returned without that leading `#`. If no fragment is present, the second
+  element is `nil`. An empty fragment (`"#"`) is also normalized to `nil`.
 
   ## Examples
 
@@ -63,10 +64,47 @@ defmodule JSONSchex.URIUtil do
   def split_fragment(""), do: {"", nil}
   def split_fragment("#"), do: {"", nil}
   def split_fragment(uri) when is_binary(uri) do
-    case String.split(uri, "#", parts: 2) do
+    case :binary.split(uri, "#", []) do
       [base, ""] -> {base, nil}
       [base, fragment] -> {base, fragment}
       [base] -> {base, nil}
+    end
+  end
+
+  @doc """
+  Returns the URI or reference without its fragment.
+
+  Removes the first literal `#` and everything after it, without decoding or
+  normalizing the URI. Fragment-only references return `""`; a missing URI
+  remains `nil`, so absence is not confused with an explicitly empty reference.
+  Callers that require an empty resource key can normalize with `base(uri) || ""`.
+
+  ## Examples
+
+      iex> JSONSchex.URIUtil.base("https://example.com/schema#meta")
+      "https://example.com/schema"
+
+      iex> JSONSchex.URIUtil.base("schema.json?version=1#/definitions/value")
+      "schema.json?version=1"
+
+      iex> JSONSchex.URIUtil.base("urn:example:schema")
+      "urn:example:schema"
+
+      iex> JSONSchex.URIUtil.base("#/definitions/value")
+      ""
+
+      iex> JSONSchex.URIUtil.base("")
+      ""
+
+      iex> JSONSchex.URIUtil.base(nil)
+      nil
+  """
+  @spec base(String.t() | nil) :: String.t() | nil
+  def base(nil), do: nil
+  def base(uri) when is_binary(uri) do
+    case :binary.match(uri, "#") do
+      {offset, 1} -> binary_part(uri, 0, offset)
+      _ -> uri
     end
   end
 
@@ -91,25 +129,37 @@ defmodule JSONSchex.URIUtil do
   end
 
   @doc """
-  Joins a base URI and fragment into a URI reference.
+  Joins a fragment-free base URI and a fragment into a URI reference.
 
   The fragment should be provided without the leading `#`. Passing `nil` returns
-  the base unchanged.
+  the base unchanged; an empty fragment appends `#`. No URI parsing, encoding,
+  normalization, or replacement of an existing fragment is performed.
 
   ## Examples
 
-      iex> JSONSchex.URIUtil.with_fragment("https://example.com/schema", "meta")
+      iex> JSONSchex.URIUtil.join_fragment("https://example.com/schema", "meta")
       "https://example.com/schema#meta"
 
-      iex> JSONSchex.URIUtil.with_fragment("https://example.com/schema", "/$defs/foo")
+      iex> JSONSchex.URIUtil.join_fragment("https://example.com/schema", "/$defs/foo")
       "https://example.com/schema#/$defs/foo"
 
-      iex> JSONSchex.URIUtil.with_fragment("https://example.com/schema", nil)
+      iex> JSONSchex.URIUtil.join_fragment("https://example.com/schema", nil)
       "https://example.com/schema"
+
+      iex> JSONSchex.URIUtil.join_fragment("https://example.com/schema", "")
+      "https://example.com/schema#"
+
+      iex> JSONSchex.URIUtil.join_fragment("", "/$defs/foo")
+      "#/$defs/foo"
   """
+  @spec join_fragment(String.t(), String.t() | nil) :: String.t()
+  def join_fragment(base, nil) when is_binary(base), do: base
+  def join_fragment(base, fragment) when is_binary(base) and is_binary(fragment), do: base <> "#" <> fragment
+
+  @doc "Deprecated alias for `join_fragment/2`."
+  @deprecated "Use join_fragment/2 instead"
   @spec with_fragment(String.t(), String.t() | nil) :: String.t()
-  def with_fragment(base, nil) when is_binary(base), do: base
-  def with_fragment(base, fragment) when is_binary(base) and is_binary(fragment), do: base <> "#" <> fragment
+  defdelegate with_fragment(base, fragment), to: __MODULE__, as: :join_fragment
 
   @doc """
   Converts a fragment into a local reference string.
@@ -161,13 +211,7 @@ defmodule JSONSchex.URIUtil do
   def remote_ref?(_), do: false
 
   @doc false
-  def external_ref?(ref) when is_binary(ref) do
-    case split_fragment(ref) do
-      {"", _fragment} -> false
-      {"#" <> _base, _fragment} -> false
-      _ -> true
-    end
-  end
+  def external_ref?(ref) when is_binary(ref), do: base(ref) != ""
 
   def external_ref?(_), do: false
 
@@ -176,7 +220,7 @@ defmodule JSONSchex.URIUtil do
   end
 
   defp resolve_filesystem_path(base, "#" <> _ = fragment_ref) do
-    {base_without_fragment, _fragment} = split_fragment(base)
+    base_without_fragment = base(base)
     base_without_fragment <> fragment_ref
   end
 
@@ -192,7 +236,7 @@ defmodule JSONSchex.URIUtil do
           if String.starts_with?(uri_path, "/") do
             uri_path
           else
-            {base_path, _base_fragment} = split_fragment(base)
+            base_path = base(base)
             expanded_path = Path.expand(uri_path, Path.dirname(base_path))
 
             if String.ends_with?(uri_path, "/") do
@@ -202,7 +246,7 @@ defmodule JSONSchex.URIUtil do
             end
           end
 
-        with_fragment(resolved_path, uri_fragment)
+        join_fragment(resolved_path, uri_fragment)
     end
   end
 end

@@ -8,8 +8,7 @@ defmodule JSONSchex.Validator.Rules do
   """
 
   alias JSONSchex.Compiler.Predicates
-  alias JSONSchex.Types.{Error, ErrorContext, Rule, Schema}
-  alias JSONSchex.Validator
+  alias JSONSchex.Types.{Error, ErrorContext, Rule}
   alias JSONSchex.Validator.{Keywords, Reference}
 
   @type validation_context :: {list(), MapSet.t(), term()}
@@ -35,7 +34,7 @@ defmodule JSONSchex.Validator.Rules do
         data,
         ctx
       ) do
-    validate_ref(data, ref_string, resolved_uri, ctx)
+    Reference.validate_ref(data, ref_string, resolved_uri, ctx)
   end
 
   def apply(
@@ -401,18 +400,4 @@ defmodule JSONSchex.Validator.Rules do
     {:error, schema_errs ++ req_errs}
   end
 
-  defp validate_ref(
-         data,
-         ref_string,
-         resolved_uri,
-         {path, evaluated, validation_context} = context
-       ) do
-    case Map.get(validation_context.root_schema.defs, resolved_uri) do
-      %Schema{} = schema ->
-        Validator.validate_entry(schema, data, path, validation_context, evaluated)
-
-      _ ->
-        Reference.validate_ref(data, ref_string, context)
-    end
-  end
 end

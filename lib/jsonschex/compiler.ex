@@ -117,10 +117,11 @@ defmodule JSONSchex.Compiler do
     with :ok <- validate_required_vocabularies(raw_schema, ctx.draft),
          {:ok, root_vocabs} <- resolve_dialect(raw_schema, loader, @default_vocabs_list, ctx.draft),
          {:ok, root_compiled} <- compile_schema_node(raw_schema, entry_base, root_vocabs, ctx) do
-      {global_scopes, explicit_refs} = scan_context(context_document, init_base, scope_mode, ctx.draft)
+      {global_scopes, explicit_refs, resources} = scan_context(context_document, init_base, scope_mode, ctx.draft)
       scope_cache = if map_size(global_scopes) == 0, do: %{}, else: Cache.build(root_compiled)
       local_defs = root_compiled.defs
-      root_compiled = %{root_compiled | raw: pointer_root}
+      local_refs = if pointer_root === raw_schema, do: root_compiled.local_refs, else: %{}
+      root_compiled = %{root_compiled | raw: pointer_root, local_refs: local_refs}
 
       full_defs =
         Enum.reduce_while(global_scopes, root_compiled.defs, fn {id, sub_raw}, acc_defs ->
@@ -166,7 +167,44 @@ defmodule JSONSchex.Compiler do
           error
 
         defs ->
-          {:ok, %{root_compiled | defs: defs, loader: loader}}
+          # Eager pointers were resolved against the containing document, which
+          # need not be the selected fragment's owning resource.
+          local_refs =
+            if pointer_root === context_document,
+              do: Map.merge(root_compiled.local_refs, resolved_runtime_defs),
+              else: root_compiled.local_refs
+
+          root_compiled = %{root_compiled | defs: defs, local_refs: local_refs, loader: loader}
+          defs = bind_reference_roots(defs, resources, root_compiled)
+          {:ok, %{root_compiled | defs: defs}}
+      end
+    end
+  end
+
+  # Bind pointers to the lexical owner before another registry can replace its
+  # canonical URI. The target's compiled dynamic_anchor remains unchanged.
+  defp bind_reference_roots(defs, resources, root_schema) do
+    Map.new(defs, fn {id, schema} ->
+      case Map.get(resources, id) do
+        %{raw: raw} = resource when raw !== schema.raw ->
+          refs = resource_local_refs(resource, root_schema, defs)
+          {id, %{schema | raw: raw, local_refs: refs}}
+
+        _ ->
+          {id, schema}
+      end
+    end)
+  end
+
+  defp resource_local_refs(%{raw: raw, source_id: source_id}, root_schema, defs) do
+    base = URIUtil.base(source_id || "")
+
+    if raw === root_schema.raw and base == URIUtil.base(root_schema.source_id || "") do
+      root_schema.local_refs
+    else
+      case Map.get(defs, base) do
+        %{raw: ^raw, local_refs: refs} -> refs
+        _ -> %{}
       end
     end
   end
@@ -202,7 +240,7 @@ defmodule JSONSchex.Compiler do
   end
 
   defp compile_scope(raw, id, vocabs, root_vocabs, ctx, scope_cache) do
-    base = scope_resource_base(id)
+    base = URIUtil.base(id)
     reusable = if vocabs === root_vocabs, do: Cache.fetch_scope(scope_cache, id, raw, base), else: nil
 
     case reusable do
@@ -211,10 +249,6 @@ defmodule JSONSchex.Compiler do
     end
   end
 
-  defp scope_resource_base(uri) when is_binary(uri) do
-    {base, _fragment} = URIUtil.split_fragment(uri)
-    base
-  end
 
   defp entry_context(context_document, init_base, {:document, [_ | _] = path}, "draft7") do
     # Keep the inherited URI and its raw pointer root together while traversing
@@ -241,12 +275,12 @@ defmodule JSONSchex.Compiler do
   defp enter_entry_scope(%{"$ref" => _}, context), do: context
   defp enter_entry_scope(%{"$id" => id} = schema, {base, resource}) when is_binary(id) do
     new_base = resolve_uri(base, id)
-    {id_base, _fragment} = URIUtil.split_fragment(id)
+    id_base = URIUtil.base(id)
 
     # IDs without a base stay within the enclosing resource, even when URI
     # resolution falls back to the child ID for a relative parent base.
     resource =
-      if id_base == "" or scope_resource_base(new_base) == scope_resource_base(base || ""),
+      if id_base == "" or URIUtil.base(new_base) == URIUtil.base(base || ""),
         do: resource,
         else: schema
 
@@ -257,10 +291,10 @@ defmodule JSONSchex.Compiler do
   # Modes describe the discovery scope: a schema tree or its containing document.
   # The document path marks the selected schema, not the limit of discovery.
   defp scan_context(context_document, base_uri, :schema, draft),
-    do: ScopeScanner.scan(context_document, draft: draft, base_uri: base_uri)
+    do: ScopeScanner.scan_schema(context_document, draft: draft, base_uri: base_uri, with_resource_contexts: true)
 
   defp scan_context(context_document, base_uri, {:document, path}, draft),
-    do: ScopeScanner.scan_all(context_document, base_uri, draft: draft, schema_path: path)
+    do: ScopeScanner.scan_document(context_document, base_uri, draft: draft, schema_path: path, with_resource_contexts: true)
 
   defp merge_defs({:error, error}, _), do: {:error, error}
   defp merge_defs(full_defs, runtime_defs), do: Map.merge(full_defs, runtime_defs)
@@ -340,7 +374,8 @@ defmodule JSONSchex.Compiler do
             {:ok, compiled_sub} ->
               # Eager targets need the same URI/raw-root pairing as JIT targets;
               # entering a compiled leaf must not discard its owning resource.
-              compiled_sub = %{compiled_sub | raw: resource}
+              local_refs = if resource === fragment, do: compiled_sub.local_refs, else: %{}
+              compiled_sub = %{compiled_sub | raw: resource, local_refs: local_refs}
 
               Map.put(acc, ref, compiled_sub)
 
@@ -410,8 +445,9 @@ defmodule JSONSchex.Compiler do
       end
 
     base = resolve_uri(parent_base, Map.get(effective_schema, "$id"))
+    dynamic_anchor = Map.get(effective_schema, "$dynamicAnchor")
 
-    with {:ok, compiled_defs} <- compile_local_defs(effective_schema, base, vocabs, ctx),
+    with {:ok, compiled_defs, local_refs} <- compile_local_defs(effective_schema, base, vocabs, ctx),
          {:ok, standard_rules} <- compile_standard_keywords(effective_schema, base, vocabs, ctx) do
       rules =
         if Map.has_key?(effective_schema, "$ref") do
@@ -424,8 +460,10 @@ defmodule JSONSchex.Compiler do
        %Schema{
          rules: rules,
          defs: compiled_defs,
+         local_refs: local_refs,
          source_id: base,
          raw: schema,
+         dynamic_anchor: if(ctx.draft == "draft2020_12" and is_binary(dynamic_anchor), do: dynamic_anchor),
          loader: ctx.loader,
          format_assertion: ctx.format_assertion,
          content_assertion: ctx.content_assertion,
@@ -436,19 +474,22 @@ defmodule JSONSchex.Compiler do
 
   defp resolve_uri(parent, id), do: URIUtil.resolve(parent, id)
 
-  defp compile_local_defs(_schema, _base, _vocabs, %{draft: "draft7"}), do: {:ok, %{}}
+  defp compile_local_defs(_schema, _base, _vocabs, %{draft: "draft7"}), do: {:ok, %{}, %{}}
 
   defp compile_local_defs(schema, base, vocabs, ctx) do
     raw_defs = Map.get(schema, "$defs", %{})
 
-    Enum.reduce_while(raw_defs, {:ok, %{}}, fn {key, sub}, {:ok, acc} ->
+    Enum.reduce_while(raw_defs, {:ok, %{}, %{}}, fn {key, sub}, {:ok, acc, refs} ->
       case compile_schema_node(sub, base, vocabs, ctx) do
         {:ok, compiled_sub} ->
           local_ref = "#/$defs/" <> key
 
           updated_acc = Map.put(acc, local_ref, compiled_sub)
+          # Retain legacy defs keys, but cache only canonical JSON Pointer aliases.
+          pointer = ExJSONPointer.encode_path(["$defs", key], format: "uri_fragment")
+          refs = Map.put(refs, pointer, compiled_sub)
 
-          {:cont, {:ok, updated_acc}}
+          {:cont, {:ok, updated_acc, refs}}
 
         {:error, error} ->
           {:halt, {:error, %{error | path: ["$defs", key] ++ error.path}}}

@@ -165,7 +165,6 @@ defmodule JSONSchex.Draft7.Schemas do
 
   def compiled_defs(_uri, _opts), do: nil
 
-  # Keep the default registry compatible with cache entries created by compiled_defs/1.
   defp compiled_defs_cache_key(false, false), do: @compiled_defs_cache_key
 
   defp compiled_defs_cache_key(format_assertion, content_assertion) do
