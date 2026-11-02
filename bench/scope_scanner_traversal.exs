@@ -8,19 +8,44 @@
 # VM-wide GC counters, so run this script in a dedicated VM.
 
 root = Path.expand("..", __DIR__)
-source_paths = ["lib/jsonschex/schema_traversal.ex", "lib/jsonschex/scope_scanner.ex"]
+traversal_path = "lib/jsonschex/schema_traversal.ex"
+scanner_path = "lib/jsonschex/scope_scanner.ex"
 
 {sources, source_label} =
   case System.argv() do
     [] ->
+      draft_paths =
+        root
+        |> Path.join("lib/jsonschex/draft*/scope_scanner.ex")
+        |> Path.wildcard()
+        |> Enum.map(&Path.relative_to(&1, root))
+
       {
-        Enum.map(source_paths, fn path -> {path, File.read!(Path.join(root, path))} end),
+        Enum.map([traversal_path] ++ draft_paths ++ [scanner_path], fn path ->
+          {path, File.read!(Path.join(root, path))}
+        end),
         "working tree (snapshot at script startup)"
       }
 
     ["--baseline", revision] ->
+      # Facade revisions need matching draft scanners; monolithic revisions have none.
+      draft_paths =
+        case System.cmd(
+               "git",
+               ["--no-pager", "ls-tree", "-r", "--name-only", revision, "--", "lib/jsonschex"],
+               cd: root
+             ) do
+          {output, 0} ->
+            output
+            |> String.split("\n", trim: true)
+            |> Enum.filter(&Regex.match?(~r{^lib/jsonschex/draft[^/]+/scope_scanner\.ex$}, &1))
+
+          {output, status} ->
+            raise "Cannot list scanner sources at #{revision} (exit #{status}): #{output}"
+        end
+
       baseline_sources =
-        Enum.map(source_paths, fn path ->
+        Enum.map([traversal_path] ++ draft_paths ++ [scanner_path], fn path ->
           case System.cmd("git", ["--no-pager", "show", "#{revision}:#{path}"], cd: root) do
             {source, 0} -> {path, source}
             {output, status} -> raise "Cannot load #{path} (exit #{status}): #{output}"
@@ -196,7 +221,12 @@ defmodule ScopeScannerTraversalBench do
   end
 
   def measure({label, input, runner}) do
-    current = fn -> runner.(input, &ScopeScanner.scan/1) end
+    # Historical sources may still expose scan/1; resolve the API before timing.
+    scan_function =
+      if function_exported?(ScopeScanner, :scan_schema, 1), do: :scan_schema, else: :scan
+
+    scanner = Function.capture(ScopeScanner, scan_function, 1)
+    current = fn -> runner.(input, scanner) end
     reducer = fn -> runner.(input, &ScopeScannerReducerPrototype.scan/1) end
 
     expected = current.()

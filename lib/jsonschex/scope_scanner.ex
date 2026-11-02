@@ -15,7 +15,7 @@ defmodule JSONSchex.ScopeScanner do
       ...>     "user" => %{"$id" => "user", "type" => "object"}
       ...>   }
       ...> }
-      iex> {registry, _refs} = JSONSchex.ScopeScanner.scan(schema)
+      iex> {registry, _refs} = JSONSchex.ScopeScanner.scan_schema(schema)
       iex> Map.has_key?(registry, "https://example.com/schema")
       true
       iex> Map.has_key?(registry, "https://example.com/user")
@@ -32,7 +32,9 @@ defmodule JSONSchex.ScopeScanner do
   @type contextual_scan_result :: {registry(), MapSet.t(String.t()), resource_contexts()}
 
   @doc """
-  Scans a raw schema and returns a tuple `{registry, refs}` where:
+  Scans a known JSON Schema through draft-recognized subschema locations.
+
+  Returns a tuple `{registry, refs}` where:
   - `registry` is a map of `{absolute_uri => raw_schema}`.
   - `refs` is a MapSet of local fragment references found during the initial traversal.
 
@@ -53,17 +55,17 @@ defmodule JSONSchex.ScopeScanner do
   This provenance is retained during discovery rather than inferred from a
   potentially overwritten canonical URI later.
   """
-  @spec scan(map() | boolean(), keyword()) :: scan_result() | contextual_scan_result()
-  def scan(schema, opts \\ []) do
+  @spec scan_schema(map() | boolean(), keyword()) :: scan_result() | contextual_scan_result()
+  def scan_schema(schema, opts \\ []) do
     scanner = scanner(opts)
-    scanner.scan(schema, opts)
+    scanner.scan_schema(schema, opts)
   end
 
   @doc """
   Scans maps and lists in a containing document for JSON Schema resource
   identifiers and references.
 
-  This is intentionally broader than `scan/1`: fragment compilation may receive
+  This is intentionally broader than `scan_schema/1`: fragment compilation may receive
   an OpenAPI document whose schema objects live under arbitrary paths such as
   `components.schemas` or `paths.*.requestBody.content.*.schema`.
   The `:draft` option controls Draft 7 `$ref` sibling and newer-keyword handling.
@@ -79,12 +81,12 @@ defmodule JSONSchex.ScopeScanner do
   addressable without traversing unrelated ignored siblings.
   Draft 2020-12 scans every map/list node without requiring roles or a selected
   schema path. The compiler's `:with_resource_contexts` option has the same
-  three-element result as `scan/2`.
+  three-element result as `scan_schema/2`.
   """
-  @spec scan_all(term(), String.t() | nil, keyword()) :: scan_result() | contextual_scan_result()
-  def scan_all(document, base_uri \\ nil, opts \\ []) do
+  @spec scan_document(term(), String.t() | nil, keyword()) :: scan_result() | contextual_scan_result()
+  def scan_document(document, base_uri \\ nil, opts \\ []) do
     scanner = scanner(opts)
-    scanner.scan_all(document, base_uri, opts)
+    scanner.scan_document(document, base_uri, opts)
   end
 
   @spec scanner(keyword()) :: module()

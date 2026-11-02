@@ -3,22 +3,22 @@ defmodule JSONSchex.Draft202012.ScopeScanner do
 
   alias JSONSchex.{SchemaTraversal, URIUtil}
 
-  def scan(schema, opts \\ []) do
+  def scan_schema(schema, opts \\ []) do
     base_uri = Keyword.get(opts, :base_uri)
     owner = %{raw: schema, source_id: base_uri}
 
-    do_scan(schema, base_uri, owner, {%{}, MapSet.new()})
+    do_scan_schema(schema, base_uri, owner, {%{}, MapSet.new()})
     |> finish(opts)
   end
 
-  def scan_all(document, base_uri, opts) do
+  def scan_document(document, base_uri, opts) do
     owner = %{raw: document, source_id: base_uri}
 
-    do_scan_all(document, base_uri, owner, {%{}, MapSet.new()})
+    do_scan_document(document, base_uri, owner, {%{}, MapSet.new()})
     |> finish(opts)
   end
 
-  defp do_scan(schema, base_uri, owner, {registry, refs}) when is_map(schema) do
+  defp do_scan_schema(schema, base_uri, owner, {registry, refs}) when is_map(schema) do
     current_id = Map.get(schema, "$id")
     new_base_uri = URIUtil.resolve(base_uri, current_id) || ""
     owner = update_resource_owner(schema, current_id, base_uri, new_base_uri, owner)
@@ -39,13 +39,13 @@ defmodule JSONSchex.Draft202012.ScopeScanner do
     refs = collect_refs(schema, refs)
 
     SchemaTraversal.reduce_scope_subschemas(schema, {registry, refs}, fn subschema, acc ->
-      do_scan(subschema, new_base_uri, owner, acc)
+      do_scan_schema(subschema, new_base_uri, owner, acc)
     end)
   end
 
-  defp do_scan(_value, _base_uri, _owner, acc), do: acc
+  defp do_scan_schema(_value, _base_uri, _owner, acc), do: acc
 
-  defp do_scan_all(schema, base_uri, owner, {registry, refs}) when is_map(schema) do
+  defp do_scan_document(schema, base_uri, owner, {registry, refs}) when is_map(schema) do
     current_id = Map.get(schema, "$id")
     new_base_uri = if is_binary(current_id), do: URIUtil.resolve(base_uri, current_id), else: base_uri
     new_base_uri = new_base_uri || ""
@@ -67,15 +67,15 @@ defmodule JSONSchex.Draft202012.ScopeScanner do
     refs = collect_refs(schema, refs)
 
     Enum.reduce(schema, {registry, refs}, fn {_key, value}, acc ->
-      do_scan_all(value, new_base_uri, owner, acc)
+      do_scan_document(value, new_base_uri, owner, acc)
     end)
   end
 
-  defp do_scan_all(list, base_uri, owner, acc) when is_list(list) do
-    Enum.reduce(list, acc, fn item, inner_acc -> do_scan_all(item, base_uri, owner, inner_acc) end)
+  defp do_scan_document(list, base_uri, owner, acc) when is_list(list) do
+    Enum.reduce(list, acc, fn item, inner_acc -> do_scan_document(item, base_uri, owner, inner_acc) end)
   end
 
-  defp do_scan_all(_value, _base_uri, _owner, acc), do: acc
+  defp do_scan_document(_value, _base_uri, _owner, acc), do: acc
 
   defp update_resource_owner(schema, id, parent_base, resolved_base, owner) when is_binary(id) do
     resource_uri = URIUtil.base(resolved_base)

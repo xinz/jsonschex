@@ -853,7 +853,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
       }
     }
 
-    {scopes, refs} = JSONSchex.ScopeScanner.scan_all(document, nil,
+    {scopes, refs} = JSONSchex.ScopeScanner.scan_document(document, nil,
       draft: "draft7", schema_path: ["$defs", "holder", "entry"])
     refute Map.has_key?(scopes, poison_uri)
     assert refs == MapSet.new(["#/$defs/pick"])
@@ -896,7 +896,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
   test "Discovery follows pointers into another registered resource" do
     for ref <- ["https://example.com/b#/$defs/selected", "b#/$defs/selected"] do
       {schema, resource_uri, integer_uri, ignored_uri} = registered_resource_pointer_schema(ref)
-      {scopes, refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      {scopes, refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
 
       # B is already known; following its pointer must not require an external loader.
       assert Map.has_key?(scopes, resource_uri)
@@ -1281,13 +1281,13 @@ defmodule JSONSchex.Test.Draft7Compatibility do
 
       # The anchor's custom map is ignored annotation data with a competing target.
       # The explicit pointer must select the root's true schema, not this poison.
-      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
       refute Map.has_key?(scopes, poison_uri)
 
       # A reached resource proves discovery follows the pointer rather than skipping it.
       reached_uri = "https://example.com/reached"
       schema = put_in(schema, ["custom", "pick"], %{"$id" => reached_uri, "type" => "integer"})
-      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
       assert Map.has_key?(scopes, reached_uri)
       refute Map.has_key?(scopes, poison_uri)
     end
@@ -1307,7 +1307,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
       }
 
       # Schema compilation must not activate the anchor's ignored annotation target.
-      # Broad document discovery via scan_all intentionally walks arbitrary custom maps.
+      # Broad document discovery via scan_document intentionally walks arbitrary custom maps.
       assert {:ok, compiled} = JSONSchex.compile(schema, draft: "draft7")
       refute Map.has_key?(compiled.defs, poison_uri)
 
@@ -1324,7 +1324,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     test "Draft 7 pointer discovery registers crossed #{id_kind} ancestors without scanning siblings" do
       fixture = crossed_ancestor_resource_fixture(unquote(id_kind))
 
-      {scopes, refs} = JSONSchex.ScopeScanner.scan(fixture.schema,
+      {scopes, refs} = JSONSchex.ScopeScanner.scan_schema(fixture.schema,
         draft: "draft7", base_uri: fixture.base_uri)
 
       assert refs == MapSet.new(["#/definitions/a/definitions/b"])
@@ -1351,7 +1351,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     test "Draft 7 selected-entry discovery registers #{id_kind} ancestors beneath ignored annotations" do
       fixture = crossed_ancestor_resource_fixture(unquote(id_kind))
 
-      {scopes, refs} = JSONSchex.ScopeScanner.scan_all(fixture.document, fixture.base_uri,
+      {scopes, refs} = JSONSchex.ScopeScanner.scan_document(fixture.document, fixture.base_uri,
         draft: "draft7", schema_path: ["$defs", "a", "definitions", "b"])
 
       assert refs == MapSet.new()
@@ -1389,7 +1389,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
       "allOf" => [%{"$ref" => "#/$defs/a/definitions/b"}]
     }
 
-    {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
     assert Map.fetch!(scopes, fixture.ancestor_uri) === ordinary
     for uri <- fixture.ignored_uris, do: refute(Map.has_key?(scopes, uri))
 
@@ -1417,7 +1417,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
 
     # The back-reference is deferred before the pointer crosses A. B is already
     # registered, so adding A's metadata alone must trigger another worklist pass.
-    {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
 
     assert Map.get(scopes, reached_uri) === reached
     assert Map.fetch!(scopes, fixture.ancestor_uri) === ancestor
@@ -1430,7 +1430,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
     test "Draft 7 ordinary pointer targets override ancestor metadata with #{order} order" do
       {schema, uri, target} = competing_ancestor_metadata_fixture(unquote(order))
 
-      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
 
       assert Map.fetch!(scopes, uri) === target
     end
@@ -1451,7 +1451,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
   test "Draft 7 selected-route metadata cannot shadow a later ordinary pointer target" do
     {document, uri, target, ignored_uri} = selected_ancestor_metadata_fixture()
 
-    {scopes, _refs} = JSONSchex.ScopeScanner.scan_all(document, nil,
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan_document(document, nil,
       draft: "draft7", schema_path: ["$defs", "metadata", "selected"])
 
     assert Map.fetch!(scopes, uri) === target
@@ -1488,7 +1488,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
 
     # Reverse queue order resolves the URI through metadata before finding the
     # ordinary root. The same pointer must then be resolved against that new root.
-    {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+    {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
 
     assert Map.fetch!(scopes, uri) === target
     assert Map.get(scopes, ordinary_hit["$id"]) === ordinary_hit
@@ -1506,7 +1506,7 @@ defmodule JSONSchex.Test.Draft7Compatibility do
         "allOf" => Enum.map(names, &%{"$ref" => "#/$defs/" <> &1})
       }
 
-      {scopes, _refs} = JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
+      {scopes, _refs} = JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
       assert Map.fetch!(scopes, uri) === winner
     end
   end
@@ -1521,8 +1521,8 @@ defmodule JSONSchex.Test.Draft7Compatibility do
       fixture = shared_fallback_child_fixture(unquote(order))
       {scopes, _refs} =
         case unquote(mode) do
-          "schema" -> JSONSchex.ScopeScanner.scan(fixture.schema, draft: "draft7")
-          "document" -> JSONSchex.ScopeScanner.scan_all(fixture.schema, nil,
+          "schema" -> JSONSchex.ScopeScanner.scan_schema(fixture.schema, draft: "draft7")
+          "document" -> JSONSchex.ScopeScanner.scan_document(fixture.schema, nil,
             draft: "draft7", schema_path: [])
         end
 
@@ -1584,8 +1584,8 @@ defmodule JSONSchex.Test.Draft7Compatibility do
       # must not launder the derived reference into an ordinary discovery.
       {scopes, _refs} =
         case unquote(mode) do
-          "schema" -> JSONSchex.ScopeScanner.scan(schema, draft: "draft7")
-          "document" -> JSONSchex.ScopeScanner.scan_all(schema, nil,
+          "schema" -> JSONSchex.ScopeScanner.scan_schema(schema, draft: "draft7")
+          "document" -> JSONSchex.ScopeScanner.scan_document(schema, nil,
             draft: "draft7", schema_path: [])
         end
 

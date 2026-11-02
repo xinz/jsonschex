@@ -39,7 +39,7 @@ defmodule JSONSchex.Test.Draft202012CompiledDefsRegistryTest do
     for uri <- @family_uris do
       assert {:ok, raw_schema} = Schemas.fetch(uri)
       assert {:ok, compiled_schema} = Compiler.compile(raw_schema, base_uri: uri)
-      {scanned_defs, _refs} = ScopeScanner.scan(raw_schema)
+      {scanned_defs, _refs} = ScopeScanner.scan_schema(raw_schema)
 
       compiler_registry =
         %{}

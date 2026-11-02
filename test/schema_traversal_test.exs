@@ -22,15 +22,15 @@ defmodule JSONSchex.Test.SchemaTraversal do
       MapSet.new(["#/definitions/child", "#dynamic"])
     }
 
-    assert ScopeScanner.scan(schema) == expected
-    assert ScopeScanner.scan(schema, draft: "draft2020_12") == expected
-    assert ScopeScanner.scan(schema, draft: "draft7") == {%{child_uri => child}, MapSet.new(["#/definitions/child"])}
+    assert ScopeScanner.scan_schema(schema) == expected
+    assert ScopeScanner.scan_schema(schema, draft: "draft2020_12") == expected
+    assert ScopeScanner.scan_schema(schema, draft: "draft7") == {%{child_uri => child}, MapSet.new(["#/definitions/child"])}
 
     document = %{"entry" => schema}
-    assert ScopeScanner.scan_all(document) == expected
-    assert ScopeScanner.scan_all(document, nil, draft: "draft2020_12", schema_path: ["entry"]) == expected
+    assert ScopeScanner.scan_document(document) == expected
+    assert ScopeScanner.scan_document(document, nil, draft: "draft2020_12", schema_path: ["entry"]) == expected
     # The pointer belongs to the containing document, which has no root definitions.
-    assert ScopeScanner.scan_all(document, nil, draft: "draft7", schema_path: ["entry"]) ==
+    assert ScopeScanner.scan_document(document, nil, draft: "draft7", schema_path: ["entry"]) ==
              {%{}, MapSet.new(["#/definitions/child"])}
   end
 
@@ -42,8 +42,8 @@ defmodule JSONSchex.Test.SchemaTraversal do
     expected_document = Enum.reduce(properties, nil, fn {_name, child}, _previous -> child end)
 
     for draft <- ["draft7", "draft2020_12"] do
-      assert ScopeScanner.scan(schema, draft: draft) == {%{uri => expected}, MapSet.new()}
-      assert ScopeScanner.scan_all(schema, nil, draft: draft) == {%{uri => expected_document}, MapSet.new()}
+      assert ScopeScanner.scan_schema(schema, draft: draft) == {%{uri => expected}, MapSet.new()}
+      assert ScopeScanner.scan_document(schema, nil, draft: draft) == {%{uri => expected_document}, MapSet.new()}
     end
   end
 
@@ -54,8 +54,8 @@ defmodule JSONSchex.Test.SchemaTraversal do
     document = %{"extension" => [child]}
 
     for draft <- ["draft7", "draft2020_12"] do
-      assert ScopeScanner.scan(document, draft: draft) == {%{}, MapSet.new()}
-      assert ScopeScanner.scan_all(document, base_uri, draft: draft) == {%{uri => child}, MapSet.new()}
+      assert ScopeScanner.scan_schema(document, draft: draft) == {%{}, MapSet.new()}
+      assert ScopeScanner.scan_document(document, base_uri, draft: draft) == {%{uri => child}, MapSet.new()}
     end
   end
 
@@ -68,10 +68,10 @@ defmodule JSONSchex.Test.SchemaTraversal do
     expected = {%{root_uri => schema, child_uri => child}, MapSet.new()}
 
     for draft <- ["draft7", "draft2020_12"] do
-      assert ScopeScanner.scan(schema, draft: draft, base_uri: base_uri) == expected
-      assert ScopeScanner.scan_all(schema, base_uri, draft: draft) == expected
-      assert ScopeScanner.scan(schema, draft: draft) ==
-               ScopeScanner.scan(schema, draft: draft, base_uri: nil)
+      assert ScopeScanner.scan_schema(schema, draft: draft, base_uri: base_uri) == expected
+      assert ScopeScanner.scan_document(schema, base_uri, draft: draft) == expected
+      assert ScopeScanner.scan_schema(schema, draft: draft) ==
+               ScopeScanner.scan_schema(schema, draft: draft, base_uri: nil)
     end
   end
 
@@ -101,8 +101,8 @@ defmodule JSONSchex.Test.SchemaTraversal do
       MapSet.new(["#dynamic"])
     }
 
-    assert ScopeScanner.scan(schema, draft: "draft2020_12", base_uri: base_uri) == expected
-    assert ScopeScanner.scan(schema, draft: "draft7", base_uri: base_uri) == {%{}, MapSet.new()}
+    assert ScopeScanner.scan_schema(schema, draft: "draft2020_12", base_uri: base_uri) == expected
+    assert ScopeScanner.scan_schema(schema, draft: "draft7", base_uri: base_uri) == {%{}, MapSet.new()}
   end
 
   test "Draft 7 never registers newer anchors or collects dynamic refs from document metadata" do
@@ -114,12 +114,12 @@ defmodule JSONSchex.Test.SchemaTraversal do
       MapSet.new(["#/target"])
     }
 
-    assert ScopeScanner.scan_all(document, base_uri, draft: "draft2020_12") == expected
-    assert ScopeScanner.scan_all(document, base_uri, draft: "draft7") == {%{}, MapSet.new()}
-    assert ScopeScanner.scan(metadata, draft: "draft7") == {%{}, MapSet.new()}
-    assert ScopeScanner.scan_all(document, base_uri, draft: "draft7", schema_path: ["metadata"]) ==
+    assert ScopeScanner.scan_document(document, base_uri, draft: "draft2020_12") == expected
+    assert ScopeScanner.scan_document(document, base_uri, draft: "draft7") == {%{}, MapSet.new()}
+    assert ScopeScanner.scan_schema(metadata, draft: "draft7") == {%{}, MapSet.new()}
+    assert ScopeScanner.scan_document(document, base_uri, draft: "draft7", schema_path: ["metadata"]) ==
              {%{}, MapSet.new()}
-    assert ScopeScanner.scan_all(document, base_uri, draft: "draft2020_12", schema_path: ["metadata"]) == expected
+    assert ScopeScanner.scan_document(document, base_uri, draft: "draft2020_12", schema_path: ["metadata"]) == expected
   end
 
   test "Draft 7 document dynamic-ref annotations do not eagerly compile their targets" do
@@ -148,8 +148,8 @@ defmodule JSONSchex.Test.SchemaTraversal do
     }
     expected = {%{uri => schema, uri <> "#integer" => child}, MapSet.new(["#integer"])}
 
-    assert ScopeScanner.scan(schema, draft: "draft7") == expected
-    assert ScopeScanner.scan_all(schema, nil, draft: "draft7") == expected
+    assert ScopeScanner.scan_schema(schema, draft: "draft7") == expected
+    assert ScopeScanner.scan_document(schema, nil, draft: "draft7") == expected
   end
 
   test "Draft 7 document scanning prunes both resources and refs inside actual schema annotations" do
@@ -163,7 +163,7 @@ defmodule JSONSchex.Test.SchemaTraversal do
                    %{"examples" => [], keyword => child},
                    %{"properties" => %{"value" => %{keyword => child}}}] do
       document = %{"arbitrary" => [schema]}
-      {registry, refs} = ScopeScanner.scan_all(document, nil, draft: "draft7")
+      {registry, refs} = ScopeScanner.scan_document(document, nil, draft: "draft7")
 
       refute Map.has_key?(registry, "https://example.test/ignored")
       refute MapSet.member?(refs, "#/missing")
@@ -176,7 +176,7 @@ defmodule JSONSchex.Test.SchemaTraversal do
     for keyword <- ["properties", "patternProperties", "definitions", "dependencies"],
         name <- ["$ref", "$id", "$defs", "prefixItems", "$anchor", "$dynamicAnchor", "$dynamicRef"] do
       document = %{"arbitrary" => %{keyword => %{name => child}}}
-      {registry, refs} = ScopeScanner.scan_all(document, nil, draft: "draft7")
+      {registry, refs} = ScopeScanner.scan_document(document, nil, draft: "draft7")
 
       assert registry == %{"https://example.test/named" => child}
       assert refs == MapSet.new()
@@ -189,7 +189,7 @@ defmodule JSONSchex.Test.SchemaTraversal do
 
     for name <- ["$anchor", "$dynamicAnchor", "$dynamicRef"] do
       document = %{"arbitrary" => %{name => child}}
-      assert ScopeScanner.scan_all(document, nil, draft: "draft7") == {%{uri => child}, MapSet.new()}
+      assert ScopeScanner.scan_document(document, nil, draft: "draft7") == {%{uri => child}, MapSet.new()}
     end
   end
 
@@ -219,7 +219,7 @@ defmodule JSONSchex.Test.SchemaTraversal do
 
     assert reduced === SchemaTraversal.scope_subschemas(schema)
 
-    {registry, _refs} = ScopeScanner.scan(schema)
+    {registry, _refs} = ScopeScanner.scan_schema(schema)
     assert Map.fetch!(registry, target_uri) === expected
     assert Map.fetch!(registry, target_uri <> "#shared") === expected
 

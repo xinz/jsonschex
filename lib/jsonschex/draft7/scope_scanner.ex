@@ -29,16 +29,16 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   )
 
 
-  def scan(schema, opts \\ []) do
+  def scan_schema(schema, opts \\ []) do
     base_uri = Keyword.get(opts, :base_uri)
     owner = document_owner(schema, base_uri)
-    schema |> do_scan(base_uri, new_state(), owner) |> finish(opts)
+    schema |> do_scan_schema(base_uri, new_state(), owner) |> finish(opts)
   end
 
-  def scan_all(document, base_uri, opts) do
+  def scan_document(document, base_uri, opts) do
     path = Keyword.get(opts, :schema_path)
     owner = document_owner(document, base_uri)
-    document |> do_scan_all(base_uri, new_state(), :document, path, owner) |> finish(opts)
+    document |> do_scan_document(base_uri, new_state(), :document, path, owner) |> finish(opts)
   end
 
 
@@ -52,7 +52,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
       resource: %{raw: document, source_id: base_uri}}
   end
 
-  defp do_scan(raw_schema, base_uri, state, owner) when is_map(raw_schema) do
+  defp do_scan_schema(raw_schema, base_uri, state, owner) when is_map(raw_schema) do
     schema = scope_schema(raw_schema)
     current_id = Map.get(schema, "$id")
     new_base_uri = URIUtil.resolve(base_uri, current_id) || ""
@@ -67,21 +67,21 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     state = collect_refs(schema, %{state | resources: resources}, owner)
 
     SchemaTraversal.reduce_scope_subschemas(schema, state, fn subschema, acc ->
-      do_scan(subschema, new_base_uri, acc, owner)
+      do_scan_schema(subschema, new_base_uri, acc, owner)
     end, "draft7")
   end
 
-  defp do_scan(_value, _base_uri, acc, _owner), do: acc
+  defp do_scan_schema(_value, _base_uri, acc, _owner), do: acc
 
-  defp do_scan_all(schemas, base_uri, acc, :schema_map, path, owner)
+  defp do_scan_document(schemas, base_uri, acc, :schema_map, path, owner)
        when is_map(schemas) and path != [] do
     # These keys are names, even when they happen to spell a schema keyword.
     Enum.reduce(schemas, acc, fn {name, schema}, inner_acc ->
-      do_scan_all(schema, base_uri, inner_acc, :schema, child_path(path, name), owner)
+      do_scan_document(schema, base_uri, inner_acc, :schema, child_path(path, name), owner)
     end)
   end
 
-  defp do_scan_all(raw_schema, base_uri, state, role, path, owner) when is_map(raw_schema) do
+  defp do_scan_document(raw_schema, base_uri, state, role, path, owner) when is_map(raw_schema) do
     schema_context? = role == :schema or path == [] or schema_candidate?(raw_schema)
     schema = if schema_context?, do: scope_schema(raw_schema), else: raw_schema
     current_id = Map.get(schema, "$id")
@@ -99,7 +99,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
 
     state = Enum.reduce(schema, state, fn {key, value}, acc ->
       child_role = if schema_context?, do: schema_child_role(key), else: :document
-      do_scan_all(value, new_base_uri, acc, child_role, child_path(path, key), owner)
+      do_scan_document(value, new_base_uri, acc, child_role, child_path(path, key), owner)
     end)
 
     # Explicit entry selection may cross an ignored annotation. Follow only that
@@ -112,23 +112,23 @@ defmodule JSONSchex.Draft7.ScopeScanner do
     end
   end
 
-  defp do_scan_all(list, base_uri, acc, role, nil, owner) when is_list(list) do
+  defp do_scan_document(list, base_uri, acc, role, nil, owner) when is_list(list) do
     Enum.reduce(list, acc, fn item, inner_acc ->
-      do_scan_all(item, base_uri, inner_acc, role, nil, owner)
+      do_scan_document(item, base_uri, inner_acc, role, nil, owner)
     end)
   end
 
-  defp do_scan_all(list, base_uri, acc, role, path, owner) when is_list(list) do
+  defp do_scan_document(list, base_uri, acc, role, path, owner) when is_list(list) do
     path = canonical_list_path(path, list)
 
     list
     |> Enum.with_index()
     |> Enum.reduce(acc, fn {item, index}, inner_acc ->
-      do_scan_all(item, base_uri, inner_acc, role, child_path(path, Integer.to_string(index)), owner)
+      do_scan_document(item, base_uri, inner_acc, role, child_path(path, Integer.to_string(index)), owner)
     end)
   end
 
-  defp do_scan_all(_value, _base_uri, acc, _role, _path, _owner), do: acc
+  defp do_scan_document(_value, _base_uri, acc, _role, _path, _owner), do: acc
 
   defp child_path([key | rest], key), do: rest
   defp child_path(_path, _key), do: nil
@@ -144,7 +144,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
   defp canonical_list_path(path, _list), do: path
 
   defp scan_selected_route(value, base_uri, acc, [], owner) do
-    do_scan_all(value, base_uri, acc, :schema, [], owner)
+    do_scan_document(value, base_uri, acc, :schema, [], owner)
   end
   defp scan_selected_route(map, base_uri, state, [key | rest], owner) when is_map(map) do
     owner = resource_owner(map, base_uri, owner)
@@ -259,7 +259,7 @@ defmodule JSONSchex.Draft7.ScopeScanner do
       resource_owner(raw, parent_base, acc)
     end)
 
-    do_scan(context.target, context.inherited_base, new_state(fallbacks), owner)
+    do_scan_schema(context.target, context.inherited_base, new_state(fallbacks), owner)
   end
 
 
