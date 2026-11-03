@@ -16,17 +16,17 @@ defmodule JSONSchex.Compiler.Predicates do
   Checks if data matches the specified JSON Schema type(s).
   """
   @spec check_type(term(), String.t() | [String.t()]) :: :ok | {:error, ErrorContext.t()}
-  # Guard comparisons avoid binary-match context allocation during type dispatch.
-  def check_type(data, expected) when is_binary(data) and expected == "string", do: :ok
-  def check_type(data, expected) when is_integer(data) and expected == "integer", do: :ok
-  def check_type(data, expected) when is_float(data) and expected == "integer" do
+  # Keep literal heads: lower-allocation guards were not consistently faster.
+  def check_type(data, "string") when is_binary(data), do: :ok
+  def check_type(data, "integer") when is_integer(data), do: :ok
+  def check_type(data, "integer") when is_float(data) do
     if data == trunc(data), do: :ok, else: {:error, %ErrorContext{contrast: "integer", input: "float"}}
   end
-  def check_type(data, expected) when is_boolean(data) and expected == "boolean", do: :ok
-  def check_type(data, expected) when is_map(data) and expected == "object", do: :ok
-  def check_type(data, expected) when is_list(data) and expected == "array", do: :ok
-  def check_type(data, expected) when is_nil(data) and expected == "null", do: :ok
-  def check_type(data, expected) when is_number(data) and expected == "number", do: :ok
+  def check_type(data, "boolean") when is_boolean(data), do: :ok
+  def check_type(data, "object") when is_map(data), do: :ok
+  def check_type(data, "array") when is_list(data), do: :ok
+  def check_type(data, "null") when is_nil(data), do: :ok
+  def check_type(data, "number") when is_number(data), do: :ok
   def check_type(data, types) when is_list(types) do
     if Enum.any?(types, fn type -> check_type(data, type) == :ok end) do
       :ok

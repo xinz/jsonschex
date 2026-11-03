@@ -2,27 +2,41 @@
 # Quick mixed-only run:
 #   BENCH=mixed BENCH_WARMUP=0.2 BENCH_TIME=1 BENCH_MEMORY_TIME=0.2 mix run type_check_before_after.exs
 #
-# Compile two in-memory copies of the same predicate source. Before restores
-# only the eight literal type-name heads; After keeps the data-first guards.
-# Source loading, compilation, fixture construction, and verification are untimed.
+# Compare literal heads (Before) with experimental data-first guards (After).
+# Both copies share the current predicate bodies, whether production uses literal
+# or guarded heads. Loading, compilation, fixtures, and verification are untimed.
 
 defmodule JSONSchexTypeCheckBench do
   alias JSONSchex.Types.ErrorContext
 
   def compile_versions do
     path = Path.expand("../lib/jsonschex/compiler/predicates.ex", __DIR__)
-    after_source = File.read!(path)
+    production_source = File.read!(path)
     heads = [
       {"string", "is_binary"}, {"integer", "is_integer"}, {"integer", "is_float"},
       {"boolean", "is_boolean"}, {"object", "is_map"}, {"array", "is_list"},
       {"null", "is_nil"}, {"number", "is_number"}
     ]
 
-    before_source = Enum.reduce(heads, after_source, fn {type, guard}, source ->
-      replace_once!(source,
-        "def check_type(data, expected) when #{guard}(data) and expected == #{inspect(type)}",
-        "def check_type(data, #{inspect(type)}) when #{guard}(data)")
+    before_source = Enum.reduce(heads, production_source, fn {type, guard}, source ->
+      literal = "def check_type(data, #{inspect(type)}) when #{guard}(data)"
+      guarded = "def check_type(data, expected) when #{guard}(data) and expected == #{inspect(type)}"
+      case {String.contains?(source, literal), String.contains?(source, guarded)} do
+        {true, false} -> source
+        {false, true} -> replace_once!(source, guarded, literal)
+        _ -> raise "Predicate source changed; expected a literal or guarded head for #{inspect({type, guard})}"
+      end
     end)
+    after_source = Enum.reduce(heads, before_source, fn {type, guard}, source ->
+      replace_once!(source,
+        "def check_type(data, #{inspect(type)}) when #{guard}(data)",
+        "def check_type(data, expected) when #{guard}(data) and expected == #{inspect(type)}")
+    end)
+    production_style = cond do
+      production_source === before_source -> "literal heads"
+      production_source === after_source -> "data-first guards"
+      true -> "mixed literal/guard heads"
+    end
 
     for {module, source} <- [{__MODULE__.Before, before_source}, {__MODULE__.After, after_source}] do
       source = replace_once!(source, "defmodule JSONSchex.Compiler.Predicates do", "defmodule #{inspect(module)} do")
@@ -30,8 +44,8 @@ defmodule JSONSchexTypeCheckBench do
       Code.compile_string(source, path)
     end
 
-    fingerprint = :crypto.hash(:sha256, after_source) |> Base.encode16(case: :lower)
-    IO.puts("Predicates source SHA-256: #{fingerprint}")
+    fingerprint = :crypto.hash(:sha256, production_source) |> Base.encode16(case: :lower)
+    IO.puts("Predicates source SHA-256: #{fingerprint}; production: #{production_style}")
     {Function.capture(__MODULE__.Before, :check_type, 2), Function.capture(__MODULE__.After, :check_type, 2)}
   end
 
@@ -180,7 +194,7 @@ if map_size(inputs) == 0, do: raise("No type-check inputs match BENCH=#{inspect(
 
 {before_check, after_check} = JSONSchexTypeCheckBench.compile_versions()
 JSONSchexTypeCheckBench.verify!(before_check, after_check, fixtures)
-IO.puts("Before: literal-binary heads; After: data-first type guards; order: #{order}")
+IO.puts("Before: literal-binary heads; After: experimental data-first guards; order: #{order}")
 IO.puts("Each Benchee operation repeats its input #{repetitions} times; raw statistics are per batch.")
 IO.puts("The final table divides batch statistics by the number of predicate calls.")
 

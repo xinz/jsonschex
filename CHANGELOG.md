@@ -11,7 +11,6 @@ Reduce compilation, scope-scanning, validation, and fragment-bundling overhead w
   * Avoid redundant URI-base extraction when reference owners differ or source IDs already match, retaining strict raw-owner and resource-base checks.
   * Fast-path compiled references with resolved registry keys, avoiding intermediate lookup tuples and binary-prefix match allocations while preserving fragment-only lookup, resource ownership, dynamic scope, and missing-target fallback.
   * Reject non-string `$ref` values during schema compilation with structured `invalid_keyword_value` errors, including nested schemas, selected fragments, and compile-time macros. Keep empty-string references valid and make compiled reference keys explicitly binary-only.
-  * Dispatch scalar `type` checks through data and type-name guards to avoid binary-match allocations, preserving integral-float acceptance and existing scalar and union diagnostics.
   * Skip URI-base extraction for anonymous (`nil`-base) resources during fragment bundling, preserving the distinction between missing and explicit empty bases in bundled output.
 
 Fix resource-local reference ownership, and simplify URI and validation context handling. ([#15](https://github.com/xinz/jsonschex/pull/15))
