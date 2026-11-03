@@ -4,6 +4,11 @@
 
 ### Bug Fixes and Improvements
 
+Fix nested numeric equality and streamline uniqueItems validation. ([#17](https://github.com/xinz/jsonschex/pull/17))
+
+  * Fix `uniqueItems` numeric equality recursively inside arrays and objects, so nested values such as `[1]` and `[1.0]` are recognized as duplicates. Retain exact object-key semantics, hash-collision checks, and original validation inputs.
+  * Replace uniqueness reduction callbacks with early-exit tail recursion, avoiding continuation tuples while retaining numeric-aware scalar hashing. Reuse unchanged branches when normalizing composite hash keys.
+
 Reduce compilation, scope-scanning, validation, and fragment-bundling overhead while preserving resource ownership and URI semantics. ([#16](https://github.com/xinz/jsonschex/pull/16))
 
   * Skip empty definition-compilation work when `$defs` is absent, avoid generic pointer encoding for plain ASCII definition names, and share identical definition and local-reference maps. Preserve canonical escaping and collisions between escaped and legacy definition keys.
