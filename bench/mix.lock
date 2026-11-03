@@ -6,10 +6,10 @@
   "ex_json_pointer": {:hex, :ex_json_pointer, "0.9.0", "385173b59bff87706d3aef5e74290af233839c43bd8d917d88e48a4752afda24", [:mix], [], "hexpm", "e0292f6476e903bedd77cec1585e24554760d66b3c2dd731abe31ca147a8d3f5"},
   "idna": {:hex, :idna, "7.1.0", "1067a13043538129602d2f2ce6899d8713125c7d19734aa557ce2e3ea55bd4f1", [:rebar3], [], "hexpm", "6ae959a025bf36df61a8cab8508d9654891b5426a84c44d82deaffd6ddf8c71f"},
   "json_xema": {:git, "https://github.com/hrzndhrn/json_xema.git", "78f47a2cfbfeaed21bc3bdb4fcff01b6a4095718", []},
-  "jsv": {:git, "https://github.com/lud/jsv.git", "f8cc8bd2bdb7adc9bf9142c8e66faf008f0b5aca", []},
+  "jsv": {:git, "https://github.com/lud/jsv.git", "14b44599164a49006f4e29f72254ec5e524b96cd", []},
   "nimble_options": {:hex, :nimble_options, "1.1.1", "e3a492d54d85fc3fd7c5baf411d9d2852922f66e69476317787a7b2bb000a61b", [:mix], [], "hexpm", "821b2470ca9442c4b6984882fe9bb0389371b8ddec4d45a9504f00a66f650b44"},
   "nimble_parsec": {:hex, :nimble_parsec, "1.4.2", "8efba0122db06df95bfaa78f791344a89352ba04baedd3849593bfce4d0dc1c6", [:mix], [], "hexpm", "4b21398942dda052b403bbe1da991ccd03a053668d147d53fb8c4e0efe09c973"},
   "statistex": {:hex, :statistex, "1.1.1", "73612aa7f79e53c30569be065fd121e380f1cf57bc4c2da5b41be9246da18df9", [:mix], [], "hexpm", "310c4b49b34adf683de3103639006bed233ab54c08a4add65a531448e653857c"},
-  "texture": {:hex, :texture, "1.2.1", "ae8d875fb099bcc1ccb0269296bf6c4590116eff9a44895049379359a14d5fca", [:mix], [{:abnf_parsec, "~> 2.0", [hex: :abnf_parsec, repo: "hexpm", optional: false]}], "hexpm", "925b1938891ce5c1d589df408faa7ed57dd872e4aac9521b32495a29b265cb17"},
-  "xema": {:hex, :xema, "0.17.9", "10bd9eae3fdcdd810229afc53fe7fb87026141d5081965fe10eddc203299ca74", [:mix], [{:conv_case, "~> 0.2.2", [hex: :conv_case, repo: "hexpm", optional: false]}, {:decimal, "~> 1.0 or ~> 2.0 or ~> 3.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "5cb8757c006ee57423fc8f076f3289377dedce9baeb93d1997d6f19d5cee73a8"},
+  "texture": {:hex, :texture, "2.0.0", "26d1d2fcb45ddedef200695d4bcc3b994461ddc1f8bba7a3e0d7fa0a7dac55c5", [:mix], [{:abnf_parsec, "~> 2.0", [hex: :abnf_parsec, repo: "hexpm", optional: false]}], "hexpm", "c85cbac5f456f4c9867deb0f70c45daa8a536142a8c8c5403401bd51962660bc"},
+  "xema": {:hex, :xema, "0.17.10", "77b4efb2644a43452012ffb493ef5a9b74d51a3a9458fa5d2775aecde520f9f5", [:mix], [{:conv_case, "~> 0.2.2", [hex: :conv_case, repo: "hexpm", optional: false]}, {:decimal, "~> 1.0 or ~> 2.0 or ~> 3.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "207353488d806cc6da0d5c5c1dc74d1be296a685cd52cd68792f7a1dc7d841a4"},
 }
