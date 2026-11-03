@@ -171,10 +171,6 @@ defmodule JSONSchex.Validator.Reference do
   defp same_owner?(schema, context) do
     schema.raw === context.raw and same_base?(schema.source_id, context.source_id)
   end
-  #defp same_owner?(%{raw: raw, source_id: schema_source_id}, %{raw: raw, source_id: context_source_id}) do
-  #  same_base?(schema_source_id, context_source_id)
-  #end
-  #defp same_owner?(_, _), do: false
 
   defp fragment_only_id?(%{raw: %{"$id" => id}}, parent_base, source_id) when is_binary(id) do
     URIUtil.base(id) == "" and URIUtil.resolve(parent_base, id) == source_id
