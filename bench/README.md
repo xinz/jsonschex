@@ -30,8 +30,6 @@ BENCH=scale mix run libs_comparison.exs
 
 Results are printed to stdout via [Benchee](https://github.com/bencheeorg/benchee), and some benchmark results from my local are [here](./results.txt).
 
-The `array_prefix_contains_valid` and `array_prefix_contains_invalid` cases explicitly use Draft 2020-12 and exclude JsonXema, whose installed version supports older drafts and ignores `prefixItems`. Agreement on the original valid/invalid pair does not prove keyword support: the invalid input also fails `contains`, masking ignored prefix constraints. Untimed preflights, run when either case is selected by `BENCH`, check the valid input and rejection of each invalid prefix position while `contains` still matches.
-
 ### JSONSchex Version Comparison
 
 Compare the current JSONSchex working tree with a complete source snapshot from a Git revision. The benchmark reports only `Before` and `After` JSONSchex jobs. It retains the original 52-case `libs_comparison.exs` snapshot plus 12 focused bundle, compile, scan, and validation cases for the optimizations from `9ab9748` through the current `main`; the four newer cross-library scale cases are intentionally tracked only by `libs_comparison.exs`:
