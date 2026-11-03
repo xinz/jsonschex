@@ -227,6 +227,7 @@ defmodule JSONSchex.Compiler.Fragment.Bundle do
     %{state | fallback_anchors: candidates}
   end
 
+  defp resource_base_or_empty_string(nil), do: ""
   defp resource_base_or_empty_string(uri), do: URIUtil.base(uri) || ""
 
   defp put_resource_root(state, uri, document, inherited_base) do
