@@ -277,6 +277,7 @@ run_bench.("array_invalid", %{
 # --- prefixItems + contains ---
 
 prefix_contains_schema = %{
+  "$schema" => "https://json-schema.org/draft/2020-12/schema",
   "type" => "array",
   "prefixItems" => [
     %{"type" => "string"},
@@ -286,21 +287,38 @@ prefix_contains_schema = %{
   "contains" => %{"type" => "integer", "minimum" => 10}
 }
 
-{jsv_prefix, jx_prefix, xema_prefix} = compile_both.(prefix_contains_schema, [])
+# JsonXema supports older drafts and ignores prefixItems, so it cannot compare this case.
+{jsv_prefix, jx_prefix, _xema_prefix} =
+  compile_both.(prefix_contains_schema, [xema_supported: false])
 
 prefix_valid = ["hello", 42, true, "extra", 15]
 prefix_invalid = ["hello", "not int", true, 1]
 
+if bench_filter == "all" or
+     String.contains?("array_prefix_contains_valid", bench_filter) or
+     String.contains?("array_prefix_contains_invalid", bench_filter) do
+  {:ok, _} = JSV.validate(prefix_valid, jsv_prefix)
+  :ok = JSONSchex.validate(jx_prefix, prefix_valid)
+
+  # Untimed controls isolate each prefix constraint while contains still matches.
+  Enum.each([
+    [0, 42, true, "extra", 15],
+    ["hello", "not int", true, 15],
+    ["hello", 42, "not bool", 15]
+  ], fn invalid_prefix ->
+    {:error, _} = JSV.validate(invalid_prefix, jsv_prefix)
+    {:error, _} = JSONSchex.validate(jx_prefix, invalid_prefix)
+  end)
+end
+
 run_bench.("array_prefix_contains_valid", %{
   "JSV" => fn -> {:ok, _} = JSV.validate(prefix_valid, jsv_prefix) end,
-  "JSONSchex" => fn -> :ok = JSONSchex.validate(jx_prefix, prefix_valid) end,
-  "JsonXema" => fn -> :ok = JsonXema.validate(xema_prefix, prefix_valid) end
+  "JSONSchex" => fn -> :ok = JSONSchex.validate(jx_prefix, prefix_valid) end
 })
 
 run_bench.("array_prefix_contains_invalid", %{
   "JSV" => fn -> {:error, _} = JSV.validate(prefix_invalid, jsv_prefix) end,
-  "JSONSchex" => fn -> {:error, _} = JSONSchex.validate(jx_prefix, prefix_invalid) end,
-  "JsonXema" => fn -> {:error, _} = JsonXema.validate(xema_prefix, prefix_invalid) end
+  "JSONSchex" => fn -> {:error, _} = JSONSchex.validate(jx_prefix, prefix_invalid) end
 })
 
 # --- uniqueItems ---
