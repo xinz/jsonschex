@@ -220,6 +220,10 @@ defmodule JSONSchex.ErrorFormatter do
   end
   defp format_path(_), do: "/"
 
+  defp format_invalid_keyword("$ref", value, %{contrast: "string"}) do
+    "Keyword '$ref' must be a string, got: #{inspect(value)}"
+  end
+
   defp format_invalid_keyword("type", value, %{contrast: valid_types}) when is_binary(value) and is_list(valid_types) do
     valid = Enum.join(valid_types, ", ")
     "Keyword 'type' must be one of [#{valid}], got: #{inspect(value)}"

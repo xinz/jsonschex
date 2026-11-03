@@ -13,7 +13,11 @@ defmodule JSONSchex.Test.BundlePerformanceRegression do
       assert {:ok, bundle} = JSONSchex.bundle_fragment(document, opts)
 
       # An absent base must not manufacture an explicit empty $id in the output.
-      if Keyword.get(base_opts, :base_uri) == nil, do: refute(Map.has_key?(bundle, "$id"))
+      if Keyword.get(base_opts, :base_uri) == nil do
+        refute Map.has_key?(bundle, "$id")
+      else
+        assert bundle["$id"] == ""
+      end
 
       assert {:ok, compiled} = JSONSchex.compile(bundle, loader: loader)
       assert :ok == JSONSchex.validate(compiled, 1)
@@ -37,6 +41,39 @@ defmodule JSONSchex.Test.BundlePerformanceRegression do
       assert :ok == JSONSchex.validate(compiled, %{"next" => %{"next" => %{}}})
       assert {:error, [%{rule: :type, context: %{contrast: "object"}}]} =
                JSONSchex.validate(compiled, %{"next" => 1})
+    end
+  end
+
+  test "deep anonymous structural bundles preserve the schema without adding an ID" do
+    schema = chain(400)
+    valid = Enum.reduce(1..400, 1, fn _, child -> %{"child" => child} end)
+    invalid = Enum.reduce(1..400, "1", fn _, child -> %{"child" => child} end)
+    loader = fn uri -> flunk("Unexpected external load: #{inspect(uri)}") end
+
+    for base_opts <- [[], [base_uri: nil]] do
+      assert {:ok, bundle} = JSONSchex.bundle_fragment(schema, [entry: "#", loader: loader] ++ base_opts)
+      assert bundle === schema
+      refute Map.has_key?(bundle, "$id")
+      assert {:ok, compiled} = JSONSchex.compile(bundle, loader: loader)
+      assert :ok == JSONSchex.validate(compiled, valid)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, invalid)
+    end
+  end
+
+  test "anonymous fallback anchors resolve with omitted, nil, and empty bases" do
+    document = %{
+      "schema" => %{"$ref" => "#value"},
+      "x-value" => %{"$anchor" => "value", "type" => "integer"}
+    }
+    loader = fn uri -> flunk("Unexpected external load: #{inspect(uri)}") end
+
+    for base_opts <- [[], [base_uri: nil], [base_uri: ""]] do
+      assert {:ok, bundle} = JSONSchex.bundle_fragment(document, [entry: "#/schema", loader: loader] ++ base_opts)
+      assert {:ok, compiled} = JSONSchex.compile(bundle, loader: loader)
+      assert :ok == JSONSchex.validate(compiled, 1)
+      assert {:error, [%{rule: :type, context: %{contrast: "integer"}}]} =
+               JSONSchex.validate(compiled, "1")
     end
   end
 

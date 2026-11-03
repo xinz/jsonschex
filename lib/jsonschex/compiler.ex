@@ -434,6 +434,18 @@ defmodule JSONSchex.Compiler do
      }}
   end
 
+  # $ref is compiled outside the vocabulary-gated keyword reducer. Validate its
+  # type before resolving its URI or compiling any sibling keywords.
+  defp compile_schema_node(%{"$ref" => ref}, _parent_base, _vocabs, _ctx) when not is_binary(ref) do
+    {:error,
+     %Error{
+       rule: :invalid_keyword_value,
+       path: ["$ref"],
+       value: ref,
+       context: %ErrorContext{contrast: "string", input: ref}
+     }}
+  end
+
   defp compile_schema_node(schema, parent_base, vocabs, ctx) when is_map(schema) do
     # In Draft 7, a $ref object ignores all sibling keywords, including $id.
     # In Draft 2020-12 allows $ref to have sibling keywords.
@@ -476,24 +488,47 @@ defmodule JSONSchex.Compiler do
 
   defp compile_local_defs(_schema, _base, _vocabs, %{draft: "draft7"}), do: {:ok, %{}, %{}}
 
-  defp compile_local_defs(schema, base, vocabs, ctx) do
-    raw_defs = Map.get(schema, "$defs", %{})
-
-    Enum.reduce_while(raw_defs, {:ok, %{}, %{}}, fn {key, sub}, {:ok, acc, refs} ->
+  defp compile_local_defs(%{"$defs" => raw_defs}, base, vocabs, ctx) do
+    Enum.reduce_while(raw_defs, {:ok, %{}, []}, fn {key, sub}, {:ok, acc, aliases} ->
       case compile_schema_node(sub, base, vocabs, ctx) do
         {:ok, compiled_sub} ->
           local_ref = "#/$defs/" <> key
+          pointer =
+            if unescaped_def_key?(key),
+              do: local_ref,
+              else: ExJSONPointer.encode_path(["$defs", key], format: "uri_fragment")
 
-          updated_acc = Map.put(acc, local_ref, compiled_sub)
-          # Retain legacy defs keys, but cache only canonical JSON Pointer aliases.
-          pointer = ExJSONPointer.encode_path(["$defs", key], format: "uri_fragment")
-          refs = Map.put(refs, pointer, compiled_sub)
-
-          {:cont, {:ok, updated_acc, refs}}
+          aliases = if pointer == local_ref, do: aliases, else: [{local_ref, pointer} | aliases]
+          {:cont, {:ok, Map.put(acc, local_ref, compiled_sub), aliases}}
 
         {:error, error} ->
           {:halt, {:error, %{error | path: ["$defs", key] ++ error.path}}}
       end
+    end)
+    |> case do
+      {:ok, defs, aliases} -> {:ok, defs, canonical_local_refs(defs, aliases)}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp compile_local_defs(_schema, _base, _vocabs, _ctx), do: {:ok, %{}, %{}}
+
+  # Ordinary ASCII names need neither JSON Pointer escaping nor URI encoding.
+  # Delegate every other byte to the canonical encoder, including ~, /, %, and #.
+  defp unescaped_def_key?(<<char, rest::binary>>)
+       when char in ?a..?z or char in ?A..?Z or char in ?0..?9 or char in [?_, ?-, ?.],
+       do: unescaped_def_key?(rest)
+  defp unescaped_def_key?(<<>>), do: true
+  defp unescaped_def_key?(_key), do: false
+
+  # Most schemas share the same immutable map for defs and canonical local refs.
+  defp canonical_local_refs(defs, []), do: defs
+  defp canonical_local_refs(defs, aliases) do
+    # Remove all legacy spellings first: one escaped name can equal another's
+    # legacy spelling (for example a/b and a~1b).
+    refs = Map.drop(defs, Enum.map(aliases, &elem(&1, 0)))
+    Enum.reduce(aliases, refs, fn {legacy, pointer}, acc ->
+      Map.put(acc, pointer, Map.fetch!(defs, legacy))
     end)
   end
 

@@ -15,7 +15,8 @@ defmodule JSONSchex.Compiler.Predicates do
   @doc """
   Checks if data matches the specified JSON Schema type(s).
   """
-  @spec check_type(term(), String.t()) :: :ok | {:error, map()}
+  @spec check_type(term(), String.t() | [String.t()]) :: :ok | {:error, ErrorContext.t()}
+  # Keep literal heads: lower-allocation guards were not consistently faster.
   def check_type(data, "string") when is_binary(data), do: :ok
   def check_type(data, "integer") when is_integer(data), do: :ok
   def check_type(data, "integer") when is_float(data) do
