@@ -131,41 +131,66 @@ defmodule JSONSchex.Compiler.Predicates do
   def check_unique_items([], true), do: :ok
   def check_unique_items([_], true), do: :ok
   def check_unique_items(data, true) when is_list(data) do
-    has_duplicates =
-      Enum.reduce_while(data, %{}, fn item, buckets ->
-        key = unique_item_hash(item)
-
-        case buckets do
-          %{^key => bucket} ->
-            if Enum.any?(bucket, fn x -> x == item end) do
-              {:halt, true}
-            else
-              {:cont, Map.put(buckets, key, [item | bucket])}
-            end
-
-          _ ->
-            {:cont, Map.put(buckets, key, [item])}
-        end
-      end) == true
-
-    if has_duplicates do
-      {:error, %ErrorContext{contrast: true, input: data}}
-    else
+    if unique_items?(data, %{}) do
       :ok
+    else
+      {:error, %ErrorContext{contrast: true, input: data}}
     end
   end
   # If uniqueItems is false (or data not list), validation passes
   def check_unique_items(_, _), do: :ok
 
-  defp unique_item_hash(item) when is_integer(item), do: :erlang.phash2(item)
-  defp unique_item_hash(item) when is_float(item) do
-    if item == trunc(item) do
-      :erlang.phash2(trunc(item))
-    else
-      :erlang.phash2(item)
+  defp unique_items?([], _buckets), do: true
+  defp unique_items?([item | rest], buckets) do
+    key = unique_item_hash(item)
+
+    case buckets do
+      %{^key => bucket} ->
+        if Enum.any?(bucket, &(&1 == item)) do
+          false
+        else
+          unique_items?(rest, Map.put(buckets, key, [item | bucket]))
+        end
+      _ ->
+        unique_items?(rest, Map.put(buckets, key, [item]))
     end
   end
+
+  defp unique_item_hash(item) when is_integer(item), do: :erlang.phash2(item)
+  defp unique_item_hash(item) when is_float(item) do
+    integer = trunc(item)
+    if item == integer, do: :erlang.phash2(integer), else: :erlang.phash2(item)
+  end
+  defp unique_item_hash(item) when is_binary(item), do: :erlang.phash2(item)
+  # Equal composites must reach the same bucket; map keys retain exact-key semantics.
+  defp unique_item_hash(item) when is_list(item) or is_map(item) or is_tuple(item),
+    do: :erlang.phash2(normalize_unique_item(item))
   defp unique_item_hash(item), do: :erlang.phash2(item)
+
+  defp normalize_unique_item(item) when is_integer(item) or is_binary(item) or is_atom(item),
+    do: item
+  defp normalize_unique_item(item) when is_float(item) do
+    integer = trunc(item)
+    if item == integer, do: integer, else: item
+  end
+  defp normalize_unique_item([]), do: []
+  defp normalize_unique_item([item | rest] = list) do
+    normalized_item = normalize_unique_item(item)
+    normalized_rest = normalize_unique_item(rest)
+
+    # Strict comparison must notice integral-float rewrites despite numeric equality.
+    if normalized_item === item and normalized_rest === rest,
+      do: list, else: [normalized_item | normalized_rest]
+  end
+  defp normalize_unique_item(item) when is_map(item) do
+    :maps.fold(fn key, value, acc ->
+      normalized = normalize_unique_item(value)
+      if normalized === value, do: acc, else: Map.put(acc, key, normalized)
+    end, item, item)
+  end
+  defp normalize_unique_item(item) when is_tuple(item),
+    do: item |> Tuple.to_list() |> Enum.map(&normalize_unique_item/1) |> List.to_tuple()
+  defp normalize_unique_item(item), do: item
 
   # Keep the standard conversion for small and medium strings. The cutoff is
   # measured across UTF-8 widths; ASCII alone would favor the unrolled path sooner.
