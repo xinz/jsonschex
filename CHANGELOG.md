@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug Fixes and Improvements
+
+Fix compiler and test warnings on Elixir 1.20 and add reproducible Alpine-based testing. ([#20](https://github.com/xinz/jsonschex/pull/20))
+
 ## v0.11.0 (2026-11-04)
 
 ### Security
