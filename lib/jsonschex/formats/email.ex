@@ -44,13 +44,13 @@ defmodule JSONSchex.Formats.Email do
 
       [{pos, 1}] ->
         # Common case: exactly one "@" — zero-copy split
-        <<local::binary-size(pos), ?@, domain::binary>> = data
+        <<local::binary-size(^pos), ?@, domain::binary>> = data
         {local, domain}
 
       matches ->
         # Multiple "@" signs — split at the last one
         {pos, 1} = List.last(matches)
-        <<local::binary-size(pos), ?@, domain::binary>> = data
+        <<local::binary-size(^pos), ?@, domain::binary>> = data
         {local, domain}
     end
   end

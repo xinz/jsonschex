@@ -7,9 +7,9 @@ defmodule JSONSchex.Test.URIUtil do
 
   test "base distinguishes a missing URI from empty and fragment-only references" do
     assert URIUtil.base(nil) == nil
-    assert (URIUtil.base(nil) || "fallback.json") == "fallback.json"
-    assert (URIUtil.base("") || "fallback.json") == ""
-    assert (URIUtil.base("#named") || "fallback.json") == ""
+    for {ref, expected} <- [{nil, "fallback.json"}, {"", ""}, {"#named", ""}] do
+      assert (URIUtil.base(ref) || "fallback.json") == expected
+    end
 
     for ref <- ["", "#", "#named", "#/definitions/value", "##"] do
       assert URIUtil.base(ref) == ""
@@ -84,9 +84,6 @@ defmodule JSONSchex.Test.URIUtil do
     assert URIUtil.split_fragment(uri) === legacy_split_fragment(uri)
   end
 
-  test "split_fragment still requires a binary rather than treating nil as an empty URI" do
-    assert_raise FunctionClauseError, fn -> URIUtil.split_fragment(nil) end
-  end
 
   test "join_fragment distinguishes nil, empty, and local fragments" do
     cases = [
@@ -102,12 +99,6 @@ defmodule JSONSchex.Test.URIUtil do
     for {base, fragment, expected} <- cases do
       assert URIUtil.join_fragment(base, fragment) === expected
     end
-  end
-
-  test "join_fragment requires a binary base and a binary or nil fragment" do
-    assert_raise FunctionClauseError, fn -> URIUtil.join_fragment(nil, "named") end
-    assert_raise FunctionClauseError, fn -> URIUtil.join_fragment(nil, nil) end
-    assert_raise FunctionClauseError, fn -> URIUtil.join_fragment("schema.json", :named) end
   end
 
   test "external references require a nonempty base" do

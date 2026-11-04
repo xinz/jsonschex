@@ -1,0 +1,13 @@
+**/.git
+.github
+.expert
+**/_build
+**/deps
+/cover
+/doc
+/tmp
+/bench
+**/erl_crash.dump
+**/*.beam
+**/*.ez
+/jsonschex-*.tar
