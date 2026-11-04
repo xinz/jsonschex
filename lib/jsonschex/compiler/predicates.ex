@@ -2,11 +2,13 @@ defmodule JSONSchex.Compiler.Predicates do
   @moduledoc """
   Pure predicates for JSON Schema validation constraints.
 
-  All functions return `:ok` or `{:error, context}`. Non-applicable data types
-  pass validation (e.g., pattern checking on non-strings).
+  Functions return `:ok` or `{:error, context}`. Non-applicable data types
+  pass validation (e.g., pattern checking on non-strings). Regex engine errors
+  abort validation rather than returning an invertible schema mismatch.
   """
 
   alias JSONSchex.Types.ErrorContext
+  alias JSONSchex.Validator.Pattern
 
   # A fixed compromise: it avoids the short non-ASCII regression from the
   # unrolled counter while keeping charlist allocation bounded.
@@ -235,13 +237,15 @@ defmodule JSONSchex.Compiler.Predicates do
   end
 
   @doc "Checks `pattern`."
-  @spec check_pattern(String.t(), Regex.t()) :: :ok | {:error, map()}
-  def check_pattern(data, regex) when is_binary(data) do
-    if Regex.match?(regex, data) do
+  @spec check_pattern(term(), Regex.t(), list()) :: :ok | {:error, map()}
+  def check_pattern(data, regex, path \\ [])
+
+  def check_pattern(data, regex, path) when is_binary(data) do
+    if Pattern.match?(regex, data, path) do
       :ok
     else
       {:error, %ErrorContext{contrast: regex, input: data}}
     end
   end
-  def check_pattern(_, _), do: :ok
+  def check_pattern(_, _, _), do: :ok
 end

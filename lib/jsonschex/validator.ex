@@ -20,7 +20,7 @@ defmodule JSONSchex.Validator do
 
   alias JSONSchex.Types.{Error, Rule, Schema, ValidationContext}
 
-  alias JSONSchex.Validator.{Reference, Rules}
+  alias JSONSchex.Validator.{Pattern, Reference, Rules}
 
   @empty_mapset MapSet.new()
 
@@ -29,6 +29,10 @@ defmodule JSONSchex.Validator do
 
   @doc """
   Validates data against a compiled schema.
+
+  Regex engine errors abort validation with an `:indeterminate_pattern` error.
+  They are not ordinary schema mismatches and cannot be inverted or suppressed
+  by subschema combinators.
 
   ## Examples
 
@@ -60,6 +64,9 @@ defmodule JSONSchex.Validator do
       {:error, errors} ->
         {:error, flatten_and_format_errors(errors, data)}
     end
+  catch
+    {Pattern, %Error{} = error} ->
+      {:error, [error]}
   end
 
   defp flatten_and_format_errors(errors, data) do

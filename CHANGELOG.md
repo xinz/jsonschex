@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Security
+
+Fix validation bypass on regex match-limit exhaustion. ([#18](https://github.com/xinz/jsonschex/pull/19))
+
+  * Fix regex match-limit exhaustion being treated as a non-match in both supported drafts, preventing `patternProperties` subschema bypasses and `not`/combinator inversions of regex failures.
+  * Report regex engine failures as `:indeterminate_pattern` errors and stop validation, preserving the affected string, instance path, and error reason. Cover `pattern`, `propertyNames`, and all cached and uncached `patternProperties`/`additionalProperties` matching paths. Existing execution limits remain unchanged; rewrite excessive-backtracking patterns to avoid rejecting valid data.
+
 ### Bug Fixes and Improvements
 
 Fix nested numeric equality and streamline uniqueItems validation. ([#17](https://github.com/xinz/jsonschex/pull/17))
