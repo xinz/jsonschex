@@ -79,8 +79,10 @@ These changes support both drafts; they are infrastructure and maintenance updat
 
 ### Bug Fixes and Improvements
 
-  * Improve fragment-bundling performance by avoiding repeated descendant metadata indexing, accumulating fallback-anchor candidates without repeated list scans, and skipping deep reference-rewrite passes when external-reference aliases are identities. ([#9](https://github.com/xinz/jsonschex/pull/9))
-  * Reuse already-compiled schema nodes when their compilation context matches, reducing repeated compilation while preserving resource scope, rule order, and context-sensitive behavior. ([#10](https://github.com/xinz/jsonschex/pull/10))
+  * Add a Git-baseline JSONSchex before/after benchmark suite covering broad validation cases and focused bundle, compile, scan, and validation workloads. ([#13](https://github.com/xinz/jsonschex/pull/13))
+
+  * Optimize two-rule validation dispatch by reserving the pattern-match-cache path for exact sibling `patternProperties` and `additionalProperties` pairs; other two-rule schemas retain their direct fast path. ([#12](https://github.com/xinz/jsonschex/pull/12))
+
   * Reduce repeated validation work and allocations. ([#11](https://github.com/xinz/jsonschex/pull/11))
     * Count Unicode code points for `minLength` and `maxLength` without allocating a charlist for inputs larger than 256 bytes, while retaining the standard conversion for shorter inputs. Malformed UTF-8 now produces a validation error with `error_detail: "invalid_utf8"` instead of raising `UnicodeConversionError`.
     * Compile each `patternProperties` regex once when the same schema also uses `additionalProperties`, with a bounded per-schema cache that preserves vocabulary gates, error behavior, and validation semantics.
@@ -89,8 +91,10 @@ These changes support both drafts; they are infrastructure and maintenance updat
     * Avoid rebuilding already-flat validation error lists at the public validation boundary, and fuse nested error flattening with legacy error formatting while preserving diagnostic order, values, and internal error grouping.
     * Remove redundant input-key presence checks when validating `required`, while preserving declaration order, duplicate entries, non-object behavior, and diagnostic shape.
     * Avoid rescanning built-in Draft 2020-12 resources after compilation, and reduce scope-scanner traversal intermediates while preserving resource identities, anchor targets, and traversal precedence.
-  * Optimize two-rule validation dispatch by reserving the pattern-match-cache path for exact sibling `patternProperties` and `additionalProperties` pairs; other two-rule schemas retain their direct fast path. ([#12](https://github.com/xinz/jsonschex/pull/12))
-  * Add a Git-baseline JSONSchex before/after benchmark suite covering broad validation cases and focused bundle, compile, scan, and validation workloads. ([#13](https://github.com/xinz/jsonschex/pull/13))
+
+  * Reuse already-compiled schema nodes when their compilation context matches, reducing repeated compilation while preserving resource scope, rule order, and context-sensitive behavior. ([#10](https://github.com/xinz/jsonschex/pull/10))
+
+  * Improve fragment-bundling performance by avoiding repeated descendant metadata indexing, accumulating fallback-anchor candidates without repeated list scans, and skipping deep reference-rewrite passes when external-reference aliases are identities. ([#9](https://github.com/xinz/jsonschex/pull/9))
 
 ## v0.9.3 (2026-09-07)
 
