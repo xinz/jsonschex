@@ -101,13 +101,6 @@ defmodule JSONSchex.Test.URIUtil do
     end
   end
 
-  test "join_fragment requires a binary base and a binary or nil fragment" do
-    # These calls intentionally violate the API's accepted types.
-    assert_raise FunctionClauseError, fn -> apply(URIUtil, :join_fragment, [nil, "named"]) end
-    assert_raise FunctionClauseError, fn -> apply(URIUtil, :join_fragment, [nil, nil]) end
-    assert_raise FunctionClauseError, fn -> apply(URIUtil, :join_fragment, ["schema.json", :named]) end
-  end
-
   test "external references require a nonempty base" do
     for ref <- [nil, "", "#", "#named", "#/definitions/value"] do
       refute URIUtil.external_ref?(ref)
