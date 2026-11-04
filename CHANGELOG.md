@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.11.0 (2026-11-04)
+
 ### Security
 
 Fix validation bypass on regex match-limit exhaustion. ([#18](https://github.com/xinz/jsonschex/pull/19))

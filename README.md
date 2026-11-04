@@ -3,7 +3,7 @@
 [![hex.pm version](https://img.shields.io/hexpm/v/jsonschex.svg?v=1)](https://hex.pm/packages/jsonschex)
 [![Draft 2020-12](https://img.shields.io/endpoint?url=https%3A%2F%2Fbowtie.report%2Fbadges%2Felixir-jsonschex%2Fcompliance%2Fdraft2020-12.json)](https://bowtie.report/#/implementations/elixir-jsonschex)
 
-JSONSchex is a performance-focused JSON Schema validator for Elixir, supporting [Draft 2020-12](https://json-schema.org/draft/2020-12) and [Draft 7](https://json-schema.org/draft-07).
+JSONSchex is a performance-focused JSON Schema validator for Elixir, supporting [Draft 7](https://json-schema.org/draft-07) and [Draft 2020-12](https://json-schema.org/draft/2020-12).
 
 ## Features
 
