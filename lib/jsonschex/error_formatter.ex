@@ -201,6 +201,10 @@ defmodule JSONSchex.ErrorFormatter do
     "Value #{inspect(input)} does not match const: #{inspect(expected)}"
   end
 
+  defp format_message(%Error{rule: :indeterminate_pattern, context: %{contrast: pattern, error_detail: reason}}) do
+    "Cannot determine whether input matches pattern #{inspect(pattern)}: regex engine error #{inspect(reason)}"
+  end
+
   defp format_message(%Error{rule: :pattern, context: %{contrast: pattern, input: input}}) do
     "String #{inspect(input)} does not match pattern: #{inspect(pattern)}"
   end

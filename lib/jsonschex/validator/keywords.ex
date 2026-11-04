@@ -8,6 +8,7 @@ defmodule JSONSchex.Validator.Keywords do
 
   alias JSONSchex.Validator
   alias JSONSchex.Types.{Error, ErrorContext}
+  alias JSONSchex.Validator.Pattern
 
   @empty_mapset MapSet.new()
 
@@ -658,7 +659,7 @@ defmodule JSONSchex.Validator.Keywords do
          eval_keys,
          cache
        ) do
-    if Regex.match?(regex, key) do
+    if Pattern.match?(regex, key, [key | path]) do
       cache = mark_pattern_match(cache, key)
 
       case Validator.validate_entry(schema, val, [key | path], root) do
@@ -771,7 +772,7 @@ defmodule JSONSchex.Validator.Keywords do
          eval_keys,
          cache
        ) do
-    if pattern_matches_after_additional?(cache, key, index, regex) do
+    if pattern_matches_after_additional?(cache, key, index, regex, path) do
       case Validator.validate_entry(schema, val, [key | path], root) do
         {:error, new_errs} ->
           reduce_pattern_data_after_additional(
@@ -814,7 +815,7 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp pattern_matches_after_additional?(%{matches: matches}, key, index, regex) do
+  defp pattern_matches_after_additional?(%{matches: matches}, key, index, regex, path) do
     case Map.fetch(matches, key) do
       {:ok, :no_match} ->
         false
@@ -826,7 +827,7 @@ defmodule JSONSchex.Validator.Keywords do
         false
 
       _ ->
-        Regex.match?(regex, key)
+        Pattern.match?(regex, key, [key | path])
     end
   end
 
@@ -856,7 +857,7 @@ defmodule JSONSchex.Validator.Keywords do
     do: {errs, eval_keys}
 
   defp reduce_pattern_data([{key, val} | rest], regex, schema, path, root, errs, eval_keys) do
-    if Regex.match?(regex, key) do
+    if Pattern.match?(regex, key, [key | path]) do
       case Validator.validate_entry(schema, val, [key | path], root) do
         {:error, new_errs} ->
           reduce_pattern_data(rest, regex, schema, path, root, [new_errs | errs], eval_keys)
@@ -1002,7 +1003,7 @@ defmodule JSONSchex.Validator.Keywords do
         cache
       )
     else
-      {classification, cache} = classify_additional_pattern(cache, key, patterns)
+      {classification, cache} = classify_additional_pattern(cache, key, patterns, path)
 
       case classification do
         :no_match ->
@@ -1105,24 +1106,24 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp classify_additional_pattern(%{matches: matches} = cache, key, patterns) do
+  defp classify_additional_pattern(%{matches: matches} = cache, key, patterns, path) do
     case Map.fetch(matches, key) do
       {:ok, classification} ->
         {classification, cache}
 
       :error ->
-        classification = first_matching_pattern(patterns, key, 0)
+        classification = first_matching_pattern(patterns, key, 0, path)
         {classification, %{cache | matches: Map.put(matches, key, classification)}}
     end
   end
 
-  defp first_matching_pattern([], _key, _index), do: :no_match
+  defp first_matching_pattern([], _key, _index, _path), do: :no_match
 
-  defp first_matching_pattern([regex | rest], key, index) do
-    if Regex.match?(regex, key) do
+  defp first_matching_pattern([regex | rest], key, index, path) do
+    if Pattern.match?(regex, key, [key | path]) do
       {:first_match, index}
     else
-      first_matching_pattern(rest, key, index + 1)
+      first_matching_pattern(rest, key, index + 1, path)
     end
   end
 
@@ -1148,7 +1149,7 @@ defmodule JSONSchex.Validator.Keywords do
       MapSet.member?(known, key) ->
         reduce_additional(rest, schema, known, patterns, path, root, errs, eval_keys)
 
-      patterns != [] and Enum.any?(patterns, &Regex.match?(&1, key)) ->
+      patterns != [] and Enum.any?(patterns, &Pattern.match?(&1, key, [key | path])) ->
         reduce_additional(rest, schema, known, patterns, path, root, errs, eval_keys)
 
       true ->
@@ -1175,18 +1176,23 @@ defmodule JSONSchex.Validator.Keywords do
   Collects additional property keys as evaluated without validation.
   Used when the `additionalProperties` sub-schema always passes (e.g., `true`).
   """
-  def collect_additional_keys(data, known_props_set, patterns) when is_map(data) do
-    reduce_collect_additional(Map.to_list(data), known_props_set, patterns, [])
+  def collect_additional_keys(data, known_props_set, patterns, path \\ [])
+
+  def collect_additional_keys(data, known_props_set, patterns, path) when is_map(data) do
+    reduce_collect_additional(Map.to_list(data), known_props_set, patterns, path, [])
   end
 
-  def collect_additional_keys(_, _, _), do: :ok
+  def collect_additional_keys(_, _, _, _), do: :ok
 
   @doc false
+  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache, path \\ [])
+
   def collect_additional_keys_with_match_cache(
         data,
         known_props_set,
         patterns,
-        %{source: source} = cache
+        %{source: source} = cache,
+        path
       )
       when is_map(data) and source in [nil, :additional_properties] do
     cache = if source == nil, do: %{cache | source: :additional_properties}, else: cache
@@ -1195,6 +1201,7 @@ defmodule JSONSchex.Validator.Keywords do
       Map.to_list(data),
       known_props_set,
       patterns,
+      path,
       [],
       cache
     )
@@ -1204,40 +1211,42 @@ defmodule JSONSchex.Validator.Keywords do
         data,
         known_props_set,
         _patterns,
-        %{source: :pattern_properties} = cache
+        %{source: :pattern_properties} = cache,
+        _path
       )
       when is_map(data) do
     reduce_collect_additional_after_pattern(Map.to_list(data), known_props_set, [], cache)
   end
 
-  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache) do
-    {collect_additional_keys(data, known_props_set, patterns), cache}
+  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache, path) do
+    {collect_additional_keys(data, known_props_set, patterns, path), cache}
   end
 
-  defp reduce_collect_additional_with_match_cache([], _known, _patterns, [], cache),
+  defp reduce_collect_additional_with_match_cache([], _known, _patterns, _path, [], cache),
     do: {:ok, cache}
 
-  defp reduce_collect_additional_with_match_cache([], _known, _patterns, eval_keys, cache),
+  defp reduce_collect_additional_with_match_cache([], _known, _patterns, _path, eval_keys, cache),
     do: {{:ok, MapSet.new(eval_keys)}, cache}
 
   defp reduce_collect_additional_with_match_cache(
          [{key, _val} | rest],
          known,
          patterns,
+         path,
          eval_keys,
          cache
        ) do
     if MapSet.member?(known, key) do
-      reduce_collect_additional_with_match_cache(rest, known, patterns, eval_keys, cache)
+      reduce_collect_additional_with_match_cache(rest, known, patterns, path, eval_keys, cache)
     else
-      {classification, cache} = classify_additional_pattern(cache, key, patterns)
+      {classification, cache} = classify_additional_pattern(cache, key, patterns, path)
 
       case classification do
         :no_match ->
-          reduce_collect_additional_with_match_cache(rest, known, patterns, [key | eval_keys], cache)
+          reduce_collect_additional_with_match_cache(rest, known, patterns, path, [key | eval_keys], cache)
 
         {:first_match, _index} ->
-          reduce_collect_additional_with_match_cache(rest, known, patterns, eval_keys, cache)
+          reduce_collect_additional_with_match_cache(rest, known, patterns, path, eval_keys, cache)
       end
     end
   end
@@ -1265,21 +1274,21 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp reduce_collect_additional([], _known, _patterns, []), do: :ok
+  defp reduce_collect_additional([], _known, _patterns, _path, []), do: :ok
 
-  defp reduce_collect_additional([], _known, _patterns, eval_keys),
+  defp reduce_collect_additional([], _known, _patterns, _path, eval_keys),
     do: {:ok, MapSet.new(eval_keys)}
 
-  defp reduce_collect_additional([{key, _val} | rest], known, patterns, eval_keys) do
+  defp reduce_collect_additional([{key, _val} | rest], known, patterns, path, eval_keys) do
     cond do
       MapSet.member?(known, key) ->
-        reduce_collect_additional(rest, known, patterns, eval_keys)
+        reduce_collect_additional(rest, known, patterns, path, eval_keys)
 
-      patterns != [] and Enum.any?(patterns, &Regex.match?(&1, key)) ->
-        reduce_collect_additional(rest, known, patterns, eval_keys)
+      patterns != [] and Enum.any?(patterns, &Pattern.match?(&1, key, [key | path])) ->
+        reduce_collect_additional(rest, known, patterns, path, eval_keys)
 
       true ->
-        reduce_collect_additional(rest, known, patterns, [key | eval_keys])
+        reduce_collect_additional(rest, known, patterns, path, [key | eval_keys])
     end
   end
 

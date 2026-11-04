@@ -33,6 +33,7 @@ defmodule JSONSchex.MixProject do
         "guide/dialect_and_vocabulary.md",
         "guide/feature_matrix.md",
         "guide/content_and_format.md",
+        "guide/regex_validation.md",
         "guide/test_suite.md"
       ],
       groups_for_extras: [
@@ -41,6 +42,7 @@ defmodule JSONSchex.MixProject do
           "guide/dialect_and_vocabulary.md",
           "guide/feature_matrix.md",
           "guide/content_and_format.md",
+          "guide/regex_validation.md",
           "guide/test_suite.md"
         ]
       ],

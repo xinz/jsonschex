@@ -152,6 +152,10 @@ JSONSchex.format_error(error)
 # => "At /user/age: Value -5 is less than minimum 0"
 ```
 
+Regex engine failures return `:indeterminate_pattern` and stop validation. See
+the [regex validation guide](guide/regex_validation.md) for execution limits,
+error details, and guidance on avoiding excessive backtracking.
+
 ## Compile options
 
 `JSONSchex.compile/2` accepts these options:
@@ -214,6 +218,7 @@ See the `guide/` directory for detailed documentation:
 - [Dialect and `$vocabulary` behavior](guide/dialect_and_vocabulary.md)
 - [Feature matrix (Draft 2020-12 support)](guide/feature_matrix.md)
 - [Content and format assertion options](guide/content_and_format.md)
+- [Regex validation and execution limits](guide/regex_validation.md)
 - [Test suite coverage](guide/test_suite.md)
 
 ## Development

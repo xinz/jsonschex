@@ -88,8 +88,8 @@ defmodule JSONSchex.Validator.Rules do
   def apply(%Rule{name: :maxLength, params: max_length}, data, _ctx),
     do: Predicates.check_max_length(data, max_length)
 
-  def apply(%Rule{name: :pattern, params: %{regex: regex}}, data, _ctx) do
-    Predicates.check_pattern(data, regex)
+  def apply(%Rule{name: :pattern, params: %{regex: regex}}, data, {path, _, _}) do
+    Predicates.check_pattern(data, regex, path)
   end
 
   def apply(%Rule{name: :minProperties, params: min_properties}, data, _ctx),
@@ -146,9 +146,9 @@ defmodule JSONSchex.Validator.Rules do
           params: %{known_props: known_props, patterns: patterns, always_valid?: true}
         },
         data,
-        {_path, _evaluated, _root}
+        {path, _evaluated, _root}
       ) do
-    Keywords.collect_additional_keys(data, known_props, patterns)
+    Keywords.collect_additional_keys(data, known_props, patterns, path)
   end
 
   def apply(
@@ -362,10 +362,10 @@ defmodule JSONSchex.Validator.Rules do
           params: %{known_props: known_props, patterns: patterns, always_valid?: true}
         },
         data,
-        _ctx,
+        {path, _evaluated, _root},
         cache
       ) do
-    Keywords.collect_additional_keys_with_match_cache(data, known_props, patterns, cache)
+    Keywords.collect_additional_keys_with_match_cache(data, known_props, patterns, cache, path)
   end
 
   def apply(
