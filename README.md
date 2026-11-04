@@ -19,7 +19,7 @@ Requires Elixir 1.14 or later. Add JSONSchex to your dependencies:
 ```elixir
 def deps do
   [
-    {:jsonschex, "~> 0.10"}
+    {:jsonschex, "~> 0.11"}
   ]
 end
 ```
