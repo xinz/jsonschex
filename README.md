@@ -242,6 +242,18 @@ git submodule update --remote -- test/fixtures/JSON-Schema-Test-Suite
 git submodule status -- test/fixtures/JSON-Schema-Test-Suite
 ```
 
+### Test in an Alpine container
+
+The Dockerfile of the code repository uses `elixir:1.20.5-otp-29-alpine` and treats project compiler warnings as errors. Initialize the fixture submodules before building; they are copied into the image with the tests.
+
+```sh
+git submodule update --init --recursive
+docker build -t jsonschex-test .
+docker run --rm jsonschex-test
+```
+
+The image compiles in `MIX_ENV=test` and runs `mix test --warnings-as-errors` by default. You can use `podman` instead of `docker` for both commands.
+
 ## Test suite summary
 
 `mix test` runs both official draft suites, including optional format and content
