@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+## v0.11.2 (2026-11-05)
+
 ### Bug Fixes and Improvements
 
-Fix 26 format-validation failures exposed by the updated official [JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite/commit/245a45abc90190c0bff04d97e6d2b541b4bb9f12) across Draft 7 and Draft 2020-12. ([#21](https://github.com/xinz/jsonschex/pull/21))
+Fix 26 format-validation failures exposed by the updated official [JSON Schema Test Suite commit 245a45a](https://github.com/json-schema-org/JSON-Schema-Test-Suite/commit/245a45abc90190c0bff04d97e6d2b541b4bb9f12) across Draft 7 and Draft 2020-12. ([#21](https://github.com/xinz/jsonschex/pull/21))
 
   * Fix `email` validation to accept empty quoted local parts and case-insensitive IPv6 address-literal tags. Reject non-ASCII quoted content, including escaped characters, while preserving Unicode support for `idn-email`.
   * Apply non-transitional UTS 46 mapping and NFC normalization before validating `idn-hostname` labels, supporting fullwidth characters, ignored zero-width spaces, and ACE prefixes produced by mapping. Preserve encoded label/domain length limits, canonical Punycode validation, and domain-wide Bidi checks.
