@@ -66,22 +66,27 @@ defmodule JSONSchex.Formats.Email do
   end
   defp validate_local(local), do: validate_unquoted_local(local)
 
-  defp validate_quoted_local("\"\""), do: false
   defp validate_quoted_local(local) do
     # Remove surrounding quotes
     inner = String.slice(local, 1..-2//1)
-    validate_quoted_inner(inner)
+    validate_quoted_inner(inner, :ascii)
   end
 
-  # Valid: reached end of quoted content
-  defp validate_quoted_inner(<<>>), do: true
-  # Escaped character: skip the backslash and the following char
-  defp validate_quoted_inner(<<?\\, _, rest::binary>>), do: validate_quoted_inner(rest)
-  # Bare backslash at end or bare quote — invalid
-  defp validate_quoted_inner(<<?\\>>), do: false
-  defp validate_quoted_inner(<<?", _::binary>>), do: false
-  # Any other character is allowed
-  defp validate_quoted_inner(<<_, rest::binary>>), do: validate_quoted_inner(rest)
+  # Empty quoted content is valid for both email formats.
+  defp validate_quoted_inner(<<>>, _mode), do: true
+  # Plain email requires ASCII even after a backslash; idn-email permits UTF-8.
+  defp validate_quoted_inner(<<?\\, c, rest::binary>>, mode)
+       when c < 128 or mode == :utf8 do
+    validate_quoted_inner(rest, mode)
+  end
+  # Reject a trailing backslash, an invalid escape, or an unescaped quote.
+  defp validate_quoted_inner(<<?\\, _::binary>>, _mode), do: false
+  defp validate_quoted_inner(<<?", _::binary>>, _mode), do: false
+  defp validate_quoted_inner(<<c, rest::binary>>, mode)
+       when c < 128 or mode == :utf8 do
+    validate_quoted_inner(rest, mode)
+  end
+  defp validate_quoted_inner(_, _mode), do: false
 
   defp validate_unquoted_local(local) do
     case local do
@@ -136,7 +141,7 @@ defmodule JSONSchex.Formats.Email do
 
   defp validate_quoted_local_idn(local) do
     inner = String.slice(local, 1..-2//1)
-    validate_quoted_inner(inner)
+    validate_quoted_inner(inner, :utf8)
   end
 
   defp validate_unquoted_local_idn(local) do
@@ -189,7 +194,8 @@ defmodule JSONSchex.Formats.Email do
     end
   end
 
-  defp validate_literal_domain("IPv6:" <> ip_str) do
+  defp validate_literal_domain(<<i, p, v, ?6, ?:, ip_str::binary>>)
+       when i in [?I, ?i] and p in [?P, ?p] and v in [?V, ?v] do
     JSONSchex.Formats.IP.valid_ipv6?(ip_str)
   end
 

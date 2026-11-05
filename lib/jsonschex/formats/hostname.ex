@@ -110,28 +110,21 @@ defmodule JSONSchex.Formats.Hostname do
         bidi_domain? = Enum.any?(ulabels, &contains_rtl?/1)
 
         encoded_length <= 253 and
-          Enum.all?(Enum.zip([labels, encoded_labels, ulabels]), fn {label, encoded, ulabel} ->
-            valid_idn_label?(label, encoded, ulabel, bidi_domain?)
+          Enum.all?(Enum.zip(encoded_labels, ulabels), fn {encoded, ulabel} ->
+            valid_idn_label?(encoded, ulabel, bidi_domain?)
           end)
       catch
         _, _ -> false
       end
     end
 
-    defp encode_idn_label(label), do: :idna.encode(String.to_charlist(label), [:strict])
+    # Apply non-transitional UTS 46 mapping (including NFC) before validating
+    # lengths and canonical A-labels, since mapping can produce an ACE prefix.
+    defp encode_idn_label(label), do: :idna.encode(String.to_charlist(label), [:uts46, :strict])
 
-    defp valid_idn_label?(label, encoded, ulabel, bidi_domain?) do
-      valid_label_for_idn?(label) and
-        length(encoded) <= 63 and
+    defp valid_idn_label?(encoded, ulabel, bidi_domain?) do
+      valid_label?(List.to_string(encoded)) and
         (not bidi_domain? or :idna_bidi.check_bidi(ulabel, true) == :ok)
-    end
-
-    defp valid_label_for_idn?(label) do
-      if String.starts_with?(String.downcase(label), "xn--") do
-        validate_idn_label(label)
-      else
-        is_ascii?(label) == false or validate_std_label(label)
-      end
     end
 
     defp contains_rtl?(ulabel) do
