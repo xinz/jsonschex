@@ -11,11 +11,32 @@ defmodule JSONSchex.Formats.URITemplate do
       end)
 
     if valid_expressions? do
-      remaining = Regex.replace(~r/\{([^{}]*)\}/, data, "")
-      not String.contains?(remaining, ["{", "}"])
+      # Keep literal segments separate: an expression cannot complete a percent escape.
+      Regex.split(~r/\{[^{}]*\}/, data)
+      |> Enum.all?(&valid_literal?/1)
     else
       false
     end
+  end
+
+  defp valid_literal?(literal) do
+    # RFC 6570 sections 1.5/2.1, including erratum 6937 allowing literal apostrophes.
+    Regex.match?(
+      ~r/
+      \A(?:
+        [\x21\x23-\x24\x26-\x3B\x3D\x3F-\x5B\x5D\x5F\x61-\x7A\x7E]
+        | %[0-9A-Fa-f]{2}
+        | [\x{A0}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFEF}]
+        | [\x{10000}-\x{1FFFD}\x{20000}-\x{2FFFD}\x{30000}-\x{3FFFD}]
+        | [\x{40000}-\x{4FFFD}\x{50000}-\x{5FFFD}\x{60000}-\x{6FFFD}]
+        | [\x{70000}-\x{7FFFD}\x{80000}-\x{8FFFD}\x{90000}-\x{9FFFD}]
+        | [\x{A0000}-\x{AFFFD}\x{B0000}-\x{BFFFD}\x{C0000}-\x{CFFFD}]
+        | [\x{D0000}-\x{DFFFD}\x{E1000}-\x{EFFFD}]
+        | [\x{E000}-\x{F8FF}\x{F0000}-\x{FFFFD}\x{100000}-\x{10FFFD}]
+      )*\z
+      /ux,
+      literal
+    )
   end
 
   defp valid_expression?(content) do
