@@ -3,7 +3,7 @@ defmodule JSONSchex.Formats.DateTime do
   Validates RFC 3339 `date-time` and `time` formats using pure binary pattern matching.
   """
 
-  defguardp is_digit(c) when c in ?0..?9
+  import JSONSchex.Guards, only: [is_ascii_digit?: 1]
 
   @doc """
   Validates an RFC 3339 `date-time` string (`YYYY-MM-DD[Tt]HH:MM:SS(.frac)?(Z|z|±HH:MM)`).
@@ -13,12 +13,12 @@ defmodule JSONSchex.Formats.DateTime do
         <<y1, y2, y3, y4, ?-, m1, m2, ?-, d1, d2, sep, h1, h2, ?:, min1, min2, ?:, s1, s2,
           rest::binary>>
       )
-      when is_digit(y1) and is_digit(y2) and is_digit(y3) and is_digit(y4) and
-             is_digit(m1) and is_digit(m2) and is_digit(d1) and is_digit(d2) and
+      when is_ascii_digit?(y1) and is_ascii_digit?(y2) and is_ascii_digit?(y3) and is_ascii_digit?(y4) and
+             is_ascii_digit?(m1) and is_ascii_digit?(m2) and is_ascii_digit?(d1) and is_ascii_digit?(d2) and
              (sep == ?T or sep == ?t) and
-             is_digit(h1) and is_digit(h2) and
-             is_digit(min1) and is_digit(min2) and
-             is_digit(s1) and is_digit(s2) do
+             is_ascii_digit?(h1) and is_ascii_digit?(h2) and
+             is_ascii_digit?(min1) and is_ascii_digit?(min2) and
+             is_ascii_digit?(s1) and is_ascii_digit?(s2) do
     year = (y1 - ?0) * 1000 + (y2 - ?0) * 100 + (y3 - ?0) * 10 + (y4 - ?0)
     month = (m1 - ?0) * 10 + (m2 - ?0)
     day = (d1 - ?0) * 10 + (d2 - ?0)
@@ -37,9 +37,9 @@ defmodule JSONSchex.Formats.DateTime do
   """
   @spec valid_time?(term()) :: boolean()
   def valid_time?(<<h1, h2, ?:, min1, min2, ?:, s1, s2, rest::binary>>)
-      when is_digit(h1) and is_digit(h2) and
-             is_digit(min1) and is_digit(min2) and
-             is_digit(s1) and is_digit(s2) do
+      when is_ascii_digit?(h1) and is_ascii_digit?(h2) and
+             is_ascii_digit?(min1) and is_ascii_digit?(min2) and
+             is_ascii_digit?(s1) and is_ascii_digit?(s2) do
     validate_time_parts(h1, h2, min1, min2, s1, s2, rest)
   end
 
@@ -70,17 +70,22 @@ defmodule JSONSchex.Formats.DateTime do
     end
   end
 
-  defp parse_frac_and_tz(<<?., d, rest::binary>>) when is_digit(d), do: skip_digits_then_tz(rest)
+  defp parse_frac_and_tz(<<?., d, rest::binary>>) when is_ascii_digit?(d),
+    do: skip_digits_then_tz(rest)
+
   defp parse_frac_and_tz(rest), do: parse_tz(rest)
 
-  defp skip_digits_then_tz(<<d, rest::binary>>) when is_digit(d), do: skip_digits_then_tz(rest)
+  defp skip_digits_then_tz(<<d, rest::binary>>) when is_ascii_digit?(d),
+    do: skip_digits_then_tz(rest)
+
   defp skip_digits_then_tz(rest), do: parse_tz(rest)
 
   defp parse_tz(<<z>>) when z == ?Z or z == ?z, do: {:ok, 0}
 
   defp parse_tz(<<sign, oh1, oh2, ?:, om1, om2>>)
        when (sign == ?+ or sign == ?-) and
-              is_digit(oh1) and is_digit(oh2) and is_digit(om1) and is_digit(om2) do
+              is_ascii_digit?(oh1) and is_ascii_digit?(oh2) and
+              is_ascii_digit?(om1) and is_ascii_digit?(om2) do
     oh = (oh1 - ?0) * 10 + (oh2 - ?0)
     om = (om1 - ?0) * 10 + (om2 - ?0)
 

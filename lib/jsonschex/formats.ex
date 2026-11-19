@@ -21,10 +21,9 @@ defmodule JSONSchex.Formats do
   - Unknown format values pass validation by default (per the JSON Schema specification).
   """
 
-  alias JSONSchex.Types.ErrorContext
+  import JSONSchex.Guards, only: [is_ascii_digit?: 1, is_ascii_hex?: 1]
 
-  defguardp is_digit(c) when c in ?0..?9
-  defguardp is_hex(c) when c in ?0..?9 or c in ?a..?f or c in ?A..?F
+  alias JSONSchex.Types.ErrorContext
 
   @doc """
   Validates data against the specified format.
@@ -57,8 +56,8 @@ defmodule JSONSchex.Formats do
   # `Date.from_iso8601/1` also accepts signed years, so validate the lexical form
   # before delegating calendar and leap-year checks to `Date`.
   defp valid?("date", <<y1, y2, y3, y4, ?-, m1, m2, ?-, d1, d2>> = data)
-       when y1 in ?0..?9 and y2 in ?0..?9 and y3 in ?0..?9 and y4 in ?0..?9 and
-              m1 in ?0..?9 and m2 in ?0..?9 and d1 in ?0..?9 and d2 in ?0..?9 do
+       when is_ascii_digit?(y1) and is_ascii_digit?(y2) and is_ascii_digit?(y3) and is_ascii_digit?(y4) and
+              is_ascii_digit?(m1) and is_ascii_digit?(m2) and is_ascii_digit?(d1) and is_ascii_digit?(d2) do
     match?({:ok, _}, Date.from_iso8601(data))
   end
 
@@ -135,14 +134,14 @@ defmodule JSONSchex.Formats do
          <<a1, a2, a3, a4, a5, a6, a7, a8, ?-, b1, b2, b3, b4, ?-, c1, c2, c3, c4, ?-,
            d1, d2, d3, d4, ?-, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12>>
        )
-       when is_hex(a1) and is_hex(a2) and is_hex(a3) and is_hex(a4) and
-              is_hex(a5) and is_hex(a6) and is_hex(a7) and is_hex(a8) and
-              is_hex(b1) and is_hex(b2) and is_hex(b3) and is_hex(b4) and
-              is_hex(c1) and is_hex(c2) and is_hex(c3) and is_hex(c4) and
-              is_hex(d1) and is_hex(d2) and is_hex(d3) and is_hex(d4) and
-              is_hex(e1) and is_hex(e2) and is_hex(e3) and is_hex(e4) and
-              is_hex(e5) and is_hex(e6) and is_hex(e7) and is_hex(e8) and
-              is_hex(e9) and is_hex(e10) and is_hex(e11) and is_hex(e12),
+       when is_ascii_hex?(a1) and is_ascii_hex?(a2) and is_ascii_hex?(a3) and is_ascii_hex?(a4) and
+              is_ascii_hex?(a5) and is_ascii_hex?(a6) and is_ascii_hex?(a7) and is_ascii_hex?(a8) and
+              is_ascii_hex?(b1) and is_ascii_hex?(b2) and is_ascii_hex?(b3) and is_ascii_hex?(b4) and
+              is_ascii_hex?(c1) and is_ascii_hex?(c2) and is_ascii_hex?(c3) and is_ascii_hex?(c4) and
+              is_ascii_hex?(d1) and is_ascii_hex?(d2) and is_ascii_hex?(d3) and is_ascii_hex?(d4) and
+              is_ascii_hex?(e1) and is_ascii_hex?(e2) and is_ascii_hex?(e3) and is_ascii_hex?(e4) and
+              is_ascii_hex?(e5) and is_ascii_hex?(e6) and is_ascii_hex?(e7) and is_ascii_hex?(e8) and
+              is_ascii_hex?(e9) and is_ascii_hex?(e10) and is_ascii_hex?(e11) and is_ascii_hex?(e12),
        do: true
 
   defp valid?("uuid", _data), do: false
@@ -170,8 +169,9 @@ defmodule JSONSchex.Formats do
 
   defp valid_percent_encoding?(<<>>), do: true
 
-  defp valid_percent_encoding?(<<?%, h1, h2, rest::binary>>) when is_hex(h1) and is_hex(h2),
-    do: valid_percent_encoding?(rest)
+  defp valid_percent_encoding?(<<?%, h1, h2, rest::binary>>)
+       when is_ascii_hex?(h1) and is_ascii_hex?(h2),
+       do: valid_percent_encoding?(rest)
 
   defp valid_percent_encoding?(<<?%, _::binary>>), do: false
   defp valid_percent_encoding?(<<_, rest::binary>>), do: valid_percent_encoding?(rest)
@@ -237,9 +237,9 @@ defmodule JSONSchex.Formats do
 
   defp parse_duration_time(_, _, _), do: false
 
-  defp consume_digits(<<d, rest::binary>>) when is_digit(d), do: {:ok, skip_digits(rest)}
+  defp consume_digits(<<d, rest::binary>>) when is_ascii_digit?(d), do: {:ok, skip_digits(rest)}
   defp consume_digits(_), do: :error
 
-  defp skip_digits(<<d, rest::binary>>) when is_digit(d), do: skip_digits(rest)
+  defp skip_digits(<<d, rest::binary>>) when is_ascii_digit?(d), do: skip_digits(rest)
   defp skip_digits(rest), do: rest
 end

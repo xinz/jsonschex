@@ -868,7 +868,13 @@ defmodule JSONSchex.Compiler do
   defp compile_keyword({"pattern", p}, _, _base, _vocabs, _ctx) do
     case JSONSchex.Compiler.ECMARegex.compile(p) do
       {:ok, regex} ->
-        {:ok, %Rule{name: :pattern, params: %{source: p, regex: regex}}}
+        params =
+          case JSONSchex.Validator.Pattern.compile_fast(p) do
+            nil -> %{source: p, regex: regex}
+            matcher -> %{source: p, regex: regex, matcher: matcher}
+          end
+
+        {:ok, %Rule{name: :pattern, params: params}}
 
       {:error, {err, _pos}} ->
         {:error,

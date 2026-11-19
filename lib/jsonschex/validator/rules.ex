@@ -88,6 +88,10 @@ defmodule JSONSchex.Validator.Rules do
   def apply(%Rule{name: :maxLength, params: max_length}, data, _ctx),
     do: Predicates.check_max_length(data, max_length)
 
+  def apply(%Rule{name: :pattern, params: %{regex: regex, matcher: matcher}}, data, {path, _, _}) do
+    Predicates.check_pattern(data, regex, matcher, path)
+  end
+
   def apply(%Rule{name: :pattern, params: %{regex: regex}}, data, {path, _, _}) do
     Predicates.check_pattern(data, regex, path)
   end

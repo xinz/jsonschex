@@ -248,4 +248,14 @@ defmodule JSONSchex.Compiler.Predicates do
     end
   end
   def check_pattern(_, _, _), do: :ok
+
+  @doc false
+  def check_pattern(data, regex, matcher, _path) when is_binary(data) do
+    if Pattern.match_fast?(matcher, data) do
+      :ok
+    else
+      {:error, %ErrorContext{contrast: regex, input: data}}
+    end
+  end
+  def check_pattern(_, _, _, _), do: :ok
 end
