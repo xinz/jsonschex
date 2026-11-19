@@ -131,7 +131,7 @@ defmodule JSONSchex.MixProject do
       {:ex_json_pointer, "~> 0.9"},
       {:jason, "~> 1.4", optional: true},
       {:decimal, "~> 3.2", optional: true},
-      {:idna, "~> 6.0 or ~> 7.1", optional: true},
+      {:idna, "~> 8.0", optional: true},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
