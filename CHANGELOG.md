@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.11.3 (2026-11-19)
+
+### Bug Fixes and Improvements
+
+Update dependencies and make `idna ~> 8.0` an optional dependency.
+
 ## v0.11.2 (2026-11-05)
 
 ### Bug Fixes and Improvements
