@@ -62,111 +62,109 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   defp run_rules([], _data, _ctx), do: true
 
-  defp run_rules([rule | rest], data, ctx) do
-    if check_rule(rule, data, ctx) do
+  defp run_rules([%Rule{name: name, params: params} | rest], data, ctx) do
+    if check_rule(name, params, data, ctx) do
       run_rules(rest, data, ctx)
     else
       false
     end
   end
 
-  # --- Scalar & Primitive Rules ---
+  # --- Scalar & Primitive Rules (atom-keyed jump table) ---
 
-  defp check_rule(%Rule{name: :boolean_schema}, _data, _ctx), do: false
+  defp check_rule(:boolean_schema, _params, _data, _ctx), do: false
 
-  defp check_rule(%Rule{name: :type, params: type}, data, _ctx), do: check_type?(data, type)
+  defp check_rule(:type, type, data, _ctx), do: check_type?(data, type)
 
-  defp check_rule(%Rule{name: :minimum, params: min}, data, _ctx),
+  defp check_rule(:minimum, min, data, _ctx),
     do: not is_number(data) or data >= min
 
-  defp check_rule(%Rule{name: :maximum, params: max}, data, _ctx),
+  defp check_rule(:maximum, max, data, _ctx),
     do: not is_number(data) or data <= max
 
-  defp check_rule(%Rule{name: :exclusiveMinimum, params: min}, data, _ctx),
+  defp check_rule(:exclusiveMinimum, min, data, _ctx),
     do: not is_number(data) or data > min
 
-  defp check_rule(%Rule{name: :exclusiveMaximum, params: max}, data, _ctx),
+  defp check_rule(:exclusiveMaximum, max, data, _ctx),
     do: not is_number(data) or data < max
 
-  defp check_rule(%Rule{name: :multipleOf, params: 0}, _data, _ctx), do: false
-  defp check_rule(%Rule{name: :multipleOf, params: +0.0}, _data, _ctx), do: false
+  defp check_rule(:multipleOf, 0, _data, _ctx), do: false
+  defp check_rule(:multipleOf, +0.0, _data, _ctx), do: false
 
-  defp check_rule(%Rule{name: :multipleOf, params: factor}, data, _ctx) when is_number(data),
+  defp check_rule(:multipleOf, factor, data, _ctx) when is_number(data),
     do: MultipleOf.valid?(data, factor)
 
-  defp check_rule(%Rule{name: :multipleOf}, _data, _ctx), do: true
+  defp check_rule(:multipleOf, _factor, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :minLength, params: min}, data, _ctx) when is_binary(data),
+  defp check_rule(:minLength, min, data, _ctx) when is_binary(data),
     do: Predicates.check_min_length(data, min) == :ok
 
-  defp check_rule(%Rule{name: :minLength}, _data, _ctx), do: true
+  defp check_rule(:minLength, _min, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :maxLength, params: max}, data, _ctx) when is_binary(data),
+  defp check_rule(:maxLength, max, data, _ctx) when is_binary(data),
     do: Predicates.check_max_length(data, max) == :ok
 
-  defp check_rule(%Rule{name: :maxLength}, _data, _ctx), do: true
+  defp check_rule(:maxLength, _max, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :pattern, params: %{matcher: matcher}}, data, _ctx)
+  defp check_rule(:pattern, %{matcher: matcher}, data, _ctx)
        when is_binary(data),
        do: Pattern.match_fast?(matcher, data)
 
-  defp check_rule(%Rule{name: :pattern, params: %{regex: regex}}, data, _ctx)
+  defp check_rule(:pattern, %{regex: regex}, data, _ctx)
        when is_binary(data),
        do: Pattern.match?(regex, data, [])
 
-  defp check_rule(%Rule{name: :pattern}, _data, _ctx), do: true
+  defp check_rule(:pattern, _params, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :format, params: format}, data, _ctx),
+  defp check_rule(:format, format, data, _ctx),
     do: Formats.valid?(format, data)
 
-  defp check_rule(%Rule{name: :minProperties, params: min}, data, _ctx),
+  defp check_rule(:minProperties, min, data, _ctx),
     do: not is_map(data) or map_size(data) >= min
 
-  defp check_rule(%Rule{name: :maxProperties, params: max}, data, _ctx),
+  defp check_rule(:maxProperties, max, data, _ctx),
     do: not is_map(data) or map_size(data) <= max
 
-  defp check_rule(%Rule{name: :minItems, params: min}, data, _ctx),
+  defp check_rule(:minItems, min, data, _ctx),
     do: not is_list(data) or length(data) >= min
 
-  defp check_rule(%Rule{name: :maxItems, params: max}, data, _ctx),
+  defp check_rule(:maxItems, max, data, _ctx),
     do: not is_list(data) or length(data) <= max
 
-  defp check_rule(%Rule{name: :uniqueItems, params: unique}, data, _ctx),
+  defp check_rule(:uniqueItems, unique, data, _ctx),
     do: Predicates.check_unique_items(data, unique) == :ok
 
-  defp check_rule(%Rule{name: :enum, params: values}, data, _ctx),
+  defp check_rule(:enum, values, data, _ctx),
     do: Enum.any?(values, &(&1 == data))
 
-  defp check_rule(%Rule{name: :const, params: value}, data, _ctx),
+  defp check_rule(:const, value, data, _ctx),
     do: data == value
 
   # --- Object Rules ---
 
-  defp check_rule(%Rule{name: :required, params: required}, data, _ctx) when is_map(data),
+  defp check_rule(:required, required, data, _ctx) when is_map(data),
     do: all_keys_present?(required, data)
 
-  defp check_rule(%Rule{name: :required}, _data, _ctx), do: true
+  defp check_rule(:required, _required, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :properties, params: compiled_props}, data, ctx)
+  defp check_rule(:properties, compiled_props, data, ctx)
        when is_map(data),
        do: check_properties(compiled_props, data, ctx)
 
-  defp check_rule(%Rule{name: :properties}, _data, _ctx), do: true
+  defp check_rule(:properties, _compiled_props, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :patternProperties, params: compiled_patterns}, data, ctx)
+  defp check_rule(:patternProperties, compiled_patterns, data, ctx)
        when is_map(data),
        do: check_pattern_properties(compiled_patterns, Map.to_list(data), ctx)
 
-  defp check_rule(%Rule{name: :patternProperties}, _data, _ctx), do: true
+  defp check_rule(:patternProperties, _compiled_patterns, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :additionalProperties, params: %{always_valid?: true}}, _data, _ctx),
+  defp check_rule(:additionalProperties, %{always_valid?: true}, _data, _ctx),
     do: true
 
   defp check_rule(
-         %Rule{
-           name: :additionalProperties,
-           params: %{schema: compiled_sub, known_props: known_props, patterns: patterns}
-         },
+         :additionalProperties,
+         %{schema: compiled_sub, known_props: known_props, patterns: patterns},
          data,
          ctx
        )
@@ -174,37 +172,38 @@ defmodule JSONSchex.Validator.ShortCircuit do
     check_additional_properties(Map.to_list(data), compiled_sub, known_props, patterns, ctx)
   end
 
-  defp check_rule(%Rule{name: :additionalProperties}, _data, _ctx), do: true
+  defp check_rule(:additionalProperties, _params, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :propertyNames, params: compiled_sub}, data, ctx)
+  defp check_rule(:propertyNames, compiled_sub, data, ctx)
        when is_map(data),
        do: check_property_names(Map.keys(data), compiled_sub, ctx)
 
-  defp check_rule(%Rule{name: :propertyNames}, _data, _ctx), do: true
+  defp check_rule(:propertyNames, _compiled_sub, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :dependentRequired, params: deps}, data, _ctx)
+  defp check_rule(:dependentRequired, deps, data, _ctx)
        when is_map(data),
        do: check_dependent_required(Map.to_list(deps), data)
 
-  defp check_rule(%Rule{name: :dependentRequired}, _data, _ctx), do: true
+  defp check_rule(:dependentRequired, _deps, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :dependentSchemas, params: compiled_deps}, data, ctx)
+  defp check_rule(:dependentSchemas, compiled_deps, data, ctx)
        when is_map(data),
        do: check_dependent_schemas(Map.to_list(compiled_deps), data, ctx)
 
-  defp check_rule(%Rule{name: :dependentSchemas}, _data, _ctx), do: true
+  defp check_rule(:dependentSchemas, _compiled_deps, _data, _ctx), do: true
 
-  defp check_rule(%Rule{name: :dependencies, params: :ok}, _data, _ctx), do: true
-  defp check_rule(%Rule{name: :dependencies}, data, _ctx) when not is_map(data), do: true
+  defp check_rule(:dependencies, :ok, _data, _ctx), do: true
+  defp check_rule(:dependencies, _params, data, _ctx) when not is_map(data), do: true
 
-  defp check_rule(%Rule{name: :dependencies, params: %{mode: :required, required: req}}, data, _ctx),
+  defp check_rule(:dependencies, %{mode: :required, required: req}, data, _ctx),
     do: check_dependent_required(Map.to_list(req), data)
 
-  defp check_rule(%Rule{name: :dependencies, params: %{mode: :schemas, schemas: schemas}}, data, ctx),
+  defp check_rule(:dependencies, %{mode: :schemas, schemas: schemas}, data, ctx),
     do: check_dependent_schemas(Map.to_list(schemas), data, ctx)
 
   defp check_rule(
-         %Rule{name: :dependencies, params: %{mode: :both, required: req, schemas: schemas}},
+         :dependencies,
+         %{mode: :both, required: req, schemas: schemas},
          data,
          ctx
        ) do
@@ -214,14 +213,15 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   # --- Array Rules ---
 
-  defp check_rule(%Rule{name: :prefixItems, params: compiled_schemas}, data, ctx)
+  defp check_rule(:prefixItems, compiled_schemas, data, ctx)
        when is_list(data),
        do: check_prefix_items(compiled_schemas, data, ctx)
 
-  defp check_rule(%Rule{name: :prefixItems}, _data, _ctx), do: true
+  defp check_rule(:prefixItems, _compiled_schemas, _data, _ctx), do: true
 
   defp check_rule(
-         %Rule{name: :items, params: %{draft: "draft7", schemas: schemas, additional: additional}},
+         :items,
+         %{draft: "draft7", schemas: schemas, additional: additional},
          data,
          ctx
        )
@@ -230,7 +230,8 @@ defmodule JSONSchex.Validator.ShortCircuit do
   end
 
   defp check_rule(
-         %Rule{name: :items, params: %{start_index: start_index, schema: compiled_sub}},
+         :items,
+         %{start_index: start_index, schema: compiled_sub},
          data,
          ctx
        )
@@ -239,10 +240,11 @@ defmodule JSONSchex.Validator.ShortCircuit do
     check_items_list(items, compiled_sub, ctx)
   end
 
-  defp check_rule(%Rule{name: :items}, _data, _ctx), do: true
+  defp check_rule(:items, _params, _data, _ctx), do: true
 
   defp check_rule(
-         %Rule{name: :contains, params: %{schema: compiled_sub, min: min, max: max}},
+         :contains,
+         %{schema: compiled_sub, min: min, max: max},
          data,
          ctx
        )
@@ -253,24 +255,25 @@ defmodule JSONSchex.Validator.ShortCircuit do
     end
   end
 
-  defp check_rule(%Rule{name: :contains}, _data, _ctx), do: true
+  defp check_rule(:contains, _params, _data, _ctx), do: true
 
   # --- Combinators & Conditionals ---
 
-  defp check_rule(%Rule{name: :allOf, params: schemas}, data, ctx),
+  defp check_rule(:allOf, schemas, data, ctx),
     do: check_all_of(schemas, data, ctx)
 
-  defp check_rule(%Rule{name: :anyOf, params: schemas}, data, ctx),
+  defp check_rule(:anyOf, schemas, data, ctx),
     do: check_any_of(schemas, data, ctx)
 
-  defp check_rule(%Rule{name: :oneOf, params: schemas}, data, ctx),
+  defp check_rule(:oneOf, schemas, data, ctx),
     do: check_one_of(schemas, data, 0, ctx)
 
-  defp check_rule(%Rule{name: :not, params: compiled_sub}, data, ctx),
+  defp check_rule(:not, compiled_sub, data, ctx),
     do: not validate_entry(compiled_sub, data, ctx)
 
   defp check_rule(
-         %Rule{name: :if, params: %{if: compiled_if, then: compiled_then, else: compiled_else}},
+         :if,
+         %{if: compiled_if, then: compiled_then, else: compiled_else},
          data,
          ctx
        ) do
@@ -284,7 +287,8 @@ defmodule JSONSchex.Validator.ShortCircuit do
   # --- References & Content ---
 
   defp check_rule(
-         %Rule{name: :ref, params: %{ref: ref_string, resolved_uri: resolved_uri}},
+         :ref,
+         %{ref: ref_string, resolved_uri: resolved_uri},
          data,
          ctx
        ) do
@@ -295,7 +299,6 @@ defmodule JSONSchex.Validator.ShortCircuit do
         validate_entry(target_schema, data, target_ctx)
 
       nil ->
-        # fallback
         match?(
           {:ok, _},
           Reference.validate_ref(data, ref_string, resolved_uri, {[], @empty_mapset, validation_ctx})
@@ -303,16 +306,14 @@ defmodule JSONSchex.Validator.ShortCircuit do
     end
   end
 
-  defp check_rule(%Rule{name: :dynamicRef, params: ref}, data, ctx) do
+  defp check_rule(:dynamicRef, ref, data, ctx) do
     validation_ctx = ensure_context(ctx)
     match?({:ok, _}, Reference.validate_dynamic_ref(data, ref, {[], @empty_mapset, validation_ctx}))
   end
 
   defp check_rule(
-         %Rule{
-           name: :contentSchema,
-           params: %{schema: compiled_sub, media_type: media_type, encoding: encoding}
-         },
+         :contentSchema,
+         %{schema: compiled_sub, media_type: media_type, encoding: encoding},
          data,
          ctx
        ) do
@@ -334,7 +335,8 @@ defmodule JSONSchex.Validator.ShortCircuit do
   end
 
   defp check_rule(
-         %Rule{name: name, params: %{media_type: media_type, encoding: encoding}},
+         name,
+         %{media_type: media_type, encoding: encoding},
          data,
          _ctx
        )
@@ -342,7 +344,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
     Keywords.validate_content_assertion(data, media_type, encoding, []) == :ok
   end
 
-  defp check_rule(%Rule{name: name}, _data, _ctx) do
+  defp check_rule(name, _params, _data, _ctx) do
     raise ArgumentError, "unsupported compiled rule: #{inspect(name)}"
   end
 

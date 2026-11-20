@@ -1640,5 +1640,4 @@ defmodule JSONSchex.Validator.Keywords do
   defp json_media_type?(media_type) when is_binary(media_type) do
     String.ends_with?(media_type, "+json")
   end
-
 end
