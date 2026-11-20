@@ -180,6 +180,25 @@ defmodule JSONSchex do
   defdelegate validate(schema, data), to: Validator
 
   @doc """
+  Returns `true` if `data` is valid against a compiled schema, `false` otherwise.
+
+  This fail-fast entry point short-circuits on the first mismatch (and on the first
+  matching branch in `anyOf` when no `unevaluatedProperties`/`unevaluatedItems`
+  annotations are required), avoiding error struct allocation when detailed
+  diagnostics are not needed.
+
+  ## Examples
+
+      iex> {:ok, schema} = JSONSchex.compile(%{"type" => "integer", "minimum" => 10})
+      iex> JSONSchex.valid?(schema, 15)
+      true
+      iex> JSONSchex.valid?(schema, 5)
+      false
+  """
+  @spec valid?(Schema.t(), term()) :: boolean()
+  defdelegate valid?(schema, data), to: JSONSchex.Validator.ShortCircuit
+
+  @doc """
   Formats a validation error into a human-readable string.
 
   ## Examples

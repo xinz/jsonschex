@@ -44,30 +44,35 @@ defmodule JSONSchex.Formats do
   """
 
   def validate(format, data) when is_binary(data) do
-    if valid?(format, data), do: :ok, else: {:error, %ErrorContext{contrast: format, input: data}}
+    if format_valid?(format, data), do: :ok, else: {:error, %ErrorContext{contrast: format, input: data}}
   end
   def validate(_, _), do: :ok
 
-  defp valid?("date-time", data) do
+  @doc false
+  @spec valid?(String.t(), term()) :: boolean()
+  def valid?(format, data) when is_binary(data), do: format_valid?(format, data)
+  def valid?(_, _), do: true
+
+  defp format_valid?("date-time", data) do
     JSONSchex.Formats.DateTime.valid?(data)
   end
 
   # RFC 3339 `full-date` requires exactly four unsigned year digits. Elixir's
   # `Date.from_iso8601/1` also accepts signed years, so validate the lexical form
   # before delegating calendar and leap-year checks to `Date`.
-  defp valid?("date", <<y1, y2, y3, y4, ?-, m1, m2, ?-, d1, d2>> = data)
+  defp format_valid?("date", <<y1, y2, y3, y4, ?-, m1, m2, ?-, d1, d2>> = data)
        when is_ascii_digit?(y1) and is_ascii_digit?(y2) and is_ascii_digit?(y3) and is_ascii_digit?(y4) and
               is_ascii_digit?(m1) and is_ascii_digit?(m2) and is_ascii_digit?(d1) and is_ascii_digit?(d2) do
     match?({:ok, _}, Date.from_iso8601(data))
   end
 
-  defp valid?("date", _data), do: false
+  defp format_valid?("date", _data), do: false
 
-  defp valid?("time", data) do
+  defp format_valid?("time", data) do
     JSONSchex.Formats.DateTime.valid_time?(data)
   end
 
-  defp valid?("duration", <<?P, rest::binary>>) when rest != <<>> do
+  defp format_valid?("duration", <<?P, rest::binary>>) when rest != <<>> do
     # RFC 3339 Appendix A duration grammar.
     # Weeks cannot be combined with other units.
     # Date ordering is constrained to Y -> M -> D, but D cannot appear unless M is present
@@ -79,57 +84,57 @@ defmodule JSONSchex.Formats do
     end
   end
 
-  defp valid?("duration", _data), do: false
+  defp format_valid?("duration", _data), do: false
 
-  defp valid?("email", data) do
+  defp format_valid?("email", data) do
     JSONSchex.Formats.Email.valid?(data)
   end
 
-  defp valid?("idn-email", data) do
+  defp format_valid?("idn-email", data) do
     JSONSchex.Formats.Email.valid_idn?(data)
   end
 
-  defp valid?("hostname", data) do
+  defp format_valid?("hostname", data) do
     JSONSchex.Formats.Hostname.valid?(data)
   end
 
-  defp valid?("idn-hostname", data) do
+  defp format_valid?("idn-hostname", data) do
     JSONSchex.Formats.Hostname.valid_idn?(data)
   end
 
-  defp valid?("ipv4", data) do
+  defp format_valid?("ipv4", data) do
     JSONSchex.Formats.IP.valid_ipv4?(data)
   end
 
-  defp valid?("ipv6", data) do
+  defp format_valid?("ipv6", data) do
     JSONSchex.Formats.IP.valid_ipv6?(data)
   end
 
-  defp valid?("uri", data) do
+  defp format_valid?("uri", data) do
     valid_percent_encoding?(data) and
       match?({:ok, %URI{scheme: s}} when s != nil and s != "", URI.new(data))
   end
 
-  defp valid?("uri-reference", data) do
+  defp format_valid?("uri-reference", data) do
     valid_percent_encoding?(data) and
       match?({:ok, _}, URI.new(data))
   end
 
-  defp valid?("iri", data) do
+  defp format_valid?("iri", data) do
     uri_string = replace_non_ascii_chars_by_uri_encode(data)
-    valid?("uri", uri_string)
+    format_valid?("uri", uri_string)
   end
 
-  defp valid?("iri-reference", data) do
+  defp format_valid?("iri-reference", data) do
     uri_string = replace_non_ascii_chars_by_uri_encode(data)
-    valid?("uri-reference", uri_string)
+    format_valid?("uri-reference", uri_string)
   end
 
-  defp valid?("uri-template", data) do
+  defp format_valid?("uri-template", data) do
     JSONSchex.Formats.URITemplate.valid?(data)
   end
 
-  defp valid?(
+  defp format_valid?(
          "uuid",
          <<a1, a2, a3, a4, a5, a6, a7, a8, ?-, b1, b2, b3, b4, ?-, c1, c2, c3, c4, ?-,
            d1, d2, d3, d4, ?-, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12>>
@@ -144,22 +149,22 @@ defmodule JSONSchex.Formats do
               is_ascii_hex?(e9) and is_ascii_hex?(e10) and is_ascii_hex?(e11) and is_ascii_hex?(e12),
        do: true
 
-  defp valid?("uuid", _data), do: false
+  defp format_valid?("uuid", _data), do: false
 
-  defp valid?("json-pointer", data) do
+  defp format_valid?("json-pointer", data) do
     ExJSONPointer.valid_json_pointer?(data)
   end
 
-  defp valid?("relative-json-pointer", data) do
+  defp format_valid?("relative-json-pointer", data) do
     Regex.match?(~r/\A(?:0|[1-9][0-9]*)(?:[+-](?:0|[1-9][0-9]*))?(?:\/(?:[^#].*)?|#)?\z/s, data) and
       ExJSONPointer.valid_relative_json_pointer?(data)
   end
 
-  defp valid?("regex", data) do
+  defp format_valid?("regex", data) do
     JSONSchex.Formats.Regex.valid?(data)
   end
 
-  defp valid?(_, _), do: true # Unknown formats pass by default
+  defp format_valid?(_, _), do: true # Unknown formats pass by default
 
   defp replace_non_ascii_chars_by_uri_encode(data) do
     Regex.replace(~r/[^\x00-\x7F]/u, data, fn c ->

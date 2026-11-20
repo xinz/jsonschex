@@ -460,7 +460,8 @@ defmodule JSONSchex.Compiler do
     dynamic_anchor = Map.get(effective_schema, "$dynamicAnchor")
 
     with {:ok, compiled_defs, local_refs} <- compile_local_defs(effective_schema, base, vocabs, ctx),
-         {:ok, standard_rules} <- compile_standard_keywords(effective_schema, base, vocabs, ctx) do
+         {:ok, standard_rules, needs_evaluated_annotations} <-
+           compile_standard_keywords(effective_schema, base, vocabs, ctx) do
       rules =
         if Map.has_key?(effective_schema, "$ref") do
           [compile_ref(effective_schema["$ref"], base) | standard_rules]
@@ -479,7 +480,8 @@ defmodule JSONSchex.Compiler do
          loader: ctx.loader,
          format_assertion: ctx.format_assertion,
          content_assertion: ctx.content_assertion,
-         draft: ctx.draft
+         draft: ctx.draft,
+         needs_evaluated_annotations: needs_evaluated_annotations
        }}
     end
   end
@@ -545,7 +547,10 @@ defmodule JSONSchex.Compiler do
       finalizers = if props_rule, do: [props_rule | finalizers], else: finalizers
       finalizers = if items_rule, do: [items_rule | finalizers], else: finalizers
 
-      {:ok, base_rules ++ Enum.reverse(finalizers)}
+      case finalizers do
+        [] -> {:ok, base_rules, false}
+        _ -> {:ok, base_rules ++ Enum.reverse(finalizers), true}
+      end
     end
   end
 

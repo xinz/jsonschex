@@ -29,7 +29,8 @@ defmodule JSONSchex.Types do
               | nil,
             format_assertion: boolean(),
             content_assertion: boolean(),
-            draft: String.t()
+            draft: String.t(),
+            needs_evaluated_annotations: boolean()
           }
     defstruct [
       :rules,
@@ -41,7 +42,8 @@ defmodule JSONSchex.Types do
       local_refs: %{},
       format_assertion: false,
       content_assertion: false,
-      draft: "draft2020_12"
+      draft: "draft2020_12",
+      needs_evaluated_annotations: false
     ]
   end
 

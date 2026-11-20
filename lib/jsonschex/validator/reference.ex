@@ -106,6 +106,22 @@ defmodule JSONSchex.Validator.Reference do
   end
 
   @doc false
+  def resolve_compiled_ref(<<?#, _::binary>> = resolved_uri, validation_context) do
+    case lookup_ref(resolved_uri, validation_context) do
+      {schema, :local} -> {:ok, schema, context_for_local_target(schema, validation_context)}
+      {schema, :registry} -> {:ok, schema, context_for_registered_target(schema, validation_context)}
+      nil -> nil
+    end
+  end
+
+  def resolve_compiled_ref(resolved_uri, validation_context) do
+    case Map.get(validation_context.root_schema.defs, resolved_uri) do
+      %Schema{} = schema -> {:ok, schema, context_for_registered_target(schema, validation_context)}
+      _ -> nil
+    end
+  end
+
+  @doc false
   @spec context_for_child(Schema.t(), ValidationContext.t()) :: ValidationContext.t()
   def context_for_child(%{source_id: nil}, context), do: context
   def context_for_child(%{source_id: id}, %ValidationContext{source_id: id} = context), do: context
