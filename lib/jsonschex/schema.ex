@@ -22,7 +22,8 @@ defmodule JSONSchex.Schema do
   """
 
   alias JSONSchex.Compiler
-  alias JSONSchex.Types.Error
+  alias JSONSchex.StaticCompiler
+  alias JSONSchex.Types.{Error, Schema}
 
   @doc """
   Compiles a static schema literal at compile time and embeds the compiled
@@ -80,6 +81,145 @@ defmodule JSONSchex.Schema do
   """
   defmacro compile_fragment!(document_ast, opts_ast) do
     compile_fragment_ast!(document_ast, opts_ast, __CALLER__)
+  end
+
+  @doc """
+  Generates compile-time JIT-friendly validator function(s) from a static schema.
+
+  Accepts a raw map/boolean literal (with optional compiler `opts`), a `~X` sigil,
+  a `compile!/2` / `compile_fragment!/2` expression, or a module attribute (`@schema`)
+  holding any of the above.
+
+  When `name` does not end with `?` (e.g., `:validate_user`), this macro defines:
+
+  - `validate_user?(data) :: boolean()` — specialized BEAM-compiled predicate with zero
+    interpreter dispatch and zero error allocation
+  - `validate_user(data) :: :ok | {:error, [JSONSchex.Types.Error.t()]}` — returns `:ok`
+    immediately on the zero-allocation fast path, and falls back to `JSONSchex.validate/2`
+    on failure to produce full structured diagnostics
+
+  When `name` ends with `?` (e.g., `:valid_user?`), only the boolean predicate
+  `valid_user?/1` is generated.
+
+  `use JSONSchex` automatically imports both `~X` and `defvalidator/2,3`.
+
+  Any keywords outside the static subset (such as `$ref`, `$dynamicRef`, or
+  `unevaluatedProperties`) transparently fall back to the embedded compiled schema,
+  preserving full JSON Schema specification compliance.
+
+  ## Examples
+
+      iex> defmodule JSONSchexDefvalidatorExample do
+      ...>   use JSONSchex
+      ...>   defvalidator :validate_user, ~X|%{"type" => "object", "required" => ["name", "age"], "properties" => %{"name" => %{"type" => "string", "minLength" => 1}, "age" => %{"type" => "integer", "minimum" => 0}}}|
+      ...>   @email_schema %{"type" => "string", "format" => "email"}
+      ...>   defvalidator :validate_email, @email_schema, format_assertion: true
+      ...> end
+      iex> JSONSchexDefvalidatorExample.validate_user?(%{"name" => "Ada", "age" => 36})
+      true
+      iex> JSONSchexDefvalidatorExample.validate_user(%{"name" => "Ada", "age" => 36})
+      :ok
+      iex> {:error, [%{rule: :minimum}]} = JSONSchexDefvalidatorExample.validate_user(%{"name" => "Ada", "age" => -1})
+      iex> JSONSchexDefvalidatorExample.validate_email("ada@example.com")
+      :ok
+      iex> {:error, [%{rule: :format}]} = JSONSchexDefvalidatorExample.validate_email("not-an-email")
+  """
+  defmacro defvalidator(name, schema_ast, opts_ast \\ []) when is_atom(name) do
+    defvalidator_ast!(name, schema_ast, opts_ast, __CALLER__)
+  end
+
+  @doc false
+  def defvalidator_ast!(name, schema_ast, opts_ast, caller) do
+    if contains_module_attribute?(schema_ast) or contains_module_attribute?(opts_ast) do
+      quote do
+        JSONSchex.Schema.__define_validator__(
+          unquote(name),
+          unquote(schema_ast),
+          unquote(opts_ast),
+          __ENV__
+        )
+      end
+    else
+      opts = static_term!(opts_ast, caller, "options")
+      schema = static_term!(schema_ast, caller, "schema")
+      build_defvalidator_quoted!(name, schema, opts, caller)
+    end
+  end
+
+  @doc false
+  def __define_validator__(name, schema, opts, env) do
+    quoted = build_defvalidator_quoted!(name, schema, opts, env)
+    Code.eval_quoted(quoted, [], env)
+  end
+
+  defp build_defvalidator_quoted!(name, schema, opts, caller) do
+    compiled =
+      case schema do
+        %Schema{} = already_compiled ->
+          if opts != [] do
+            raise_compile_error!(
+              caller,
+              "JSONSchex.Schema.defvalidator/3 does not accept options when given an already-compiled schema; " <>
+                "pass options to ~X or JSONSchex.Schema.compile!/2 instead"
+            )
+          end
+
+          already_compiled
+
+        raw ->
+          compile_schema_value!(raw, opts, caller)
+      end
+
+    escaped_compiled = escape_embeddable!(compiled, caller)
+
+    {body_ast, helper_defs, needs_catch?} = StaticCompiler.compile(name, compiled)
+    data_var = Macro.var(:data, StaticCompiler)
+
+    predicate_body =
+      if needs_catch? do
+        quote do
+          try do
+            unquote(body_ast)
+          catch
+            {JSONSchex.Validator.Pattern, %JSONSchex.Types.Error{}} -> false
+          end
+        end
+      else
+        body_ast
+      end
+
+    name_str = Atom.to_string(name)
+
+    if String.ends_with?(name_str, "?") do
+      quote do
+        @spec unquote(name)(term()) :: boolean()
+        def unquote(name)(unquote(data_var)) do
+          unquote(predicate_body)
+        end
+
+        unquote_splicing(helper_defs)
+      end
+    else
+      pred_name = String.to_atom(name_str <> "?")
+
+      quote do
+        @spec unquote(pred_name)(term()) :: boolean()
+        def unquote(pred_name)(unquote(data_var)) do
+          unquote(predicate_body)
+        end
+
+        @spec unquote(name)(term()) :: :ok | {:error, list(JSONSchex.Types.Error.t())}
+        def unquote(name)(data) do
+          if unquote(pred_name)(data) do
+            :ok
+          else
+            JSONSchex.validate(unquote(escaped_compiled), data)
+          end
+        end
+
+        unquote_splicing(helper_defs)
+      end
+    end
   end
 
   @doc false

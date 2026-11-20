@@ -26,12 +26,12 @@ defmodule JSONSchex do
       iex> JSONSchex.format_error(error)
       ~s(Invalid email format: "not-an-email")
 
-  For compile-time schema embedding, see:
+  For compile-time schema embedding and static validator generation, see:
 
-  - `JSONSchex.Schema` for the `compile!/2` macro
+  - `JSONSchex.Schema` for `compile!/2`, `compile_fragment!/2`, and `defvalidator/2,3`
   - `JSONSchex.Sigil` for the `~X` sigil
 
-  `use JSONSchex` imports the `~X` sigil as a convenience.
+  `use JSONSchex` imports the `~X` sigil and `defvalidator/2,3` as a convenience.
   """
 
   alias JSONSchex.Compiler
@@ -231,13 +231,22 @@ defmodule JSONSchex do
   defdelegate format_error(error), to: JSONSchex.ErrorFormatter, as: :format
 
   @doc """
-  Imports the `~X` sigil for compile-time schema literals.
+  Imports the `~X` sigil and `defvalidator/2,3` macro for compile-time schemas.
 
-  For the explicit API, use `JSONSchex.Sigil` directly.
+  For the explicit APIs, use `JSONSchex.Sigil` and `JSONSchex.Schema` directly.
+
+  ## Examples
+
+      defmodule MyApp.Validators do
+        use JSONSchex
+
+        defvalidator :validate_email, ~X|%{"type" => "string", "format" => "email"}|f
+      end
   """
   defmacro __using__(_opts) do
     quote do
       import JSONSchex.Sigil, only: [sigil_X: 2]
+      import JSONSchex.Schema, only: [defvalidator: 2, defvalidator: 3]
     end
   end
 end

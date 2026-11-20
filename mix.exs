@@ -29,6 +29,7 @@ defmodule JSONSchex.MixProject do
       extras: [
         "README.md",
         "CHANGELOG.md",
+        "guide/defvalidator.md",
         "guide/loader.md",
         "guide/dialect_and_vocabulary.md",
         "guide/feature_matrix.md",
@@ -38,6 +39,7 @@ defmodule JSONSchex.MixProject do
       ],
       groups_for_extras: [
         Guides: [
+          "guide/defvalidator.md",
           "guide/loader.md",
           "guide/dialect_and_vocabulary.md",
           "guide/feature_matrix.md",
@@ -63,6 +65,7 @@ defmodule JSONSchex.MixProject do
         ],
         Compiler: [
           JSONSchex.Compiler,
+          JSONSchex.StaticCompiler,
           JSONSchex.Compiler.ECMARegex,
           JSONSchex.Compiler.Predicates,
           JSONSchex.Compiler.Predicates.MultipleOf

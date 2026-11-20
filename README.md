@@ -111,6 +111,22 @@ captures like `&MyLoader.fetch/1` over anonymous functions.
 
 `~X` is preferred over `~J` to avoid the common sigil-name conflict with Jason.
 
+### Defining named validators
+
+If callers only need a validation function, `use JSONSchex` also imports `defvalidator`. It accepts a raw Elixir schema or a compiled schema such as `~X`:
+
+```elixir
+defmodule MyApp.Quantity do
+  use JSONSchex
+  defvalidator :validate, ~X|%{"type" => "integer", "minimum" => 1}|
+end
+
+true = MyApp.Quantity.validate?(1)
+{:error, [%{rule: :minimum}]} = MyApp.Quantity.validate(0)
+```
+
+See the [`defvalidator` guide](guide/defvalidator.md) for predicate-only functions, map examples, and where to set compile options.
+
 ## How it works
 
 1. **Compile** — Convert schema keywords into reusable, serializable rule descriptors; register resource IDs, anchors, and eligible local references; and select the draft's keywords and vocabularies.
@@ -214,6 +230,7 @@ Add only the dependencies your application needs alongside `:jsonschex` in `mix.
 
 See the `guide/` directory for detailed documentation:
 
+- [Defining named validators with `defvalidator`](guide/defvalidator.md)
 - [Loader and remote `$ref` handling](guide/loader.md)
 - [Dialect and `$vocabulary` behavior](guide/dialect_and_vocabulary.md)
 - [Feature matrix (Draft 2020-12 support)](guide/feature_matrix.md)
