@@ -6,38 +6,46 @@ defmodule JSONSchex.StaticCompiler do
   map pattern matches, guard checks, and tail-recursive list validators at compile time.
 
   Keywords outside the static subset (such as `$ref`, `$dynamicRef`, `unevaluatedProperties`,
-  `unevaluatedItems`, or `contentSchema`) automatically fall back to `JSONSchex.valid?/2`
-  on the embedded compiled sub-schema, preserving 100% JSON Schema specification compliance.
+  `unevaluatedItems`, or `contentSchema`) use the short-circuit validator with the
+  original root schema and the enclosing resource's reference scope.
   """
 
-  alias JSONSchex.Types.{Rule, Schema}
+  alias JSONSchex.Types.{Rule, Schema, ValidationContext}
+  alias JSONSchex.Validator.{Reference, ShortCircuit}
 
   @doc false
   @spec compile(atom(), Schema.t()) :: {Macro.t(), [Macro.t()], boolean()}
   def compile(prefix, %Schema{} = schema) when is_atom(prefix) do
     var = Macro.var(:data, __MODULE__)
-    state = %{prefix: prefix, counter: 0, helpers: [], needs_catch?: false}
+    state = %{
+      prefix: prefix,
+      counter: 0,
+      helpers: [],
+      needs_catch?: false,
+      context: ValidationContext.from_root_schema(schema),
+      context_helper: nil
+    }
     {expr, final_state} = compile_schema(schema, var, state)
     {expr, Enum.reverse(final_state.helpers), final_state.needs_catch?}
   end
 
   # --- Schema Node Compilation ---
 
-  defp compile_schema(%Schema{needs_evaluated_annotations: true} = schema, var, state) do
-    fallback_schema(schema, var, state)
-  end
-
-  defp compile_schema(%Schema{source_id: id} = schema, var, state) when id != nil do
-    # Only fall back if the schema actually uses refs that depend on source_id scope
-    if has_ref_rule?(schema.rules) do
-      fallback_schema(schema, var, state)
-    else
-      compile_rules_node(schema, var, state)
-    end
+  # Static traversal only follows structural children. Compute their context at
+  # compile time; crossing a reference (and its dynamic scope) is the engine's job.
+  defp compile_schema(%Schema{source_id: id} = schema, var, %{context: parent} = state)
+       when id != nil and id != parent.source_id do
+    child = Reference.context_for_child(schema, parent)
+    {ast, next} = compile_rules_node(schema, var, %{state | context: child, context_helper: nil})
+    {ast, %{next | context: parent, context_helper: state.context_helper}}
   end
 
   defp compile_schema(%Schema{} = schema, var, state) do
     compile_rules_node(schema, var, state)
+  end
+
+  defp compile_rules_node(%Schema{needs_evaluated_annotations: true} = schema, var, state) do
+    fallback_schema(schema, var, state)
   end
 
   defp compile_rules_node(%Schema{rules: []}, _var, state), do: {true, state}
@@ -636,13 +644,25 @@ defmodule JSONSchex.StaticCompiler do
   # --- Helpers ---
 
   defp fallback_schema(%Schema{} = schema, var, state) do
+    {context_helper, state} = fallback_context(state)
+
     ast =
       quote do
-        JSONSchex.valid?(unquote(Macro.escape(schema)), unquote(var))
+        ShortCircuit.valid_entry?(unquote(Macro.escape(schema)), unquote(var), unquote(context_helper)())
       end
 
     {ast, %{state | needs_catch?: true}}
   end
+
+  # Embed the scope once, not once per fallback expression. Fully specialized
+  # predicates never emit a context helper or construct a context at runtime.
+  defp fallback_context(%{context_helper: nil} = state) do
+    {name, state} = next_helper_name("scope", state)
+    helper = quote do: defp(unquote(name)(), do: unquote(Macro.escape(state.context)))
+    {name, %{state | helpers: [helper | state.helpers], context_helper: name}}
+  end
+
+  defp fallback_context(%{context_helper: name} = state), do: {name, state}
 
   defp compile_type_check("string", var), do: quote(do: is_binary(unquote(var)))
 

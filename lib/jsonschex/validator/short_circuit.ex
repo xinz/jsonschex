@@ -17,48 +17,40 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   @empty_mapset MapSet.new()
 
-  @doc false
   @spec valid?(Schema.t(), term()) :: boolean()
   def valid?(%Schema{} = root_schema, data) do
-    validate_entry(root_schema, data, root_schema)
+    valid_entry?(root_schema, data, root_schema)
   catch
     {Pattern, %Error{}} ->
       false
   end
 
-  defp validate_entry(%Schema{needs_evaluated_annotations: true} = schema, data, ctx) do
+  # Internal entry point for generated predicates too. Only the outer predicate
+  # catches pattern errors: a nested `not` must not invert them into a match.
+  @spec valid_entry?(Schema.t(), term(), ValidationContext.t() | Schema.t()) :: boolean()
+  def valid_entry?(%Schema{needs_evaluated_annotations: true} = schema, data, ctx) do
     match?({:ok, _}, Validator.validate_entry(schema, data, [], ensure_context(ctx)))
   end
 
-  defp validate_entry(%Schema{rules: []}, _data, _ctx), do: true
+  def valid_entry?(%Schema{rules: []}, _data, _ctx), do: true
 
-  defp validate_entry(%Schema{rules: rules, source_id: nil}, data, ctx) do
+  def valid_entry?(%Schema{rules: rules, source_id: nil}, data, ctx) do
     run_rules(rules, data, ctx)
   end
 
-  defp validate_entry(%Schema{rules: rules} = schema, data, %Schema{} = root_schema)
+  def valid_entry?(%Schema{rules: rules} = schema, data, %Schema{} = root_schema)
        when schema === root_schema do
     run_rules(rules, data, root_schema)
   end
 
-  defp validate_entry(%Schema{rules: rules} = schema, data, ctx) do
+  def valid_entry?(%Schema{rules: rules} = schema, data, ctx) do
     child_ctx = Reference.context_for_child(schema, ensure_context(ctx))
     run_rules(rules, data, child_ctx)
   end
 
   defp ensure_context(%ValidationContext{} = ctx), do: ctx
 
-  defp ensure_context(%Schema{source_id: id} = root_schema) do
-    initial_stack = if id != nil, do: [id], else: []
-
-    %ValidationContext{
-      root_schema: root_schema,
-      scope_stack: initial_stack,
-      source_id: id,
-      raw: root_schema.raw,
-      local_refs: root_schema.local_refs
-    }
-  end
+  defp ensure_context(%Schema{} = root_schema), do: ValidationContext.from_root_schema(root_schema)
 
   defp run_rules([], _data, _ctx), do: true
 
@@ -269,7 +261,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
     do: check_one_of(schemas, data, 0, ctx)
 
   defp check_rule(:not, compiled_sub, data, ctx),
-    do: not validate_entry(compiled_sub, data, ctx)
+    do: not valid_entry?(compiled_sub, data, ctx)
 
   defp check_rule(
          :if,
@@ -277,10 +269,10 @@ defmodule JSONSchex.Validator.ShortCircuit do
          data,
          ctx
        ) do
-    if validate_entry(compiled_if, data, ctx) do
-      if compiled_then != nil, do: validate_entry(compiled_then, data, ctx), else: true
+    if valid_entry?(compiled_if, data, ctx) do
+      if compiled_then != nil, do: valid_entry?(compiled_then, data, ctx), else: true
     else
-      if compiled_else != nil, do: validate_entry(compiled_else, data, ctx), else: true
+      if compiled_else != nil, do: valid_entry?(compiled_else, data, ctx), else: true
     end
   end
 
@@ -296,7 +288,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
     case Reference.resolve_compiled_ref(resolved_uri, validation_ctx) do
       {:ok, target_schema, target_ctx} ->
-        validate_entry(target_schema, data, target_ctx)
+        valid_entry?(target_schema, data, target_ctx)
 
       nil ->
         match?(
@@ -375,7 +367,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_properties([{key, sub_schema} | rest], data, ctx) do
     case data do
       %{^key => val} ->
-        if validate_entry(sub_schema, val, ctx), do: check_properties(rest, data, ctx), else: false
+        if valid_entry?(sub_schema, val, ctx), do: check_properties(rest, data, ctx), else: false
 
       _ ->
         check_properties(rest, data, ctx)
@@ -396,7 +388,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   defp check_pattern_entries([{key, val} | rest], regex, sub_schema, ctx) do
     if Pattern.match?(regex, key, [key]) do
-      if validate_entry(sub_schema, val, ctx) do
+      if valid_entry?(sub_schema, val, ctx) do
         check_pattern_entries(rest, regex, sub_schema, ctx)
       else
         false
@@ -416,7 +408,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
       patterns != [] and Enum.any?(patterns, &Pattern.match?(&1, key, [key])) ->
         check_additional_properties(rest, sub, known, patterns, ctx)
 
-      validate_entry(sub, val, ctx) ->
+      valid_entry?(sub, val, ctx) ->
         check_additional_properties(rest, sub, known, patterns, ctx)
 
       true ->
@@ -427,7 +419,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_property_names([], _sub, _ctx), do: true
 
   defp check_property_names([key | rest], sub, ctx) do
-    if validate_entry(sub, key, ctx), do: check_property_names(rest, sub, ctx), else: false
+    if valid_entry?(sub, key, ctx), do: check_property_names(rest, sub, ctx), else: false
   end
 
   defp check_dependent_required([], _data), do: true
@@ -446,7 +438,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   defp check_dependent_schemas([{prop, sub_schema} | rest], data, ctx) do
     if :maps.is_key(prop, data) do
-      if validate_entry(sub_schema, data, ctx),
+      if valid_entry?(sub_schema, data, ctx),
         do: check_dependent_schemas(rest, data, ctx),
         else: false
     else
@@ -458,7 +450,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_prefix_items(_schemas, [], _ctx), do: true
 
   defp check_prefix_items([schema | rest_schemas], [item | rest_data], ctx) do
-    if validate_entry(schema, item, ctx),
+    if valid_entry?(schema, item, ctx),
       do: check_prefix_items(rest_schemas, rest_data, ctx),
       else: false
   end
@@ -472,7 +464,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_tuple_items(_schemas, [], _additional, _ctx), do: true
 
   defp check_tuple_items([schema | rest_schemas], [item | rest_data], additional, ctx) do
-    if validate_entry(schema, item, ctx),
+    if valid_entry?(schema, item, ctx),
       do: check_tuple_items(rest_schemas, rest_data, additional, ctx),
       else: false
   end
@@ -480,7 +472,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_items_list([], _sub_schema, _ctx), do: true
 
   defp check_items_list([item | rest], sub_schema, ctx) do
-    if validate_entry(sub_schema, item, ctx),
+    if valid_entry?(sub_schema, item, ctx),
       do: check_items_list(rest, sub_schema, ctx),
       else: false
   end
@@ -495,26 +487,26 @@ defmodule JSONSchex.Validator.ShortCircuit do
     do: count >= min and (max == nil or count <= max)
 
   defp check_contains([item | rest], sub, min, max, count, ctx) do
-    next_count = if validate_entry(sub, item, ctx), do: count + 1, else: count
+    next_count = if valid_entry?(sub, item, ctx), do: count + 1, else: count
     check_contains(rest, sub, min, max, next_count, ctx)
   end
 
   defp check_all_of([], _data, _ctx), do: true
 
   defp check_all_of([schema | rest], data, ctx) do
-    if validate_entry(schema, data, ctx), do: check_all_of(rest, data, ctx), else: false
+    if valid_entry?(schema, data, ctx), do: check_all_of(rest, data, ctx), else: false
   end
 
   defp check_any_of([], _data, _ctx), do: false
 
   defp check_any_of([schema | rest], data, ctx) do
-    if validate_entry(schema, data, ctx), do: true, else: check_any_of(rest, data, ctx)
+    if valid_entry?(schema, data, ctx), do: true, else: check_any_of(rest, data, ctx)
   end
 
   defp check_one_of([], _data, count, _ctx), do: count == 1
 
   defp check_one_of([schema | rest], data, count, ctx) do
-    if validate_entry(schema, data, ctx) do
+    if valid_entry?(schema, data, ctx) do
       if count == 1, do: false, else: check_one_of(rest, data, 1, ctx)
     else
       check_one_of(rest, data, count, ctx)

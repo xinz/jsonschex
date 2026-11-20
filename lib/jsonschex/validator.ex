@@ -46,16 +46,8 @@ defmodule JSONSchex.Validator do
       true
   """
   @spec validate(Schema.t(), term()) :: :ok | {:error, list(Error.t())}
-  def validate(%Schema{source_id: id, needs_evaluated_annotations: needs_eval} = root_schema, data) do
-    initial_stack = if id != nil, do: [id], else: []
-
-    ctx = %ValidationContext{
-      root_schema: root_schema,
-      scope_stack: initial_stack,
-      source_id: id,
-      raw: root_schema.raw,
-      local_refs: root_schema.local_refs
-    }
+  def validate(%Schema{needs_evaluated_annotations: needs_eval} = root_schema, data) do
+    ctx = ValidationContext.from_root_schema(root_schema)
 
     initial_evaluated = if needs_eval, do: @empty_mapset, else: nil
 
