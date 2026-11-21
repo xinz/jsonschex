@@ -24,7 +24,9 @@ true = MyApp.Signup.validate_age?(18)
 false = MyApp.Signup.valid_email?("not-an-email")
 ```
 
-Use the predicate for a yes/no decision. It runs specialized checks for supported rules, such as `type` and `minimum`; rules outside the static subset, such as `$ref` or `unevaluatedProperties`, use the embedded validator. When you need diagnostics, call `validate_age/1` directly: it returns `:ok` if the predicate succeeds and otherwise calls `JSONSchex.validate/2` to collect the errors. There is no need to call the predicate first.
+Use the predicate for a yes/no decision. Like `JSONSchex.valid?/2`, it can stop at the first matching `anyOf` branch when annotations are not needed. A regex engine error in a visited branch makes the predicate return `false`; skipped branches are not checked. Rules outside the static subset, such as `$ref` or `unevaluatedProperties`, use the embedded validator.
+
+When you need diagnostics, call the function without `?` directly. For a schema such as `validate_age/1` above, a successful predicate is enough to return `:ok`; failures go to `JSONSchex.validate/2` for details. If the schema can run the regex engine for a `pattern` or contains an interpreted fallback, the generated diagnostic function uses `JSONSchex.validate/2` directly. This preserves errors such as `:indeterminate_pattern` even in a later `anyOf` branch, without validating the same input twice.
 
 ## Set options when the schema is compiled
 

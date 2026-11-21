@@ -86,6 +86,7 @@ defmodule JSONSchex.MixProject do
           JSONSchex.Formats.URITemplate
         ],
         Internal: [
+          JSONSchex.PredefinedPattern,
           JSONSchex.Vocabulary,
           JSONSchex.ScopeScanner,
           JSONSchex.URIUtil

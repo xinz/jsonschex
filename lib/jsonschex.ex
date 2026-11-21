@@ -185,7 +185,9 @@ defmodule JSONSchex do
   This fail-fast entry point short-circuits on the first mismatch (and on the first
   matching branch in `anyOf` when no `unevaluatedProperties`/`unevaluatedItems`
   annotations are required), avoiding error struct allocation when detailed
-  diagnostics are not needed.
+  diagnostics are not needed. A regex engine error encountered during evaluation
+  returns `false`; branches skipped after the result is known are not checked
+  for such errors. Use `validate/2` when you need full diagnostics.
 
   ## Examples
 

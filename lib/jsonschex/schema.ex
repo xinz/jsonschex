@@ -92,11 +92,12 @@ defmodule JSONSchex.Schema do
 
   When `name` does not end with `?` (e.g., `:validate_user`), this macro defines:
 
-  - `validate_user?(data) :: boolean()` — specialized BEAM-compiled predicate with zero
-    interpreter dispatch and zero error allocation
-  - `validate_user(data) :: :ok | {:error, [JSONSchex.Types.Error.t()]}` — returns `:ok`
-    immediately on the zero-allocation fast path, and falls back to `JSONSchex.validate/2`
-    on failure to produce full structured diagnostics
+  - `validate_user?(data) :: boolean()` — a specialized, short-circuiting predicate
+    with the same branch-skipping behavior as `JSONSchex.valid?/2`.
+  - `validate_user(data) :: :ok | {:error, [JSONSchex.Types.Error.t()]}` — returns
+    the same diagnostics as `JSONSchex.validate/2`, including regex engine errors.
+    For fully specialized checks that cannot signal a regex engine error, a
+    successful predicate returns `:ok` without running detailed validation.
 
   When `name` ends with `?` (e.g., `:valid_user?`), only the boolean predicate
   `valid_user?/1` is generated.
@@ -172,11 +173,11 @@ defmodule JSONSchex.Schema do
 
     escaped_compiled = escape_embeddable!(compiled, caller)
 
-    {body_ast, helper_defs, needs_catch?} = StaticCompiler.compile(name, compiled)
+    {body_ast, helper_defs, may_abort_on_pattern?} = StaticCompiler.compile(name, compiled)
     data_var = Macro.var(:data, StaticCompiler)
 
     predicate_body =
-      if needs_catch? do
+      if may_abort_on_pattern? do
         quote do
           try do
             unquote(body_ast)
@@ -201,6 +202,16 @@ defmodule JSONSchex.Schema do
       end
     else
       pred_name = String.to_atom(name_str <> "?")
+      detailed = quote do: JSONSchex.validate(unquote(escaped_compiled), data)
+
+      # A boolean success does not rule out a regex error in a skipped branch.
+      # Choose the diagnostic path at compile time; never run a loader twice here.
+      diagnostic_body =
+        if may_abort_on_pattern? do
+          detailed
+        else
+          quote do: if(unquote(pred_name)(data), do: :ok, else: unquote(detailed))
+        end
 
       quote do
         @spec unquote(pred_name)(term()) :: boolean()
@@ -209,13 +220,7 @@ defmodule JSONSchex.Schema do
         end
 
         @spec unquote(name)(term()) :: :ok | {:error, list(JSONSchex.Types.Error.t())}
-        def unquote(name)(data) do
-          if unquote(pred_name)(data) do
-            :ok
-          else
-            JSONSchex.validate(unquote(escaped_compiled), data)
-          end
-        end
+        def unquote(name)(data), do: unquote(diagnostic_body)
 
         unquote_splicing(helper_defs)
       end

@@ -7,6 +7,7 @@ defmodule JSONSchex.Compiler.Predicates do
   abort validation rather than returning an invertible schema mismatch.
   """
 
+  alias JSONSchex.PredefinedPattern
   alias JSONSchex.Types.ErrorContext
   alias JSONSchex.Validator.Pattern
 
@@ -250,8 +251,9 @@ defmodule JSONSchex.Compiler.Predicates do
   def check_pattern(_, _, _), do: :ok
 
   @doc false
+  @spec check_pattern(term(), Regex.t(), PredefinedPattern.matcher(), list()) :: :ok | {:error, ErrorContext.t()}
   def check_pattern(data, regex, matcher, _path) when is_binary(data) do
-    if Pattern.match_fast?(matcher, data) do
+    if PredefinedPattern.match?(matcher, data) do
       :ok
     else
       {:error, %ErrorContext{contrast: regex, input: data}}

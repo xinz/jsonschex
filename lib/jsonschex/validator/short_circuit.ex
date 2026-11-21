@@ -11,6 +11,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   alias JSONSchex.Compiler.Predicates
   alias JSONSchex.Compiler.Predicates.MultipleOf
   alias JSONSchex.Formats
+  alias JSONSchex.PredefinedPattern
   alias JSONSchex.Types.{Error, Rule, Schema, ValidationContext}
   alias JSONSchex.Validator
   alias JSONSchex.Validator.{Keywords, Pattern, Reference}
@@ -100,7 +101,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   defp check_rule(:pattern, %{matcher: matcher}, data, _ctx)
        when is_binary(data),
-       do: Pattern.match_fast?(matcher, data)
+       do: PredefinedPattern.match?(matcher, data)
 
   defp check_rule(:pattern, %{regex: regex}, data, _ctx)
        when is_binary(data),

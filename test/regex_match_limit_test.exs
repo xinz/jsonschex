@@ -15,6 +15,31 @@ defmodule JSONSchex.Test.RegexMatchLimitTest do
     [:additionalProperties, :patternProperties]
   ]
 
+  require JSONSchex.Schema
+
+  @label_schema JSONSchex.Schema.compile!(%{
+                  "properties" => %{
+                    "label" => %{"anyOf" => [%{"type" => "string"}, %{"pattern" => @pattern}]}
+                  }
+                })
+  JSONSchex.Schema.defvalidator :validate_label, @label_schema
+
+  @contains_schema JSONSchex.Schema.compile!(%{"contains" => %{"pattern" => @pattern}})
+  JSONSchex.Schema.defvalidator :validate_list, @contains_schema
+
+  test "generated diagnostics preserve engine errors in branches a predicate can skip" do
+    for {schema, data, predicate, validate, path} <- [
+          {@label_schema, %{"label" => @long}, &validate_label?/1, &validate_label/1, ["label"]},
+          {@contains_schema, [@short, @long], &validate_list?/1, &validate_list/1, [1]}
+        ] do
+      assert JSONSchex.valid?(schema, data)
+      assert predicate.(data)
+      expected = assert_indeterminate(schema, data, path)
+      assert {:error, [%Error{} = actual]} = validate.(data)
+      assert comparable_pattern_error(actual) == comparable_pattern_error(expected)
+    end
+  end
+
   test "the advisory fixture exhausts the engine rather than returning a genuine nonmatch" do
     regex = Regex.compile!(@pattern)
     options = [:report_errors, {:capture, :none}]
@@ -338,6 +363,12 @@ defmodule JSONSchex.Test.RegexMatchLimitTest do
   defp compile_schema(raw, draft) do
     assert {:ok, %Schema{} = schema} = JSONSchex.compile(raw, draft: draft)
     schema
+  end
+
+  # Embedding a regex can produce a new opaque engine handle for the same pattern.
+  defp comparable_pattern_error(error) do
+    %Regex{source: source, opts: opts} = error.context.contrast
+    put_in(error.context.contrast, {source, opts})
   end
 
   defp assert_indeterminate(schema, data, path) do

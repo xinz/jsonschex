@@ -21,12 +21,12 @@ defmodule JSONSchex.StaticCompiler do
       prefix: prefix,
       counter: 0,
       helpers: [],
-      needs_catch?: false,
+      may_abort_on_pattern?: false,
       context: ValidationContext.from_root_schema(schema),
       context_helper: nil
     }
     {expr, final_state} = compile_schema(schema, var, state)
-    {expr, Enum.reverse(final_state.helpers), final_state.needs_catch?}
+    {expr, Enum.reverse(final_state.helpers), final_state.may_abort_on_pattern?}
   end
 
   # --- Schema Node Compilation ---
@@ -325,7 +325,7 @@ defmodule JSONSchex.StaticCompiler do
   defp compile_rule(%Rule{name: :pattern, params: %{matcher: matcher}}, type, _schema, var, state) do
     check =
       quote do
-        JSONSchex.Validator.Pattern.match_fast?(unquote(Macro.escape(matcher)), unquote(var))
+        JSONSchex.PredefinedPattern.match?(unquote(Macro.escape(matcher)), unquote(var))
       end
 
     ast =
@@ -343,7 +343,7 @@ defmodule JSONSchex.StaticCompiler do
     ast =
       if type == "string", do: check, else: quote(do: not is_binary(unquote(var)) or unquote(check))
 
-    {ast, %{state | needs_catch?: true}}
+    {ast, %{state | may_abort_on_pattern?: true}}
   end
 
   defp compile_rule(%Rule{name: :format, params: format}, type, _schema, var, state) do
@@ -475,7 +475,7 @@ defmodule JSONSchex.StaticCompiler do
   end
 
   defp compile_rule(
-         %Rule{name: :additionalProperties, params: %{always_valid?: true}},
+         %Rule{name: :additionalProperties, params: %{always_valid?: true, patterns: []}},
          _type,
          _schema,
          _var,
@@ -566,7 +566,7 @@ defmodule JSONSchex.StaticCompiler do
   end
 
   defp compile_rule(%Rule{name: :oneOf, params: schemas}, _type, _schema, var, state) do
-    {branch_asts, state} =
+    {reversed_branches, state} =
       Enum.reduce(schemas, {[], state}, fn sub, {acc, acc_state} ->
         {sub_ast, acc_state} = compile_schema(sub, var, acc_state)
         {[sub_ast | acc], acc_state}
@@ -574,22 +574,15 @@ defmodule JSONSchex.StaticCompiler do
 
     {count_var, state} = next_var("one_of_count", state)
 
-    # Fold branches with early exit as soon as 2 branches match
+    # Build from the last branch backwards so execution follows schema order.
+    # Embed the continuation only once; a second match skips it altogether.
     ast =
-      branch_asts
-      |> Enum.reverse()
-      |> Enum.reduce(quote(do: unquote(count_var) == 1), fn branch_ast, next_ast ->
+      Enum.reduce(reversed_branches, quote(do: unquote(count_var) == 1), fn branch_ast, rest ->
         quote do
-          if unquote(branch_ast) do
-            if unquote(count_var) == 1 do
-              false
-            else
-              unquote(count_var) = 1
-              unquote(next_ast)
-            end
-          else
-            unquote(next_ast)
-          end
+          unquote(count_var) =
+            if unquote(branch_ast), do: unquote(count_var) + 1, else: unquote(count_var)
+
+          unquote(count_var) < 2 and unquote(rest)
         end
       end)
 
@@ -651,7 +644,8 @@ defmodule JSONSchex.StaticCompiler do
         ShortCircuit.valid_entry?(unquote(Macro.escape(schema)), unquote(var), unquote(context_helper)())
       end
 
-    {ast, %{state | needs_catch?: true}}
+    # An interpreted rule (including a runtime reference target) can run PCRE.
+    {ast, %{state | may_abort_on_pattern?: true}}
   end
 
   # Embed the scope once, not once per fallback expression. Fully specialized

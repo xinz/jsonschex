@@ -54,6 +54,16 @@ defmodule JSONSchex.Test.StaticValidatorTest do
       ]
     }
 
+    # A local loader makes it observable whether oneOf visits its last branch.
+    def load_last(uri) do
+      send(self(), {:loaded_branch, uri})
+      {:ok, %{"type" => "string"}}
+    end
+
+    JSONSchex.Schema.defvalidator :match_one?,
+      %{"oneOf" => [%{"type" => "integer"}, %{"const" => 1}, %{"$ref" => "https://example.test/last"}]},
+      loader: &__MODULE__.load_last/1
+
     # Hybrid fallback: uses $ref and unevaluatedProperties
     JSONSchex.Schema.defvalidator :validate_hybrid_ref, %{
       "$defs" => %{
@@ -168,6 +178,27 @@ defmodule JSONSchex.Test.StaticValidatorTest do
     refute SampleValidators.validate_combinators?(%{"a" => 1})
     # banned: true fails `not`
     refute SampleValidators.validate_combinators?(%{"a" => 1, "tier" => 1, "banned" => true})
+  end
+
+  test "oneOf visits branches in order and stops after the second match" do
+    refute SampleValidators.match_one?(1)
+    refute_received {:loaded_branch, _}
+    assert SampleValidators.match_one?(2)
+    assert_received {:loaded_branch, "https://example.test/last"}
+    assert SampleValidators.match_one?("last")
+    refute SampleValidators.match_one?(nil)
+  end
+
+  test "doubling oneOf branches grows generated code at most linearly" do
+    size = fn width ->
+      branches = Enum.map(1..width, &%{"const" => &1})
+      {:ok, schema} = JSONSchex.compile(%{"oneOf" => branches})
+      {body, helpers, _} = JSONSchex.StaticCompiler.compile(:choice?, schema)
+      {_, nodes} = Macro.prewalk([body | helpers], 0, fn node, n -> {node, n + 1} end)
+      nodes
+    end
+
+    assert size.(8) <= 2 * size.(4)
   end
 
   test "hybrid fallback preserves $ref and unevaluatedProperties semantics" do

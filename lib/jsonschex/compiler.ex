@@ -20,6 +20,7 @@ defmodule JSONSchex.Compiler do
 
   """
   alias JSONSchex.Types.{Schema, Rule, Error, ErrorContext}
+  alias JSONSchex.PredefinedPattern
   alias JSONSchex.ScopeScanner
   alias JSONSchex.ResourceContext
   alias JSONSchex.Draft202012.{Vocabulary, Dialect}
@@ -874,7 +875,7 @@ defmodule JSONSchex.Compiler do
     case JSONSchex.Compiler.ECMARegex.compile(p) do
       {:ok, regex} ->
         params =
-          case JSONSchex.Validator.Pattern.compile_fast(p) do
+          case PredefinedPattern.compile(p) do
             nil -> %{source: p, regex: regex}
             matcher -> %{source: p, regex: regex, matcher: matcher}
           end
