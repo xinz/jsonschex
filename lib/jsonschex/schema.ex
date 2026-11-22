@@ -395,6 +395,31 @@ defmodule JSONSchex.Schema do
     end
   end
 
+  defp nonliteral_static_to_term({:{}, _, elems}, caller) when is_list(elems) do
+    with {:ok, values} <- reduce_static_terms(elems, caller) do
+      {:ok, values |> Enum.reverse() |> List.to_tuple()}
+    end
+  end
+
+  defp nonliteral_static_to_term({:-, _, [value]}, _caller) when is_number(value),
+    do: {:ok, -value}
+
+  defp nonliteral_static_to_term({:+, _, [value]}, _caller) when is_number(value),
+    do: {:ok, value}
+
+  defp nonliteral_static_to_term({{:., _, [:re, :import]}, _, [exported_ast]}, caller) do
+    if Code.ensure_loaded?(:re) and function_exported?(:re, :import, 1) do
+      with {:ok, exported} when is_tuple(exported) and elem(exported, 0) == :re_exported_pattern <-
+             quoted_static_to_term(exported_ast, caller) do
+        {:ok, apply(:re, :import, [exported])}
+      else
+        _ -> :error
+      end
+    else
+      :error
+    end
+  end
+
   defp nonliteral_static_to_term(ast, caller) when is_tuple(ast) do
     case remote_capture_to_term(ast, caller) do
       {:ok, _} = result ->

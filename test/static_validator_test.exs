@@ -115,6 +115,27 @@ defmodule JSONSchex.Test.StaticValidatorTest do
         },
         entry: "#/schema"
       )
+
+    defvalidator :validate_sigil_predefined_pattern,
+      ~X/%{"type" => "string", "pattern" => "^[a-z0-9_-]+$"}/
+
+    defvalidator :validate_sigil_regex_pattern,
+      ~X/%{"type" => "string", "pattern" => "^(foo|bar)$"}/
+
+    defvalidator :validate_sigil_pattern_props,
+      ~X/%{"type" => "object", "patternProperties" => %{"^x-" => %{"type" => "integer"}}}/
+
+    defvalidator :validate_compiled_pattern,
+      JSONSchex.Schema.compile!(%{"type" => "string", "pattern" => "^(yes|no)$"})
+
+    defvalidator :validate_fragment_pattern,
+      JSONSchex.Schema.compile_fragment!(
+        %{"schema" => %{"type" => "string", "pattern" => "^(on|off)$"}},
+        entry: "#/schema"
+      )
+
+    defvalidator :validate_signed_bounds,
+      %{"type" => "number", "minimum" => -5, "maximum" => -1.5}
   end
 
   test "validate_user/1 and validate_user?/1 handle valid, optional, UTF-8, format, and error diagnostics" do
@@ -232,6 +253,34 @@ defmodule JSONSchex.Test.StaticValidatorTest do
     assert SigilAndUseValidators.validate_fragment_name?("Ada")
     assert :ok == SigilAndUseValidators.validate_fragment_name("Ada")
     assert {:error, [%{rule: :minLength}]} = SigilAndUseValidators.validate_fragment_name("A")
+  end
+
+  test "defvalidator accepts direct ~X, compile!/2, and compile_fragment!/2 with regex patterns and signed numbers" do
+    assert SigilAndUseValidators.validate_sigil_predefined_pattern?("slug_1-a")
+    assert :ok == SigilAndUseValidators.validate_sigil_predefined_pattern("slug_1-a")
+    assert {:error, [%{rule: :pattern}]} = SigilAndUseValidators.validate_sigil_predefined_pattern("BAD!")
+
+    assert SigilAndUseValidators.validate_sigil_regex_pattern?("foo")
+    assert :ok == SigilAndUseValidators.validate_sigil_regex_pattern("bar")
+    assert {:error, [%{rule: :pattern}]} = SigilAndUseValidators.validate_sigil_regex_pattern("baz")
+
+    assert SigilAndUseValidators.validate_sigil_pattern_props?(%{"x-id" => 1})
+    assert :ok == SigilAndUseValidators.validate_sigil_pattern_props(%{"x-id" => 1})
+    assert {:error, [%{rule: :type, path: ["x-id"]}]} =
+             SigilAndUseValidators.validate_sigil_pattern_props(%{"x-id" => "bad"})
+
+    assert SigilAndUseValidators.validate_compiled_pattern?("yes")
+    assert :ok == SigilAndUseValidators.validate_compiled_pattern("no")
+    assert {:error, [%{rule: :pattern}]} = SigilAndUseValidators.validate_compiled_pattern("maybe")
+
+    assert SigilAndUseValidators.validate_fragment_pattern?("on")
+    assert :ok == SigilAndUseValidators.validate_fragment_pattern("off")
+    assert {:error, [%{rule: :pattern}]} = SigilAndUseValidators.validate_fragment_pattern("idle")
+
+    assert SigilAndUseValidators.validate_signed_bounds?(-3)
+    assert :ok == SigilAndUseValidators.validate_signed_bounds(-1.5)
+    refute SigilAndUseValidators.validate_signed_bounds?(-6)
+    refute SigilAndUseValidators.validate_signed_bounds?(-1)
   end
 
   test "defvalidator rejects options when passed an already-compiled ~X schema" do
