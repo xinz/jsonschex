@@ -452,7 +452,6 @@ defmodule JSONSchex.Validator.ShortCircuit do
   end
 
   defp check_tuple_items([], [], _additional, _ctx), do: true
-  defp check_tuple_items([], _rest_data, nil, _ctx), do: true
 
   defp check_tuple_items([], rest_data, additional, ctx),
     do: check_items_list(rest_data, additional, ctx)

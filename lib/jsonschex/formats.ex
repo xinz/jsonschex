@@ -233,8 +233,6 @@ defmodule JSONSchex.Formats do
     end
   end
 
-  defp parse_duration_time(_, _, _), do: false
-
   defp consume_digits(<<d, rest::binary>>) when is_ascii_digit?(d), do: {:ok, skip_digits(rest)}
   defp consume_digits(_), do: :error
 

@@ -31,11 +31,6 @@ defmodule JSONSchex.Guards do
   defguard is_ascii_hex?(c) when c in ?0..?9 or c in ?a..?f or c in ?A..?F
 
   @doc """
-  Returns `true` if `c` is an ASCII letter (`a`..`z`, `A`..`Z`).
-  """
-  defguard is_ascii_alpha?(c) when c in ?a..?z or c in ?A..?Z
-
-  @doc """
   Returns `true` if `c` is an ASCII ECMA-262 word character (`a`..`z`, `A`..`Z`, `0`..`9`, `_`).
   """
   defguard is_ascii_word?(c) when c in ?a..?z or c in ?A..?Z or c in ?0..?9 or c == ?_
