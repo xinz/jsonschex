@@ -351,6 +351,66 @@ defmodule JSONSchex.Test.StaticValidatorTest do
             "else" => false
           }
 
+          defvalidator :not_if_pattern_both_false, %{
+            "not" => %{
+              "if" => %{"pattern" => "^(?:(a+)+b|a+!)$"},
+              "then" => false,
+              "else" => false
+            }
+          }
+
+          defvalidator :any_of_if_pattern_both_false, %{
+            "anyOf" => [
+              %{
+                "if" => %{"pattern" => "^(?:(a+)+b|a+!)$"},
+                "then" => false,
+                "else" => false
+              },
+              true
+            ]
+          }
+
+          defvalidator :all_of_if_pattern_noop, %{
+            "allOf" => [
+              %{"if" => %{"pattern" => "^(?:(a+)+b|a+!)$"}},
+              %{"type" => "string"}
+            ]
+          }
+
+          defvalidator :one_of_if_pattern_both_false, %{
+            "oneOf" => [
+              %{
+                "if" => %{"pattern" => "^(?:(a+)+b|a+!)$"},
+                "then" => false,
+                "else" => false
+              },
+              %{"type" => "string"}
+            ]
+          }
+
+          defvalidator :items_if_pattern_both_false, %{
+            "type" => "array",
+            "items" => %{
+              "if" => %{"pattern" => "^(?:(a+)+b|a+!)$"},
+              "then" => false,
+              "else" => false
+            }
+          }
+
+          defvalidator :items_if_pattern_noop, %{
+            "type" => "array",
+            "minItems" => 1,
+            "items" => %{"if" => %{"pattern" => "^(?:(a+)+b|a+!)$"}}
+          }
+
+          defvalidator :props_if_pattern_noop, %{
+            "type" => "object",
+            "properties" => %{
+              "a" => %{"if" => %{"pattern" => "^(?:(a+)+b|a+!)$"}},
+              "b" => %{"type" => "integer"}
+            }
+          }
+
           defvalidator :if_dynamic, %{
             "if" => %{"type" => "integer"},
             "then" => %{"minimum" => 10},
@@ -426,6 +486,41 @@ defmodule JSONSchex.Test.StaticValidatorTest do
     assert {:error, [%{rule: :boolean_schema}]} = mod.if_pattern_both_false("aaa!")
     refute mod.if_pattern_both_false?(long)
     assert {:error, [%{rule: :indeterminate_pattern}]} = mod.if_pattern_both_false(long)
+
+    assert mod.not_if_pattern_both_false?("aaa!")
+    assert :ok == mod.not_if_pattern_both_false("aaa!")
+    refute mod.not_if_pattern_both_false?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.not_if_pattern_both_false(long)
+
+    assert mod.any_of_if_pattern_both_false?("aaa!")
+    assert :ok == mod.any_of_if_pattern_both_false("aaa!")
+    refute mod.any_of_if_pattern_both_false?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.any_of_if_pattern_both_false(long)
+
+    assert mod.all_of_if_pattern_noop?("aaa!")
+    refute mod.all_of_if_pattern_noop?(123)
+    refute mod.all_of_if_pattern_noop?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.all_of_if_pattern_noop(long)
+
+    assert mod.one_of_if_pattern_both_false?("aaa!")
+    refute mod.one_of_if_pattern_both_false?(123)
+    refute mod.one_of_if_pattern_both_false?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.one_of_if_pattern_both_false(long)
+
+    assert mod.items_if_pattern_both_false?([])
+    refute mod.items_if_pattern_both_false?(["aaa!"])
+    refute mod.items_if_pattern_both_false?([long])
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.items_if_pattern_both_false([long])
+
+    assert mod.items_if_pattern_noop?(["aaa!"])
+    refute mod.items_if_pattern_noop?([])
+    refute mod.items_if_pattern_noop?([long])
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.items_if_pattern_noop([long])
+
+    assert mod.props_if_pattern_noop?(%{"a" => "aaa!", "b" => 1})
+    refute mod.props_if_pattern_noop?(%{"a" => "aaa!", "b" => "bad"})
+    refute mod.props_if_pattern_noop?(%{"a" => long, "b" => 1})
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.props_if_pattern_noop(%{"a" => long, "b" => 1})
 
     assert mod.if_dynamic?(10)
     refute mod.if_dynamic?(5)

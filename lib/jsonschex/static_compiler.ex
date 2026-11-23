@@ -114,10 +114,12 @@ defmodule JSONSchex.StaticCompiler do
             {prop_var, acc_state} = next_var("v", acc_state)
             {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
 
-            if sub_ast === true do
-              {[{key, quote(do: _)} | pairs], checks, acc_state}
-            else
-              {[{key, prop_var} | pairs], [sub_ast | checks], acc_state}
+            case split_const_bool(sub_ast) do
+              {:ok, [], true} ->
+                {[{key, quote(do: _)} | pairs], checks, acc_state}
+
+              _ ->
+                {[{key, prop_var} | pairs], [sub_ast | checks], acc_state}
             end
 
           :error ->
@@ -133,18 +135,33 @@ defmodule JSONSchex.StaticCompiler do
         {prop_var, acc_state} = next_var("opt", acc_state)
         {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
 
-        if sub_ast === true do
-          {checks, acc_state}
-        else
-          check_ast =
-            quote do
-              case unquote(var) do
-                %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
-                _ -> true
-              end
-            end
+        case split_const_bool(sub_ast) do
+          {:ok, [], true} ->
+            {checks, acc_state}
 
-          {[check_ast | checks], acc_state}
+          {:ok, stmts, true} ->
+            check_ast =
+              quote do
+                case unquote(var) do
+                  %{unquote(key) => unquote(prop_var)} -> unquote(prepend_stmts(stmts, :ok))
+                  _ -> :ok
+                end
+
+                true
+              end
+
+            {[check_ast | checks], acc_state}
+
+          _ ->
+            check_ast =
+              quote do
+                case unquote(var) do
+                  %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
+                  _ -> true
+                end
+              end
+
+            {[check_ast | checks], acc_state}
         end
       end)
 
@@ -160,17 +177,31 @@ defmodule JSONSchex.StaticCompiler do
       |> combine_and()
 
     ast =
-      if all_checks === false do
-        false
-      else
-        map_pattern = {:%{}, [], Enum.reverse(map_pairs)}
+      case split_const_bool(all_checks) do
+        {:ok, [], false} ->
+          false
 
-        quote do
-          case unquote(var) do
-            unquote(map_pattern) -> unquote(all_checks)
-            _ -> false
+        {:ok, stmts, false} ->
+          map_pattern = {:%{}, [], Enum.reverse(map_pairs)}
+
+          quote do
+            case unquote(var) do
+              unquote(map_pattern) -> unquote(prepend_stmts(stmts, :ok))
+              _ -> :ok
+            end
+
+            false
           end
-        end
+
+        _ ->
+          map_pattern = {:%{}, [], Enum.reverse(map_pairs)}
+
+          quote do
+            case unquote(var) do
+              unquote(map_pattern) -> unquote(all_checks)
+              _ -> false
+            end
+          end
       end
 
     {ast, state}
@@ -464,28 +495,55 @@ defmodule JSONSchex.StaticCompiler do
         {prop_var, acc_state} = next_var("prop", acc_state)
         {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
 
-        if sub_ast === true do
-          {acc, acc_state}
-        else
-          check =
-            quote do
-              case unquote(var) do
-                %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
-                _ -> true
-              end
-            end
+        case split_const_bool(sub_ast) do
+          {:ok, [], true} ->
+            {acc, acc_state}
 
-          {[check | acc], acc_state}
+          {:ok, stmts, true} ->
+            check =
+              quote do
+                case unquote(var) do
+                  %{unquote(key) => unquote(prop_var)} -> unquote(prepend_stmts(stmts, :ok))
+                  _ -> :ok
+                end
+
+                true
+              end
+
+            {[check | acc], acc_state}
+
+          _ ->
+            check =
+              quote do
+                case unquote(var) do
+                  %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
+                  _ -> true
+                end
+              end
+
+            {[check | acc], acc_state}
         end
       end)
 
     combined = checks |> Enum.reverse() |> combine_and()
 
     ast =
-      cond do
-        combined === true -> true
-        type == "object" -> combined
-        true -> quote(do: not is_map(unquote(var)) or unquote(combined))
+      case split_const_bool(combined) do
+        {:ok, [], true} ->
+          true
+
+        {:ok, stmts, true} ->
+          if type == "object" do
+            combined
+          else
+            quote do
+              if is_map(unquote(var)), do: unquote(prepend_stmts(stmts, :ok))
+              true
+            end
+          end
+
+        _ ->
+          if type == "object", do: combined, else: quote(do: not is_map(unquote(var)) or unquote(combined))
       end
 
     {ast, state}
@@ -540,16 +598,59 @@ defmodule JSONSchex.StaticCompiler do
     item_var = Macro.var(:item, __MODULE__)
     {item_ast, state} = compile_schema(sub_schema, item_var, state)
 
-    case item_ast do
-      true ->
+    case split_const_bool(item_ast) do
+      {:ok, [], true} ->
         {true, state}
 
-      false ->
+      {:ok, [], false} ->
         check = quote(do: unquote(var) == [])
         ast = if type == "array", do: check, else: quote(do: not is_list(unquote(var)) or unquote(check))
         {ast, state}
 
-      _ ->
+      {:ok, stmts, false} ->
+        check =
+          quote do
+            case unquote(var) do
+              [] -> true
+              [unquote(item_var) | _] -> unquote(prepend_stmts(stmts, false))
+            end
+          end
+
+        ast = if type == "array", do: check, else: quote(do: not is_list(unquote(var)) or unquote(check))
+        {ast, state}
+
+      {:ok, stmts, true} ->
+        {helper_name, state} = next_helper_name("items", state)
+        rest_var = Macro.var(:rest, __MODULE__)
+
+        helper_def =
+          quote do
+            defp unquote(helper_name)([]), do: :ok
+
+            defp unquote(helper_name)([unquote(item_var) | unquote(rest_var)]) do
+              unquote(prepend_stmts(stmts, quote(do: unquote(helper_name)(unquote(rest_var)))))
+            end
+          end
+
+        state = %{state | helpers: [helper_def | state.helpers]}
+        call = quote(do: unquote(helper_name)(unquote(var)))
+
+        ast =
+          if type == "array" do
+            quote do
+              unquote(call)
+              true
+            end
+          else
+            quote do
+              if is_list(unquote(var)), do: unquote(call)
+              true
+            end
+          end
+
+        {ast, state}
+
+      :dynamic ->
         {helper_name, state} = next_helper_name("items", state)
         rest_var = Macro.var(:rest, __MODULE__)
 
@@ -609,11 +710,26 @@ defmodule JSONSchex.StaticCompiler do
     # Embed the continuation only once; a second match skips it altogether.
     ast =
       Enum.reduce(reversed_branches, quote(do: unquote(count_var) == 1), fn branch_ast, rest ->
-        quote do
-          unquote(count_var) =
-            if unquote(branch_ast), do: unquote(count_var) + 1, else: unquote(count_var)
+        case split_const_bool(branch_ast) do
+          {:ok, stmts, true} ->
+            step =
+              quote do
+                unquote(count_var) = unquote(count_var) + 1
+                unquote(count_var) < 2 and unquote(rest)
+              end
 
-          unquote(count_var) < 2 and unquote(rest)
+            prepend_stmts(stmts, step)
+
+          {:ok, stmts, false} ->
+            prepend_stmts(stmts, rest)
+
+          :dynamic ->
+            quote do
+              unquote(count_var) =
+                if unquote(branch_ast), do: unquote(count_var) + 1, else: unquote(count_var)
+
+              unquote(count_var) < 2 and unquote(rest)
+            end
         end
       end)
 
@@ -630,10 +746,9 @@ defmodule JSONSchex.StaticCompiler do
     {sub_ast, state} = compile_schema(sub_schema, var, state)
 
     ast =
-      case sub_ast do
-        true -> false
-        false -> true
-        _ -> quote(do: not unquote(sub_ast))
+      case split_const_bool(sub_ast) do
+        {:ok, stmts, bool} -> prepend_stmts(stmts, not bool)
+        :dynamic -> quote(do: not unquote(sub_ast))
       end
 
     {ast, state}
@@ -658,27 +773,33 @@ defmodule JSONSchex.StaticCompiler do
       if compiled_else != nil, do: compile_schema(compiled_else, var, state), else: {true, state}
 
     ast =
-      cond do
-        if_ast === true ->
-          then_ast
+      case {split_const_bool(if_ast), split_const_bool(then_ast), split_const_bool(else_ast)} do
+        {{:ok, stmts, true}, _, _} ->
+          prepend_stmts(stmts, then_ast)
 
-        if_ast === false ->
-          else_ast
+        {{:ok, stmts, false}, _, _} ->
+          prepend_stmts(stmts, else_ast)
 
-        then_ast === true and else_ast === true ->
+        {:dynamic, {:ok, [], bool}, {:ok, [], bool}} ->
           if if_may_abort? do
-            quote do
-              _ = unquote(if_ast)
-              true
-            end
+            prepend_stmts([quote(do: _ = unquote(if_ast))], bool)
           else
-            true
+            bool
           end
 
-        then_ast === false and else_ast === false ->
-          false
+        {:dynamic, {:ok, then_stmts, bool}, {:ok, else_stmts, bool}} ->
+          branch_stmt =
+            quote do
+              if unquote(if_ast) do
+                unquote(prepend_stmts(then_stmts, :ok))
+              else
+                unquote(prepend_stmts(else_stmts, :ok))
+              end
+            end
 
-        true ->
+          prepend_stmts([branch_stmt], bool)
+
+        _ ->
           quote do
             if unquote(if_ast) do
               unquote(then_ast)
@@ -741,28 +862,63 @@ defmodule JSONSchex.StaticCompiler do
   defp combine_and([]), do: true
   defp combine_and([single]), do: single
 
-  defp combine_and(exprs) do
-    filtered = Enum.reject(exprs, &(&1 === true))
+  defp combine_and([head | tail]) do
+    case split_const_bool(head) do
+      {:ok, stmts, true} ->
+        prepend_stmts(stmts, combine_and(tail))
 
-    case filtered do
-      [] -> true
-      [single] -> single
-      list -> Enum.reduce(Enum.reverse(list), fn expr, acc -> quote(do: unquote(expr) and unquote(acc)) end)
+      {:ok, stmts, false} ->
+        prepend_stmts(stmts, false)
+
+      :dynamic ->
+        case combine_and(tail) do
+          true -> head
+          rest -> quote(do: unquote(head) and unquote(rest))
+        end
     end
   end
 
   defp combine_or([]), do: false
   defp combine_or([single]), do: single
 
-  defp combine_or(exprs) do
-    filtered = Enum.reject(exprs, &(&1 === false))
+  defp combine_or([head | tail]) do
+    case split_const_bool(head) do
+      {:ok, stmts, false} ->
+        prepend_stmts(stmts, combine_or(tail))
 
-    case filtered do
-      [] -> false
-      [single] -> single
-      list -> Enum.reduce(Enum.reverse(list), fn expr, acc -> quote(do: unquote(expr) or unquote(acc)) end)
+      {:ok, stmts, true} ->
+        prepend_stmts(stmts, true)
+
+      :dynamic ->
+        case combine_or(tail) do
+          false -> head
+          rest -> quote(do: unquote(head) or unquote(rest))
+        end
     end
   end
+
+  defp prepend_stmts([], expr), do: expr
+
+  defp prepend_stmts(stmts, {:__block__, meta, tail_stmts}) do
+    {:__block__, meta, stmts ++ tail_stmts}
+  end
+
+  defp prepend_stmts(stmts, expr) do
+    {:__block__, [], stmts ++ [expr]}
+  end
+
+  # Extracts `{prefix_statements, constant_boolean}` from a literal boolean or a
+  # block ending in a literal boolean (such as an abort-preserving `if` fold).
+  defp split_const_bool(bool) when is_boolean(bool), do: {:ok, [], bool}
+
+  defp split_const_bool({:__block__, _, [_ | _] = stmts}) do
+    case List.pop_at(stmts, -1) do
+      {bool, prefix} when is_boolean(bool) -> {:ok, prefix, bool}
+      _ -> :dynamic
+    end
+  end
+
+  defp split_const_bool(_), do: :dynamic
 
   defp next_var(base, %{counter: n} = state) do
     next = n + 1
