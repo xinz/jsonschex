@@ -1336,7 +1336,7 @@ defmodule JSONSchex.Validator.Keywords do
     do: {:error, List.flatten(errs)}
 
   defp reduce_property_names([{key, _} | rest], compiled_sub, path, root, errs) do
-    case Validator.validate_entry(compiled_sub, key, [key | path], root) do
+    case Validator.validate_entry(compiled_sub, key, [key | path], root, nil) do
       {:ok, _} ->
         reduce_property_names(rest, compiled_sub, path, root, errs)
 
@@ -1529,7 +1529,7 @@ defmodule JSONSchex.Validator.Keywords do
 
     with {:ok, decoded} <- decode_content(data, normalized_encoding),
          {:ok, content_value} <- parse_content(decoded, normalized_media_type) do
-      case Validator.validate_entry(compiled_sub, content_value, path, root, @empty_mapset) do
+      case Validator.validate_entry(compiled_sub, content_value, path, root, nil) do
         {:error, errs} -> {:error, errs}
         {:ok, _} -> :ok
       end

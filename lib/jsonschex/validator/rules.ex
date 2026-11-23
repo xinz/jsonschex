@@ -177,6 +177,15 @@ defmodule JSONSchex.Validator.Rules do
 
   def apply_rule(
         :additionalProperties,
+        %{patterns: [], always_valid?: true},
+        _data,
+        {_path, nil, _root}
+      ) do
+    :ok
+  end
+
+  def apply_rule(
+        :additionalProperties,
         %{known_props: known_props, patterns: patterns, always_valid?: true},
         data,
         {path, _evaluated, _root}
@@ -257,6 +266,15 @@ defmodule JSONSchex.Validator.Rules do
 
   def apply_rule(:prefixItems, compiled_schemas, data, {path, _evaluated, root}) do
     Keywords.validate_prefix_items(data, compiled_schemas, path, root)
+  end
+
+  def apply_rule(
+        :items,
+        %{draft: "draft7", schemas: schemas, additional: additional},
+        data,
+        {path, nil, root}
+      ) do
+    AnnotationFree.validate_tuple_items(data, schemas, additional, path, root)
   end
 
   def apply_rule(

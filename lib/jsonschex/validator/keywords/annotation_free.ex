@@ -81,6 +81,20 @@ defmodule JSONSchex.Validator.Keywords.AnnotationFree do
     end
   end
 
+  def validate_tuple_items(data, schemas, additional, path, root) when is_list(data) do
+    prefix_result = validate_prefix_items(data, schemas, path, root)
+    additional_result = validate_items_array(data, additional, length(schemas), path, root)
+
+    case {prefix_result, additional_result} do
+      {:ok, :ok} -> :ok
+      {{:error, errs}, :ok} -> {:error, errs}
+      {:ok, {:error, errs}} -> {:error, errs}
+      {{:error, prefix_errs}, {:error, additional_errs}} -> {:error, prefix_errs ++ additional_errs}
+    end
+  end
+
+  def validate_tuple_items(_, _, _, _, _), do: :ok
+
   def validate_all_of(data, schemas, path, root) do
     reduce_all_of(schemas, data, path, root, [])
   end

@@ -81,5 +81,45 @@ defmodule JSONSchex.Validator.ShortCircuitTest do
     assert JSONSchex.valid?(contains_schema, [1, 2, "a"])
     assert JSONSchex.valid?(contains_schema, [1, 2, 3])
     refute JSONSchex.valid?(contains_schema, [1, 2, 3, 4])
+
+    {:ok, min_zero_contains} =
+      JSONSchex.compile(%{"type" => "array", "contains" => %{"type" => "integer"}, "minContains" => 0})
+
+    assert JSONSchex.valid?(min_zero_contains, [])
+    assert JSONSchex.valid?(min_zero_contains, ["a", "b"])
+  end
+
+  test "annotation-free delegation preserves nested unevaluatedProperties and Draft 7 tuple items" do
+    {:ok, content_schema} =
+      JSONSchex.compile(
+        %{
+          "type" => "string",
+          "contentMediaType" => "application/json",
+          "contentSchema" => %{
+            "properties" => %{"a" => %{"type" => "integer"}},
+            "unevaluatedProperties" => false
+          }
+        },
+        content_assertion: true
+      )
+
+    assert :ok == JSONSchex.validate(content_schema, ~s({"a": 1}))
+    assert JSONSchex.valid?(content_schema, ~s({"a": 1}))
+    assert {:error, [%{rule: :unevaluatedProperties, path: ["b"]}]} =
+             JSONSchex.validate(content_schema, ~s({"a": 1, "b": 2}))
+    refute JSONSchex.valid?(content_schema, ~s({"a": 1, "b": 2}))
+
+    {:ok, draft7_tuple} =
+      JSONSchex.compile(
+        %{
+          "items" => [%{"type" => "integer"}, %{"type" => "string"}],
+          "additionalItems" => %{"type" => "boolean"}
+        },
+        draft: "draft7"
+      )
+
+    assert :ok == JSONSchex.validate(draft7_tuple, [1, "ok", true])
+    assert {:error, errors} = JSONSchex.validate(draft7_tuple, ["bad", "ok", 123])
+    assert Enum.map(errors, &{&1.path, &1.rule}) == [{[0], :type}, {[2], :type}]
   end
 end

@@ -538,6 +538,9 @@ defmodule JSONSchex.Test.StaticValidatorTest do
           {~S|@opts [loader: fn _ -> {:ok, true} end]
           defvalidator :bad, %{"type" => "string"}, @opts|,
            "JSONSchex.Schema.defvalidator/3 could not embed the compiled schema"},
+          {~S|@opts [loader: fn _ -> {:ok, true} end]
+          defvalidator :bad?, %{"$ref" => "https://example.org/x"}, @opts|,
+           "JSONSchex.Schema.defvalidator/3 could not embed the compiled schema"},
           {~S|@s JSONSchex.Schema.compile_fragment!(runtime_doc(), entry: "#/a")|,
            "JSONSchex.Schema.compile_fragment!/2 expects document to be fully known at compile time"},
           {~S|@s JSONSchex.Schema.compile_fragment!(%{"a" => true}, runtime_opts())|,

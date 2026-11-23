@@ -16,8 +16,6 @@ defmodule JSONSchex.Validator.ShortCircuit do
   alias JSONSchex.Validator
   alias JSONSchex.Validator.{Keywords, Pattern, Reference}
 
-  @empty_mapset MapSet.new()
-
   @spec valid?(Schema.t(), term()) :: boolean()
   def valid?(%Schema{} = root_schema, data) do
     valid_entry?(root_schema, data, root_schema)
@@ -242,10 +240,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
          ctx
        )
        when is_list(data) do
-    cond do
-      min == 0 and max == nil -> true
-      true -> check_contains(data, compiled_sub, min, max, 0, ctx)
-    end
+    check_contains(data, compiled_sub, min, max, 0, ctx)
   end
 
   defp check_rule(:contains, _params, _data, _ctx), do: true
@@ -294,14 +289,14 @@ defmodule JSONSchex.Validator.ShortCircuit do
       nil ->
         match?(
           {:ok, _},
-          Reference.validate_ref(data, ref_string, resolved_uri, {[], @empty_mapset, validation_ctx})
+          Reference.validate_ref(data, ref_string, resolved_uri, {[], nil, validation_ctx})
         )
     end
   end
 
   defp check_rule(:dynamicRef, ref, data, ctx) do
     validation_ctx = ensure_context(ctx)
-    match?({:ok, _}, Reference.validate_dynamic_ref(data, ref, {[], @empty_mapset, validation_ctx}))
+    match?({:ok, _}, Reference.validate_dynamic_ref(data, ref, {[], nil, validation_ctx}))
   end
 
   defp check_rule(
@@ -319,7 +314,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
            encoding,
            [],
            validation_ctx,
-           @empty_mapset
+           nil
          ) do
       :ok -> true
       {:ok, _} -> true

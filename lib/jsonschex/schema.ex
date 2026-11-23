@@ -173,9 +173,18 @@ defmodule JSONSchex.Schema do
           compile_schema_value!(raw, opts, caller, source)
       end
 
-    escaped_compiled = escape_embeddable!(compiled, caller, source)
+    {body_ast, helper_defs, may_abort_on_pattern?} =
+      try do
+        StaticCompiler.compile(name, compiled)
+      rescue
+        error in ArgumentError ->
+          raise_compile_error!(
+            caller,
+            "#{source} could not embed the compiled schema: #{Exception.message(error)}. " <>
+              "Use only compile-time embeddable values such as literals and remote captures like &Mod.fun/1."
+          )
+      end
 
-    {body_ast, helper_defs, may_abort_on_pattern?} = StaticCompiler.compile(name, compiled)
     data_var = Macro.var(:data, StaticCompiler)
 
     predicate_body =
@@ -203,6 +212,7 @@ defmodule JSONSchex.Schema do
         unquote_splicing(helper_defs)
       end
     else
+      escaped_compiled = escape_embeddable!(compiled, caller, source)
       pred_name = String.to_atom(name_str <> "?")
       detailed = quote do: JSONSchex.validate(unquote(escaped_compiled), data)
 
