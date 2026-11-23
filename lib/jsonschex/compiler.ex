@@ -876,8 +876,8 @@ defmodule JSONSchex.Compiler do
       {:ok, regex} ->
         params =
           case PredefinedPattern.compile(p) do
-            nil -> %{source: p, regex: regex}
-            matcher -> %{source: p, regex: regex, matcher: matcher}
+            nil -> %{regex: regex}
+            matcher -> %{regex: regex, matcher: matcher}
           end
 
         {:ok, %Rule{name: :pattern, params: params}}

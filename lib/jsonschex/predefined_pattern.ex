@@ -153,7 +153,7 @@ defmodule JSONSchex.PredefinedPattern do
   end
 
   defp compile_anchored_start(rest) do
-    case parse_ascii_literal(rest, [], true) do
+    case parse_ascii_literal(rest, []) do
       {:ok, literal, :end_anchor} -> {:exact, literal}
       {:ok, literal, :eof} when literal != "" -> {:prefix, literal}
       _ -> nil
@@ -161,7 +161,7 @@ defmodule JSONSchex.PredefinedPattern do
   end
 
   defp compile_unanchored_start(source) do
-    case parse_ascii_literal(source, [], true) do
+    case parse_ascii_literal(source, []) do
       {:ok, literal, :end_anchor} when literal != "" -> {:suffix, literal}
       {:ok, literal, :eof} when literal != "" -> {:contains, literal}
       _ -> nil
@@ -210,26 +210,26 @@ defmodule JSONSchex.PredefinedPattern do
 
   # Parses plain ASCII literal characters (and safe escaped punctuation) until
   # optional trailing `$` or end of string. Bails out on any regex metacharacter.
-  defp parse_ascii_literal(<<>>, acc, _allow_dollar) do
+  defp parse_ascii_literal(<<>>, acc) do
     {:ok, acc |> Enum.reverse() |> IO.iodata_to_binary(), :eof}
   end
 
-  defp parse_ascii_literal("$", acc, true) do
+  defp parse_ascii_literal("$", acc) do
     {:ok, acc |> Enum.reverse() |> IO.iodata_to_binary(), :end_anchor}
   end
 
-  defp parse_ascii_literal(<<"\\", c, rest::binary>>, acc, allow_dollar)
+  defp parse_ascii_literal(<<"\\", c, rest::binary>>, acc)
        when c in [?., ?-, ?_, ?/, ?\\, ?:, ?+] do
-    parse_ascii_literal(rest, [c | acc], allow_dollar)
+    parse_ascii_literal(rest, [c | acc])
   end
 
-  defp parse_ascii_literal(<<c, rest::binary>>, acc, allow_dollar)
+  defp parse_ascii_literal(<<c, rest::binary>>, acc)
        when is_ascii_printable?(c) and
               c not in [?^, ?$, ?\\, ?., ?*, ?+, ??, ?(, ?), ?[, ?], ?{, ?}, ?|] do
-    parse_ascii_literal(rest, [c | acc], allow_dollar)
+    parse_ascii_literal(rest, [c | acc])
   end
 
-  defp parse_ascii_literal(_, _, _), do: :error
+  defp parse_ascii_literal(_, _), do: :error
 
   # Parses an ASCII bracketed character class body until `]`.
   # Supports single ASCII chars, `a-z` ranges, safe escapes, `\d`, and `\w`.
