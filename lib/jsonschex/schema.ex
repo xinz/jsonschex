@@ -141,8 +141,8 @@ defmodule JSONSchex.Schema do
         )
       end
     else
-      opts = static_term!(opts_ast, caller, "options")
-      schema = static_term!(schema_ast, caller, "schema")
+      opts = static_term!(opts_ast, caller, "options", "JSONSchex.Schema.defvalidator/3")
+      schema = static_term!(schema_ast, caller, "schema", "JSONSchex.Schema.defvalidator/3")
       build_defvalidator_quoted!(name, schema, opts, caller)
     end
   end
@@ -154,13 +154,15 @@ defmodule JSONSchex.Schema do
   end
 
   defp build_defvalidator_quoted!(name, schema, opts, caller) do
+    source = "JSONSchex.Schema.defvalidator/3"
+
     compiled =
       case schema do
         %Schema{} = already_compiled ->
           if opts != [] do
             raise_compile_error!(
               caller,
-              "JSONSchex.Schema.defvalidator/3 does not accept options when given an already-compiled schema; " <>
+              "#{source} does not accept options when given an already-compiled schema; " <>
                 "pass options to ~X or JSONSchex.Schema.compile!/2 instead"
             )
           end
@@ -168,10 +170,10 @@ defmodule JSONSchex.Schema do
           already_compiled
 
         raw ->
-          compile_schema_value!(raw, opts, caller)
+          compile_schema_value!(raw, opts, caller, source)
       end
 
-    escaped_compiled = escape_embeddable!(compiled, caller)
+    escaped_compiled = escape_embeddable!(compiled, caller, source)
 
     {body_ast, helper_defs, may_abort_on_pattern?} = StaticCompiler.compile(name, compiled)
     data_var = Macro.var(:data, StaticCompiler)
@@ -214,13 +216,13 @@ defmodule JSONSchex.Schema do
         end
 
       quote do
+        @spec unquote(name)(term()) :: :ok | {:error, list(JSONSchex.Types.Error.t())}
+        def unquote(name)(data), do: unquote(diagnostic_body)
+
         @spec unquote(pred_name)(term()) :: boolean()
         def unquote(pred_name)(unquote(data_var)) do
           unquote(predicate_body)
         end
-
-        @spec unquote(name)(term()) :: :ok | {:error, list(JSONSchex.Types.Error.t())}
-        def unquote(name)(data), do: unquote(diagnostic_body)
 
         unquote_splicing(helper_defs)
       end
@@ -245,7 +247,7 @@ defmodule JSONSchex.Schema do
 
   @doc false
   def embed!(schema, opts, file, line) do
-    compile_schema_value!(schema, opts, %{file: file, line: line})
+    compile_schema_value!(schema, opts, %{file: file, line: line}, "JSONSchex.Schema.compile!/2")
   end
 
   @doc false
@@ -270,27 +272,28 @@ defmodule JSONSchex.Schema do
   end
 
   defp compile_literal_ast!(schema_ast, opts_ast, caller) do
-    schema = static_term!(schema_ast, caller, "schema")
-    opts = static_term!(opts_ast, caller, "options")
+    source = "JSONSchex.Schema.compile!/2"
+    schema = static_term!(schema_ast, caller, "schema", source)
+    opts = static_term!(opts_ast, caller, "options", source)
 
     schema
-    |> compile_schema_value!(opts, caller)
-    |> escape_embeddable!(caller)
+    |> compile_schema_value!(opts, caller, source)
+    |> escape_embeddable!(caller, source)
   end
 
-  defp compile_schema_value!(schema, _opts, caller)
+  defp compile_schema_value!(schema, _opts, caller, source)
        when not (is_map(schema) or is_boolean(schema)) do
     raise_compile_error!(
       caller,
-      "JSONSchex.Schema.compile!/2 expects a compile-time map or boolean schema literal"
+      "#{source} expects a compile-time map or boolean schema literal"
     )
   end
 
-  defp compile_schema_value!(schema, opts, caller) do
+  defp compile_schema_value!(schema, opts, caller, source) do
     if not Keyword.keyword?(opts) do
       raise_compile_error!(
         caller,
-        "JSONSchex.Schema.compile!/2 expects options to be a compile-time keyword list"
+        "#{source} expects options to be a compile-time keyword list"
       )
     end
 
@@ -301,21 +304,22 @@ defmodule JSONSchex.Schema do
       {:error, %Error{} = error} ->
         raise_compile_error!(
           caller,
-          "JSONSchex.Schema.compile!/2 failed: #{JSONSchex.format_error(error)}"
+          "#{source} failed: #{JSONSchex.format_error(error)}"
         )
 
       {:error, error} ->
-        raise_compile_error!(caller, "JSONSchex.Schema.compile!/2 failed: #{inspect(error)}")
+        raise_compile_error!(caller, "#{source} failed: #{inspect(error)}")
     end
   end
 
   defp compile_fragment_literal_ast!(document_ast, opts_ast, caller) do
-    document = static_term!(document_ast, caller, "document")
-    opts = static_term!(opts_ast, caller, "options")
+    source = "JSONSchex.Schema.compile_fragment!/2"
+    document = static_term!(document_ast, caller, "document", source)
+    opts = static_term!(opts_ast, caller, "options", source)
 
     document
     |> compile_fragment_value!(opts, caller)
-    |> escape_embeddable!(caller)
+    |> escape_embeddable!(caller, source)
   end
 
   defp compile_fragment_value!(document, opts, caller) do
@@ -338,18 +342,18 @@ defmodule JSONSchex.Schema do
     end
   end
 
-  defp escape_embeddable!(compiled, caller) do
+  defp escape_embeddable!(compiled, caller, source) do
     Macro.escape(compiled)
   rescue
     error in ArgumentError ->
       raise_compile_error!(
         caller,
-        "JSONSchex.Schema.compile!/2 could not embed the compiled schema: #{Exception.message(error)}. " <>
+        "#{source} could not embed the compiled schema: #{Exception.message(error)}. " <>
           "Use only compile-time embeddable values such as literals and remote captures like &Mod.fun/1."
       )
   end
 
-  defp static_term!(ast, caller, label) do
+  defp static_term!(ast, caller, label, source) do
     case quoted_static_to_term(ast, caller) do
       {:ok, value} ->
         value
@@ -357,7 +361,7 @@ defmodule JSONSchex.Schema do
       :error ->
         raise_compile_error!(
           caller,
-          "JSONSchex.Schema.compile!/2 expects #{label} to be fully known at compile time"
+          "#{source} expects #{label} to be fully known at compile time"
         )
     end
   end

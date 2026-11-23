@@ -474,6 +474,79 @@ defmodule JSONSchex.Test.StaticValidatorTest do
     :code.delete(mod)
   end
 
+  test "defvalidator attaches @doc to the primary function rather than the generated predicate" do
+    mod = :"JSONSchex.Test.DefvalidatorDocs#{System.unique_integer([:positive])}"
+
+    [{^mod, bin}] =
+      Code.compile_string("""
+      defmodule #{inspect(mod)} do
+        use JSONSchex
+
+        @doc "Validates literal user"
+        defvalidator :validate_literal, %{"type" => "string"}
+
+        @attr_schema %{"type" => "integer"}
+        @doc "Validates attribute user"
+        defvalidator :validate_attr, @attr_schema
+
+        @doc "Checks flag predicate"
+        defvalidator :valid_flag?, %{"type" => "boolean"}
+      end
+      """)
+
+    {:ok, {_, [{~c"Docs", docs_bin}]}} = :beam_lib.chunks(bin, [~c"Docs"])
+    {:docs_v1, _, _, _, _, _, docs} = :erlang.binary_to_term(docs_bin)
+
+    docs_by_fn =
+      Map.new(docs, fn {{:function, name, arity}, _, _, doc, _} -> {{name, arity}, doc} end)
+
+    assert docs_by_fn[{:validate_literal, 1}] == %{"en" => "Validates literal user"}
+    assert docs_by_fn[{:validate_literal?, 1}] == :none
+    assert docs_by_fn[{:validate_attr, 1}] == %{"en" => "Validates attribute user"}
+    assert docs_by_fn[{:validate_attr?, 1}] == :none
+    assert docs_by_fn[{:valid_flag?, 1}] == %{"en" => "Checks flag predicate"}
+
+    :code.purge(mod)
+    :code.delete(mod)
+  end
+
+  test "defvalidator and compile_fragment!/2 report their own macro names in CompileError messages" do
+    for {body, expected} <- [
+          {~S|defvalidator :bad, runtime_var()|,
+           "JSONSchex.Schema.defvalidator/3 expects schema to be fully known at compile time"},
+          {~S|defvalidator :bad, %{"type" => "string"}, runtime_opts()|,
+           "JSONSchex.Schema.defvalidator/3 expects options to be fully known at compile time"},
+          {~S|defvalidator :bad, 123|,
+           "JSONSchex.Schema.defvalidator/3 expects a compile-time map or boolean schema literal"},
+          {~S|defvalidator :bad, %{"type" => "string"}, %{}|,
+           "JSONSchex.Schema.defvalidator/3 expects options to be a compile-time keyword list"},
+          {~S|defvalidator :bad, %{"type" => "wat"}|,
+           "JSONSchex.Schema.defvalidator/3 failed:"},
+          {~S|@opts [loader: fn _ -> {:ok, true} end]
+          defvalidator :bad, %{"type" => "string"}, @opts|,
+           "JSONSchex.Schema.defvalidator/3 could not embed the compiled schema"},
+          {~S|@s JSONSchex.Schema.compile_fragment!(runtime_doc(), entry: "#/a")|,
+           "JSONSchex.Schema.compile_fragment!/2 expects document to be fully known at compile time"},
+          {~S|@s JSONSchex.Schema.compile_fragment!(%{"a" => true}, runtime_opts())|,
+           "JSONSchex.Schema.compile_fragment!/2 expects options to be fully known at compile time"}
+        ] do
+      mod = :"JSONSchex.Test.MacroErrorName#{System.unique_integer([:positive])}"
+
+      error =
+        assert_raise CompileError, fn ->
+          Code.compile_string("""
+          defmodule #{inspect(mod)} do
+            use JSONSchex
+            require JSONSchex.Schema
+            #{body}
+          end
+          """)
+        end
+
+      assert error.description =~ expected
+    end
+  end
+
   test "defvalidator rejects options when passed an already-compiled ~X schema" do
     assert_raise CompileError, ~r/does not accept options when given an already-compiled schema/, fn ->
       Code.compile_string("""
