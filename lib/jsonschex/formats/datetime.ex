@@ -1,6 +1,6 @@
 defmodule JSONSchex.Formats.DateTime do
   @moduledoc """
-  Validates RFC 3339 `date-time` and `time` formats using pure binary pattern matching.
+  Validates RFC 3339 `date-time`, `date`, and `time` formats using pure binary pattern matching.
   """
 
   import JSONSchex.Guards, only: [is_ascii_digit?: 1]
@@ -31,6 +31,22 @@ defmodule JSONSchex.Formats.DateTime do
   end
 
   def valid?(_), do: false
+
+  @doc """
+  Validates an RFC 3339 `full-date` string (`YYYY-MM-DD`).
+  """
+  @spec valid_date?(term()) :: boolean()
+  def valid_date?(<<y1, y2, y3, y4, ?-, m1, m2, ?-, d1, d2>>)
+      when is_ascii_digit?(y1) and is_ascii_digit?(y2) and is_ascii_digit?(y3) and is_ascii_digit?(y4) and
+             is_ascii_digit?(m1) and is_ascii_digit?(m2) and
+             is_ascii_digit?(d1) and is_ascii_digit?(d2) do
+    year = (y1 - ?0) * 1000 + (y2 - ?0) * 100 + (y3 - ?0) * 10 + (y4 - ?0)
+    month = (m1 - ?0) * 10 + (m2 - ?0)
+    day = (d1 - ?0) * 10 + (d2 - ?0)
+    valid_date?(year, month, day)
+  end
+
+  def valid_date?(_), do: false
 
   @doc """
   Validates an RFC 3339 `full-time` string (`HH:MM:SS(.frac)?(Z|z|±HH:MM)`).
