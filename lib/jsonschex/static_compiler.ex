@@ -200,8 +200,8 @@ defmodule JSONSchex.StaticCompiler do
   # --- Individual Rule Compilation ---
 
   defp compile_rule(%Rule{name: :maxLength, params: max}, "string", true, _schema, var, state) do
-    # `minLength` in the same node already verified `String.valid?(var)`, so we
-    # can skip the redundant UTF-8 scan when `byte_size(var) <= max`.
+    # A sibling `minLength` rule in the same `and` chain validates UTF-8, so
+    # `maxLength` can accept `byte_size(var) <= max` without an extra scan.
     ast =
       quote do
         byte_size(unquote(var)) <= unquote(max) or
