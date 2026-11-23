@@ -474,37 +474,50 @@ defmodule JSONSchex.Test.StaticValidatorTest do
     :code.delete(mod)
   end
 
+  @doc false
+  def record_doc(env, :def, name, args, _guards, _body) do
+    doc =
+      case Module.get_attribute(env.module, :doc) do
+        {_line, text} -> text
+        other -> other
+      end
+
+    Module.put_attribute(env.module, :recorded_docs, {{name, length(args)}, doc})
+  end
+
+  def record_doc(_env, _kind, _name, _args, _guards, _body), do: :ok
+
   test "defvalidator attaches @doc to the primary function rather than the generated predicate" do
     mod = :"JSONSchex.Test.DefvalidatorDocs#{System.unique_integer([:positive])}"
 
-    [{^mod, bin}] =
-      Code.compile_string("""
-      defmodule #{inspect(mod)} do
-        use JSONSchex
+    Code.compile_string("""
+    defmodule #{inspect(mod)} do
+      use JSONSchex
 
-        @doc "Validates literal user"
-        defvalidator :validate_literal, %{"type" => "string"}
+      Module.register_attribute(__MODULE__, :recorded_docs, accumulate: true)
+      @on_definition {#{inspect(__MODULE__)}, :record_doc}
 
-        @attr_schema %{"type" => "integer"}
-        @doc "Validates attribute user"
-        defvalidator :validate_attr, @attr_schema
+      @doc "Validates literal user"
+      defvalidator :validate_literal, %{"type" => "string"}
 
-        @doc "Checks flag predicate"
-        defvalidator :valid_flag?, %{"type" => "boolean"}
-      end
-      """)
+      @attr_schema %{"type" => "integer"}
+      @doc "Validates attribute user"
+      defvalidator :validate_attr, @attr_schema
 
-    {:ok, {_, [{~c"Docs", docs_bin}]}} = :beam_lib.chunks(bin, [~c"Docs"])
-    {:docs_v1, _, _, _, _, _, docs} = :erlang.binary_to_term(docs_bin)
+      @doc "Checks flag predicate"
+      defvalidator :valid_flag?, %{"type" => "boolean"}
 
-    docs_by_fn =
-      Map.new(docs, fn {{:function, name, arity}, _, _, doc, _} -> {{name, arity}, doc} end)
+      def recorded_docs, do: Map.new(@recorded_docs)
+    end
+    """)
 
-    assert docs_by_fn[{:validate_literal, 1}] == %{"en" => "Validates literal user"}
-    assert docs_by_fn[{:validate_literal?, 1}] == :none
-    assert docs_by_fn[{:validate_attr, 1}] == %{"en" => "Validates attribute user"}
-    assert docs_by_fn[{:validate_attr?, 1}] == :none
-    assert docs_by_fn[{:valid_flag?, 1}] == %{"en" => "Checks flag predicate"}
+    docs_by_fn = mod.recorded_docs()
+
+    assert docs_by_fn[{:validate_literal, 1}] == "Validates literal user"
+    assert docs_by_fn[{:validate_literal?, 1}] == nil
+    assert docs_by_fn[{:validate_attr, 1}] == "Validates attribute user"
+    assert docs_by_fn[{:validate_attr?, 1}] == nil
+    assert docs_by_fn[{:valid_flag?, 1}] == "Checks flag predicate"
 
     :code.purge(mod)
     :code.delete(mod)
