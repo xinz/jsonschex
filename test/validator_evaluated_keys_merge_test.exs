@@ -237,10 +237,13 @@ defmodule JSONSchex.Test.ValidatorEvaluatedKeysMergeTest do
       |> Enum.map(fn {_trigger, %Schema{rules: [%Rule{name: name} | _]}} -> name end)
       |> Enum.reverse()
 
-    assert {:error, errors} =
-             validate_entry(schema, %{"first" => true, "second" => true, "third" => true})
+    data = %{"first" => true, "second" => true, "third" => true}
 
+    assert {:error, errors} = validate_entry(schema, data)
     assert Enum.map(errors, & &1.rule) == expected_rules
+
+    assert {:error, public_errors} = JSONSchex.validate(schema, data)
+    assert Enum.map(public_errors, & &1.rule) == expected_rules
   end
 
   test "anyOf retains its existing list-valued evaluated-key behavior on the direct-merge fallback" do

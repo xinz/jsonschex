@@ -13,7 +13,7 @@ defmodule JSONSchex.Validator.Rules do
   alias JSONSchex.Validator.Keywords.AnnotationFree
 
   @type validation_context :: {list(), MapSet.t() | nil, term()}
-  @type result :: :ok | {:ok, MapSet.t()} | {:error, list(Error.t()) | ErrorContext.t()}
+  @type result :: :ok | {:ok, MapSet.t() | nil} | {:error, list(Error.t()) | ErrorContext.t()}
 
   @doc """
   Applies a compiled rule to data in the given validation context.

@@ -151,7 +151,7 @@ defmodule JSONSchex.Validator.Keywords.AnnotationFree do
   defp reduce_dependent_schemas([], _data, _path, _root, []), do: :ok
 
   defp reduce_dependent_schemas([], _data, _path, _root, errs),
-    do: {:error, List.flatten(Enum.reverse(errs))}
+    do: {:error, List.flatten(errs)}
 
   defp reduce_dependent_schemas([{prop, schema} | rest], data, path, root, errs) do
     if Map.has_key?(data, prop) do

@@ -109,9 +109,9 @@ defmodule JSONSchex.Validator do
       iex> JSONSchex.Validator.validate_entry(schema, "hello", [], ctx)
       {:ok, MapSet.new()}
   """
-  @spec validate_entry(Schema.t(), term(), list(), ValidationContext.t(), term()) ::
-          {:ok, MapSet.t()} | {:error, validation_error_list()}
-  def validate_entry(schema, data, path, context, initial_evaluted \\ @empty_mapset)
+  @spec validate_entry(Schema.t(), term(), list(), ValidationContext.t(), MapSet.t() | nil) ::
+          {:ok, MapSet.t() | nil} | {:error, validation_error_list()}
+  def validate_entry(schema, data, path, context, initial_evaluated \\ @empty_mapset)
 
   def validate_entry(%Schema{needs_evaluated_annotations: true} = schema, data, path, context, nil) do
     case validate_entry(schema, data, path, context, @empty_mapset) do
