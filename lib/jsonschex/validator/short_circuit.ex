@@ -11,6 +11,7 @@ defmodule JSONSchex.Validator.ShortCircuit do
   alias JSONSchex.Compiler.Predicates
   alias JSONSchex.Compiler.Predicates.MultipleOf
   alias JSONSchex.Formats
+  alias JSONSchex.Guards
   alias JSONSchex.PredefinedPattern
   alias JSONSchex.Types.{Error, Rule, Schema, ValidationContext}
   alias JSONSchex.Validator
@@ -65,7 +66,15 @@ defmodule JSONSchex.Validator.ShortCircuit do
 
   defp check_rule(:boolean_schema, _params, _data, _ctx), do: false
 
-  defp check_rule(:type, type, data, _ctx), do: check_type?(data, type)
+  for type <- Guards.json_types() do
+    defp check_rule(:type, unquote(type), data, _ctx),
+      do: unquote(Guards.type_check_ast(type, Macro.var(:data, nil)))
+  end
+
+  defp check_rule(:type, types, data, _ctx) when is_list(types),
+    do: Predicates.valid_type?(data, types)
+
+  defp check_rule(:type, _type, _data, _ctx), do: false
 
   defp check_rule(:minimum, min, data, _ctx),
     do: not is_number(data) or data >= min
@@ -88,12 +97,12 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_rule(:multipleOf, _factor, _data, _ctx), do: true
 
   defp check_rule(:minLength, min, data, _ctx) when is_binary(data),
-    do: Predicates.check_min_length(data, min) == :ok
+    do: Predicates.valid_min_length?(data, min)
 
   defp check_rule(:minLength, _min, _data, _ctx), do: true
 
   defp check_rule(:maxLength, max, data, _ctx) when is_binary(data),
-    do: Predicates.check_max_length(data, max) == :ok
+    do: Predicates.valid_max_length?(data, max)
 
   defp check_rule(:maxLength, _max, _data, _ctx), do: true
 
@@ -122,8 +131,10 @@ defmodule JSONSchex.Validator.ShortCircuit do
   defp check_rule(:maxItems, max, data, _ctx),
     do: not is_list(data) or length(data) <= max
 
-  defp check_rule(:uniqueItems, unique, data, _ctx),
-    do: Predicates.check_unique_items(data, unique) == :ok
+  defp check_rule(:uniqueItems, true, data, _ctx),
+    do: Predicates.valid_unique_items?(data)
+
+  defp check_rule(:uniqueItems, _unique, _data, _ctx), do: true
 
   defp check_rule(:enum, values, data, _ctx),
     do: Enum.any?(values, &(&1 == data))
@@ -305,21 +316,14 @@ defmodule JSONSchex.Validator.ShortCircuit do
          data,
          ctx
        ) do
-    validation_ctx = ensure_context(ctx)
-
-    case Keywords.validate_content_schema(
-           data,
-           compiled_sub,
-           media_type,
-           encoding,
-           [],
-           validation_ctx,
-           nil
-         ) do
-      :ok -> true
-      {:ok, _} -> true
-      _ -> false
-    end
+    Keywords.validate_content_schema(
+      data,
+      compiled_sub,
+      media_type,
+      encoding,
+      [],
+      ensure_context(ctx)
+    ) == :ok
   end
 
   defp check_rule(
@@ -337,19 +341,6 @@ defmodule JSONSchex.Validator.ShortCircuit do
   end
 
   # --- Helper Loops ---
-
-  defp check_type?(data, "string"), do: is_binary(data)
-  defp check_type?(data, "integer") when is_integer(data), do: true
-  defp check_type?(data, "integer") when is_float(data), do: data == trunc(data)
-  defp check_type?(_data, "integer"), do: false
-  defp check_type?(data, "number"), do: is_number(data)
-  defp check_type?(data, "boolean"), do: is_boolean(data)
-  defp check_type?(data, "object"), do: is_map(data)
-  defp check_type?(data, "array"), do: is_list(data)
-  defp check_type?(nil, "null"), do: true
-  defp check_type?(_data, "null"), do: false
-  defp check_type?(data, types) when is_list(types), do: Enum.any?(types, &check_type?(data, &1))
-  defp check_type?(_data, _), do: false
 
   defp all_keys_present?([], _data), do: true
 

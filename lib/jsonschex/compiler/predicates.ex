@@ -7,6 +7,7 @@ defmodule JSONSchex.Compiler.Predicates do
   abort validation rather than returning an invertible schema mismatch.
   """
 
+  alias JSONSchex.Guards
   alias JSONSchex.PredefinedPattern
   alias JSONSchex.Types.ErrorContext
   alias JSONSchex.Validator.Pattern
@@ -20,49 +21,36 @@ defmodule JSONSchex.Compiler.Predicates do
   """
   @spec check_type(term(), String.t() | [String.t()]) :: :ok | {:error, ErrorContext.t()}
   # Keep literal heads: lower-allocation guards were not consistently faster.
-  def check_type(data, "string") when is_binary(data), do: :ok
-  def check_type(data, "integer") when is_integer(data), do: :ok
-  def check_type(data, "integer") when is_float(data) do
-    if data == trunc(data), do: :ok, else: {:error, %ErrorContext{contrast: "integer", input: "float"}}
+  for type <- Guards.json_types() do
+    def check_type(data, unquote(type))
+        when unquote(Guards.type_check_ast(type, Macro.var(:data, nil))),
+        do: :ok
   end
-  def check_type(data, "boolean") when is_boolean(data), do: :ok
-  def check_type(data, "object") when is_map(data), do: :ok
-  def check_type(data, "array") when is_list(data), do: :ok
-  def check_type(data, "null") when is_nil(data), do: :ok
-  def check_type(data, "number") when is_number(data), do: :ok
+
+  def check_type(data, "integer") when is_float(data),
+    do: {:error, %ErrorContext{contrast: "integer", input: "float"}}
+
   def check_type(data, types) when is_list(types) do
-    if Enum.any?(types, fn type -> check_type(data, type) == :ok end) do
+    if valid_type?(data, types) do
       :ok
     else
       {:error, %ErrorContext{contrast: types, input: infer_type(data)}}
     end
   end
+
   def check_type(data, expected) do
-    actual = infer_type(data)
-    {:error, %ErrorContext{contrast: expected, input: actual}}
+    {:error, %ErrorContext{contrast: expected, input: infer_type(data)}}
   end
 
-  @doc "Checks `maximum`."
-  def check_maximum(data, max) when is_number(data) and data <= max, do: :ok
-  def check_maximum(data, max) when is_number(data), do: {:error, %ErrorContext{contrast: max, input: data}}
-  def check_maximum(_, _), do: :ok
-
-  @doc "Checks `minimum`."
-  @spec check_minimum(number(), number()) :: :ok | {:error, map()}
-  def check_minimum(data, min) when is_number(data) and data < min do
-    {:error, %ErrorContext{contrast: min, input: data}}
+  @doc false
+  @spec valid_type?(term(), String.t() | [String.t()]) :: boolean()
+  for type <- Guards.json_types() do
+    def valid_type?(data, unquote(type)),
+      do: unquote(Guards.type_check_ast(type, Macro.var(:data, nil)))
   end
-  def check_minimum(_, _), do: :ok
 
-  @doc "Checks `exclusiveMaximum`."
-  def check_exclusive_maximum(data, limit) when is_number(data) and data < limit, do: :ok
-  def check_exclusive_maximum(data, limit) when is_number(data), do: {:error, %ErrorContext{contrast: limit, input: data}}
-  def check_exclusive_maximum(_, _), do: :ok
-
-  @doc "Checks `exclusiveMinimum`."
-  def check_exclusive_minimum(data, limit) when is_number(data) and data > limit, do: :ok
-  def check_exclusive_minimum(data, limit) when is_number(data), do: {:error, %ErrorContext{contrast: limit, input: data}}
-  def check_exclusive_minimum(_, _), do: :ok
+  def valid_type?(data, types) when is_list(types), do: Enum.any?(types, &valid_type?(data, &1))
+  def valid_type?(_data, _), do: false
 
   @doc "Checks `multipleOf`."
   def check_multiple_of(data, 0), do: {:error, %ErrorContext{contrast: "invalid_factor", input: data}}
@@ -76,12 +64,6 @@ defmodule JSONSchex.Compiler.Predicates do
   end
   def check_multiple_of(_, _), do: :ok
 
-  @doc "Checks `const`."
-  @spec check_const(term(), term()) :: :ok | {:error, map()}
-  def check_const(data, const) do
-    if data == const, do: :ok, else: {:error, %ErrorContext{contrast: const, input: data}}
-  end
-
   @doc "Checks `minLength`, returning an error for malformed UTF-8."
   def check_min_length(data, min) when is_binary(data) do
     case codepoint_length(data) do
@@ -90,6 +72,16 @@ defmodule JSONSchex.Compiler.Predicates do
     end
   end
   def check_min_length(_, _), do: :ok
+
+  @doc false
+  @spec valid_min_length?(term(), non_neg_integer()) :: boolean()
+  def valid_min_length?(data, min) when is_binary(data) do
+    case codepoint_length(data) do
+      :error -> false
+      len -> len >= min
+    end
+  end
+  def valid_min_length?(_, _), do: true
 
   @doc "Checks `maxLength`, returning an error for malformed UTF-8."
   def check_max_length(data, max) when is_binary(data) do
@@ -100,41 +92,21 @@ defmodule JSONSchex.Compiler.Predicates do
   end
   def check_max_length(_, _), do: :ok
 
-  @doc "Checks `minProperties`."
-  def check_min_properties(data, min) when is_map(data) do
-    size = map_size(data)
-    if size >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: size}}
+  @doc false
+  @spec valid_max_length?(term(), non_neg_integer()) :: boolean()
+  def valid_max_length?(data, max) when is_binary(data) do
+    case codepoint_length(data) do
+      :error -> false
+      len -> len <= max
+    end
   end
-  def check_min_properties(_, _), do: :ok
-
-  @doc "Checks `maxProperties`."
-  def check_max_properties(data, max) when is_map(data) do
-    size = map_size(data)
-    if size <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: size}}
-  end
-  def check_max_properties(_, _), do: :ok
-
-  @doc "Checks `minItems`."
-  def check_min_items(data, min) when is_list(data) do
-    len = length(data)
-    if len >= min, do: :ok, else: {:error, %ErrorContext{contrast: min, input: len}}
-  end
-  def check_min_items(_, _), do: :ok
-
-  @doc "Checks `maxItems`."
-  def check_max_items(data, max) when is_list(data) do
-    len = length(data)
-    if len <= max, do: :ok, else: {:error, %ErrorContext{contrast: max, input: len}}
-  end
-  def check_max_items(_, _), do: :ok
+  def valid_max_length?(_, _), do: true
 
   @doc """
   Checks `uniqueItems`. Uses `==` semantics (`1` equals `1.0`).
   """
-  def check_unique_items([], true), do: :ok
-  def check_unique_items([_], true), do: :ok
   def check_unique_items(data, true) when is_list(data) do
-    if unique_items?(data, %{}) do
+    if valid_unique_items?(data) do
       :ok
     else
       {:error, %ErrorContext{contrast: true, input: data}}
@@ -142,6 +114,13 @@ defmodule JSONSchex.Compiler.Predicates do
   end
   # If uniqueItems is false (or data not list), validation passes
   def check_unique_items(_, _), do: :ok
+
+  @doc false
+  @spec valid_unique_items?(term()) :: boolean()
+  def valid_unique_items?([]), do: true
+  def valid_unique_items?([_]), do: true
+  def valid_unique_items?(data) when is_list(data), do: unique_items?(data, %{})
+  def valid_unique_items?(_), do: true
 
   defp unique_items?([], _buckets), do: true
   defp unique_items?([item | rest], buckets) do
@@ -227,20 +206,8 @@ defmodule JSONSchex.Compiler.Predicates do
   end
   defp infer_type(_), do: "unknown"
 
-  @doc "Checks `enum`."
-  @spec check_enum(term(), list()) :: :ok | {:error, map()}
-  def check_enum(data, values) do
-    if Enum.any?(values, fn v -> v == data end) do
-      :ok
-    else
-      {:error, %ErrorContext{contrast: values, input: data}}
-    end
-  end
-
   @doc "Checks `pattern`."
   @spec check_pattern(term(), Regex.t(), list()) :: :ok | {:error, map()}
-  def check_pattern(data, regex, path \\ [])
-
   def check_pattern(data, regex, path) when is_binary(data) do
     if Pattern.match?(regex, data, path) do
       :ok
@@ -251,13 +218,13 @@ defmodule JSONSchex.Compiler.Predicates do
   def check_pattern(_, _, _), do: :ok
 
   @doc false
-  @spec check_pattern(term(), Regex.t(), PredefinedPattern.matcher(), list()) :: :ok | {:error, ErrorContext.t()}
-  def check_pattern(data, regex, matcher, _path) when is_binary(data) do
+  @spec check_predefined_pattern(term(), Regex.t(), PredefinedPattern.matcher()) :: :ok | {:error, ErrorContext.t()}
+  def check_predefined_pattern(data, regex, matcher) when is_binary(data) do
     if PredefinedPattern.match?(matcher, data) do
       :ok
     else
       {:error, %ErrorContext{contrast: regex, input: data}}
     end
   end
-  def check_pattern(_, _, _, _), do: :ok
+  def check_predefined_pattern(_, _, _), do: :ok
 end

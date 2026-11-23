@@ -12,32 +12,61 @@ defmodule JSONSchex.Validator.Keywords do
 
   @empty_mapset MapSet.new()
 
-  @doc """
-  Validates an object's properties against a map of compiled schemas.
-  Returns evaluated property keys on success.
-  """
-  def validate_properties_map(data, compiled_props, path, root) when is_map(data) do
-    reduce_props(compiled_props, data, path, root, [], [])
+  # When `evaluated` is `nil`, no `unevaluatedProperties`/`unevaluatedItems`
+  # applies at the current location, so reducers skip `eval_keys` list consing
+  # and `MapSet.new/1` while still collecting all validation errors.
+  @compile {:inline,
+            initial_eval_acc: 1,
+            record_eval: 2,
+            finalize_eval_result: 2,
+            sub_evaluated: 1,
+            record_sub_eval: 2}
+
+  defp initial_eval_acc(nil), do: nil
+  defp initial_eval_acc(_), do: []
+
+  defp record_eval(nil, _item), do: nil
+  defp record_eval(acc, item), do: [item | acc]
+
+  defp finalize_eval_result([], nil), do: :ok
+  defp finalize_eval_result([], []), do: :ok
+  defp finalize_eval_result([], eval_keys), do: {:ok, MapSet.new(eval_keys)}
+  defp finalize_eval_result(errs, _eval_keys), do: {:error, List.flatten(errs)}
+
+  defp sub_evaluated(nil), do: nil
+  defp sub_evaluated(_), do: @empty_mapset
+
+  defp record_sub_eval(nil, _new_keys), do: nil
+
+  defp record_sub_eval(acc, new_keys) do
+    if MapSet.size(new_keys) == 0, do: acc, else: [MapSet.to_list(new_keys) | acc]
   end
 
-  def validate_properties_map(_, _, _, _), do: :ok
+  @doc """
+  Validates an object's properties against a map of compiled schemas.
+  Returns evaluated property keys on success when annotations are tracked.
+  """
+  def validate_properties_map(data, compiled_props, path, root, evaluated) when is_map(data) do
+    reduce_props(compiled_props, data, path, root, [], initial_eval_acc(evaluated))
+  end
 
-  defp reduce_props([], _data, _path, _root, [], []), do: :ok
-  defp reduce_props([], _data, _path, _root, [], eval_keys), do: {:ok, MapSet.new(eval_keys)}
-  defp reduce_props([], _data, _path, _root, errs, _eval_keys), do: {:error, List.flatten(errs)}
+  def validate_properties_map(_, _, _, _, _), do: :ok
+
+  defp reduce_props([], _data, _path, _root, errs, eval_keys),
+    do: finalize_eval_result(errs, eval_keys)
 
   defp reduce_props([{key, sub_schema} | rest], data, path, root, errs, eval_keys) do
-    case Map.fetch(data, key) do
-      {:ok, val} ->
-        case Validator.validate_entry(sub_schema, val, [key | path], root) do
+    case data do
+      %{^key => val} ->
+        case Validator.validate_entry(sub_schema, val, [key | path], root, nil) do
           {:ok, _sub_evaluated} ->
-            reduce_props(rest, data, path, root, errs, [key | eval_keys])
+            reduce_props(rest, data, path, root, errs, record_eval(eval_keys, key))
 
           {:error, new_errs} ->
             reduce_props(rest, data, path, root, [new_errs | errs], eval_keys)
         end
 
-      :error ->
+      _ ->
         reduce_props(rest, data, path, root, errs, eval_keys)
     end
   end
@@ -73,7 +102,7 @@ defmodule JSONSchex.Validator.Keywords do
     if MapSet.member?(evaluated_keys, key) do
       reduce_unevaluated_props(rest, sub_schema, path, evaluated_keys, root, errs, uneval)
     else
-      case Validator.validate_entry(sub_schema, val, [key | path], root) do
+      case Validator.validate_entry(sub_schema, val, [key | path], root, nil) do
         {:ok, _} ->
           reduce_unevaluated_props(rest, sub_schema, path, evaluated_keys, root, errs, [
             key | uneval
@@ -96,18 +125,20 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates array items against prefix schemas (`prefixItems`).
   """
-  def validate_prefix_items(data, schemas, path, root) when is_list(data) do
-    case reduce_prefix_items(schemas, data, path, root, 0, {[], []}) do
-      {[], []} -> :ok
-      {[], evaluated} -> {:ok, MapSet.new(evaluated)}
-      {errs, _} -> {:error, List.flatten(errs)}
-    end
+  def validate_prefix_items(data, schemas, path, root, evaluated) when is_list(data) do
+    {errs, eval_keys} =
+      reduce_prefix_items(schemas, data, path, root, 0, [], initial_eval_acc(evaluated))
+
+    finalize_eval_result(errs, eval_keys)
   end
 
-  def validate_prefix_items(_, _, _, _), do: :ok
+  def validate_prefix_items(_, _, _, _, _), do: :ok
 
-  defp reduce_prefix_items([], _data, _path, _root, _index, acc), do: acc
-  defp reduce_prefix_items(_schemas, [], _path, _root, _index, acc), do: acc
+  defp reduce_prefix_items([], _data, _path, _root, _index, errs, eval_keys),
+    do: {errs, eval_keys}
+
+  defp reduce_prefix_items(_schemas, [], _path, _root, _index, errs, eval_keys),
+    do: {errs, eval_keys}
 
   defp reduce_prefix_items(
          [schema | rest_schemas],
@@ -115,9 +146,10 @@ defmodule JSONSchex.Validator.Keywords do
          path,
          root,
          index,
-         {errs, evaluated}
+         errs,
+         eval_keys
        ) do
-    case Validator.validate_entry(schema, item, [index | path], root) do
+    case Validator.validate_entry(schema, item, [index | path], root, nil) do
       {:ok, _} ->
         reduce_prefix_items(
           rest_schemas,
@@ -125,7 +157,8 @@ defmodule JSONSchex.Validator.Keywords do
           path,
           root,
           index + 1,
-          {errs, [index | evaluated]}
+          errs,
+          record_eval(eval_keys, index)
         )
 
       {:error, new_errs} ->
@@ -135,7 +168,8 @@ defmodule JSONSchex.Validator.Keywords do
           path,
           root,
           index + 1,
-          {[new_errs | errs], evaluated}
+          [new_errs | errs],
+          eval_keys
         )
     end
   end
@@ -143,25 +177,34 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates array items starting from a given index (`items`).
   """
-  def validate_items_array(data, schema, start_index, path, root) when is_list(data) do
-    case reduce_items_array(data, schema, start_index, path, root, 0, {[], []}) do
-      {[], []} -> :ok
-      {[], evaluated} -> {:ok, MapSet.new(evaluated)}
-      {errs, _} -> {:error, List.flatten(errs)}
-    end
+  def validate_items_array(data, schema, start_index, path, root, evaluated) when is_list(data) do
+    {errs, eval_keys} =
+      reduce_items_array(
+        data,
+        schema,
+        start_index,
+        path,
+        root,
+        0,
+        [],
+        initial_eval_acc(evaluated)
+      )
+
+    finalize_eval_result(errs, eval_keys)
   end
 
-  def validate_items_array(_, _, _, _, _), do: :ok
+  def validate_items_array(_, _, _, _, _, _), do: :ok
 
-  defp reduce_items_array([], _schema, _start_index, _path, _root, _index, acc), do: acc
+  defp reduce_items_array([], _schema, _start_index, _path, _root, _index, errs, eval_keys),
+    do: {errs, eval_keys}
 
-  defp reduce_items_array([_ | rest], schema, start_index, path, root, index, acc)
+  defp reduce_items_array([_ | rest], schema, start_index, path, root, index, errs, eval_keys)
        when index < start_index do
-    reduce_items_array(rest, schema, start_index, path, root, index + 1, acc)
+    reduce_items_array(rest, schema, start_index, path, root, index + 1, errs, eval_keys)
   end
 
-  defp reduce_items_array([val | rest], schema, start_index, path, root, index, {errs, evaluated}) do
-    case Validator.validate_entry(schema, val, [index | path], root) do
+  defp reduce_items_array([val | rest], schema, start_index, path, root, index, errs, eval_keys) do
+    case Validator.validate_entry(schema, val, [index | path], root, nil) do
       {:ok, _} ->
         reduce_items_array(
           rest,
@@ -170,7 +213,8 @@ defmodule JSONSchex.Validator.Keywords do
           path,
           root,
           index + 1,
-          {errs, [index | evaluated]}
+          errs,
+          record_eval(eval_keys, index)
         )
 
       {:error, new_errs} ->
@@ -181,24 +225,28 @@ defmodule JSONSchex.Validator.Keywords do
           path,
           root,
           index + 1,
-          {[new_errs | errs], evaluated}
+          [new_errs | errs],
+          eval_keys
         )
     end
   end
 
   @doc "Validates Draft 7 tuple-form items and any additional items."
-  def validate_tuple_items(data, schemas, additional, path, root) when is_list(data) do
+  def validate_tuple_items(data, schemas, additional, path, root, evaluated) when is_list(data) do
+    eval_acc = initial_eval_acc(evaluated)
+
     {prefix_errors, prefix_evaluated} =
-      reduce_prefix_items(schemas, data, path, root, 0, {[], []})
+      reduce_prefix_items(schemas, data, path, root, 0, [], eval_acc)
 
     {additional_errors, additional_evaluated} =
-      reduce_items_array(data, additional, length(schemas), path, root, 0, {[], []})
+      reduce_items_array(data, additional, length(schemas), path, root, 0, [], eval_acc)
 
     case prefix_errors ++ additional_errors do
       [] ->
-        case prefix_evaluated ++ additional_evaluated do
-          [] -> :ok
-          indices -> {:ok, MapSet.new(indices)}
+        if evaluated == nil do
+          :ok
+        else
+          finalize_eval_result([], prefix_evaluated ++ additional_evaluated)
         end
 
       errors ->
@@ -206,23 +254,23 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  def validate_tuple_items(_, _, _, _, _), do: :ok
+  def validate_tuple_items(_, _, _, _, _, _), do: :ok
 
   @doc """
   Validates unevaluated array items against a schema.
   """
   def validate_unevaluated_items(data, schema, path, evaluated_indices, root)
       when is_list(data) do
-    case reduce_unevaluated_items(data, schema, path, evaluated_indices, root, 0, {[], []}) do
-      {[], []} -> :ok
-      {[], unevaluated} -> {:ok, MapSet.new(unevaluated)}
-      {errors, _} -> {:error, List.flatten(errors)}
-    end
+    {errors, unevaluated} =
+      reduce_unevaluated_items(data, schema, path, evaluated_indices, root, 0, [], [])
+
+    finalize_eval_result(errors, unevaluated)
   end
 
   def validate_unevaluated_items(_, _, _, _, _), do: :ok
 
-  defp reduce_unevaluated_items([], _schema, _path, _evaluated, _root, _index, acc), do: acc
+  defp reduce_unevaluated_items([], _schema, _path, _evaluated, _root, _index, errs, uneval),
+    do: {errs, uneval}
 
   defp reduce_unevaluated_items(
          [val | rest],
@@ -231,7 +279,8 @@ defmodule JSONSchex.Validator.Keywords do
          evaluated_indices,
          root,
          index,
-         {acc_errs, acc_uneval}
+         acc_errs,
+         acc_uneval
        ) do
     if MapSet.member?(evaluated_indices, index) do
       reduce_unevaluated_items(
@@ -241,10 +290,11 @@ defmodule JSONSchex.Validator.Keywords do
         evaluated_indices,
         root,
         index + 1,
-        {acc_errs, acc_uneval}
+        acc_errs,
+        acc_uneval
       )
     else
-      case Validator.validate_entry(schema, val, [index | path], root) do
+      case Validator.validate_entry(schema, val, [index | path], root, nil) do
         {:ok, _} ->
           reduce_unevaluated_items(
             rest,
@@ -253,7 +303,8 @@ defmodule JSONSchex.Validator.Keywords do
             evaluated_indices,
             root,
             index + 1,
-            {acc_errs, [index | acc_uneval]}
+            acc_errs,
+            [index | acc_uneval]
           )
 
         {:error, new_errs} ->
@@ -264,7 +315,8 @@ defmodule JSONSchex.Validator.Keywords do
             evaluated_indices,
             root,
             index + 1,
-            {[new_errs | acc_errs], [index | acc_uneval]}
+            [new_errs | acc_errs],
+            [index | acc_uneval]
           )
       end
     end
@@ -273,9 +325,12 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates data against all schemas in an `allOf` array.
   """
-  def validate_allOf(data, schemas, path, root, _evaluated) do
-    reduce_allOf(schemas, data, path, root, [], [])
+  def validate_allOf(data, schemas, path, root, evaluated) do
+    reduce_allOf(schemas, data, path, root, initial_eval_acc(evaluated), [])
   end
+
+  defp reduce_allOf([], _data, _path, _root, nil, []), do: :ok
+  defp reduce_allOf([], _data, _path, _root, [], []), do: :ok
 
   defp reduce_allOf([], _data, _path, _root, acc_keys, []) do
     {:ok, MapSet.new(List.flatten(acc_keys))}
@@ -286,13 +341,9 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   defp reduce_allOf([schema | rest], data, path, root, acc_keys, error_lists) do
-    case Validator.validate_entry(schema, data, path, root, @empty_mapset) do
+    case Validator.validate_entry(schema, data, path, root, sub_evaluated(acc_keys)) do
       {:ok, new_keys} ->
-        if MapSet.size(new_keys) == 0 do
-          reduce_allOf(rest, data, path, root, acc_keys, error_lists)
-        else
-          reduce_allOf(rest, data, path, root, [MapSet.to_list(new_keys) | acc_keys], error_lists)
-        end
+        reduce_allOf(rest, data, path, root, record_sub_eval(acc_keys, new_keys), error_lists)
 
       {:error, errs} ->
         reduce_allOf(rest, data, path, root, acc_keys, [errs | error_lists])
@@ -302,6 +353,10 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates data against schemas in an `anyOf` array.
   """
+  def validate_anyOf(data, schemas, path, root, nil) do
+    reduce_anyOf(schemas, data, path, root, nil, 0, nil, [])
+  end
+
   def validate_anyOf(data, schemas, path, root, evaluated) do
     if any_of_direct_merge_candidate?(schemas, evaluated) do
       reduce_anyOf_with_shared_evaluated_keys(schemas, data, path, root, evaluated, 0, 0, [], [])
@@ -309,6 +364,14 @@ defmodule JSONSchex.Validator.Keywords do
       reduce_anyOf(schemas, data, path, root, evaluated, 0, [], [])
     end
   end
+
+  defp reduce_anyOf([], _data, _path, _root, _evaluated, count, nil, _error_lists)
+       when count > 0,
+       do: :ok
+
+  defp reduce_anyOf([], _data, _path, _root, _evaluated, count, [], _error_lists)
+       when count > 0,
+       do: :ok
 
   defp reduce_anyOf([], _data, _path, _root, _evaluated, count, merged_keys, _error_lists)
        when count > 0 do
@@ -322,20 +385,16 @@ defmodule JSONSchex.Validator.Keywords do
   defp reduce_anyOf([schema | rest], data, path, root, evaluated, count, acc_keys, acc_errs) do
     case Validator.validate_entry(schema, data, path, root, evaluated) do
       {:ok, keys} ->
-        if MapSet.size(keys) == 0 do
-          reduce_anyOf(rest, data, path, root, evaluated, count + 1, acc_keys, acc_errs)
-        else
-          reduce_anyOf(
-            rest,
-            data,
-            path,
-            root,
-            evaluated,
-            count + 1,
-            [MapSet.to_list(keys) | acc_keys],
-            acc_errs
-          )
-        end
+        reduce_anyOf(
+          rest,
+          data,
+          path,
+          root,
+          evaluated,
+          count + 1,
+          record_sub_eval(acc_keys, keys),
+          acc_errs
+        )
 
       {:error, errs} ->
         new_errs = if count == 0, do: [errs | acc_errs], else: acc_errs
@@ -527,9 +586,9 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates array items against a `contains` schema with min/max constraints.
   """
-  def validate_contains(data, schema, min, max, path, root) when is_list(data) do
+  def validate_contains(data, schema, min, max, path, root, evaluated) when is_list(data) do
     {match_count, matching_indices} =
-      reduce_contains(data, schema, min, max, path, root, 0, 0, [])
+      reduce_contains(data, schema, min, max, path, root, 0, 0, initial_eval_acc(evaluated))
 
     cond do
       match_count < min ->
@@ -539,11 +598,11 @@ defmodule JSONSchex.Validator.Keywords do
         {:error, %ErrorContext{contrast: max, input: match_count, error_detail: "max"}}
 
       true ->
-        if matching_indices == [], do: :ok, else: {:ok, MapSet.new(matching_indices)}
+        finalize_eval_result([], matching_indices)
     end
   end
 
-  def validate_contains(_, _, _, _, _, _), do: :ok
+  def validate_contains(_, _, _, _, _, _, _), do: :ok
 
   defp reduce_contains(_data, _schema, _min, max, _path, _root, _index, count, indices)
        when is_integer(max) and count > max do
@@ -555,33 +614,43 @@ defmodule JSONSchex.Validator.Keywords do
   end
 
   defp reduce_contains([item | rest], schema, min, max, path, root, index, count, indices) do
-    case Validator.validate_entry(schema, item, [index | path], root) do
+    case Validator.validate_entry(schema, item, [index | path], root, nil) do
       {:error, _} ->
         reduce_contains(rest, schema, min, max, path, root, index + 1, count, indices)
 
       {:ok, _} ->
-        reduce_contains(rest, schema, min, max, path, root, index + 1, count + 1, [
-          index | indices
-        ])
+        reduce_contains(
+          rest,
+          schema,
+          min,
+          max,
+          path,
+          root,
+          index + 1,
+          count + 1,
+          record_eval(indices, index)
+        )
     end
   end
 
   @doc """
   Validates object properties against pattern-based schemas (`patternProperties`).
   """
-  def validate_pattern_properties(data, compiled_patterns, path, root) when is_map(data) do
+  def validate_pattern_properties(data, compiled_patterns, path, root, evaluated)
+      when is_map(data) do
     data_list = Map.to_list(data)
-    reduce_patterns(compiled_patterns, data_list, path, root, [], [])
+    reduce_patterns(compiled_patterns, data_list, path, root, [], initial_eval_acc(evaluated))
   end
 
-  def validate_pattern_properties(_, _, _, _), do: :ok
+  def validate_pattern_properties(_, _, _, _, _), do: :ok
 
   @doc false
-  def validate_pattern_properties(
+  def validate_pattern_properties_with_match_cache(
         data,
         compiled_patterns,
         path,
         root,
+        evaluated,
         %{source: source} = cache
       )
       when is_map(data) and source in [nil, :pattern_properties] do
@@ -593,16 +662,17 @@ defmodule JSONSchex.Validator.Keywords do
       path,
       root,
       [],
-      [],
+      initial_eval_acc(evaluated),
       cache
     )
   end
 
-  def validate_pattern_properties(
+  def validate_pattern_properties_with_match_cache(
         data,
         compiled_patterns,
         path,
         root,
+        evaluated,
         %{source: :additional_properties} = cache
       )
       when is_map(data) do
@@ -613,23 +683,24 @@ defmodule JSONSchex.Validator.Keywords do
       root,
       0,
       [],
-      [],
+      initial_eval_acc(evaluated),
       cache
     )
   end
 
-  def validate_pattern_properties(data, compiled_patterns, path, root, cache) do
-    {validate_pattern_properties(data, compiled_patterns, path, root), cache}
+  def validate_pattern_properties_with_match_cache(
+        data,
+        compiled_patterns,
+        path,
+        root,
+        evaluated,
+        cache
+      ) do
+    {validate_pattern_properties(data, compiled_patterns, path, root, evaluated), cache}
   end
 
-  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, [], [], cache),
-    do: {:ok, cache}
-
-  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, [], eval_keys, cache),
-    do: {{:ok, MapSet.new(eval_keys)}, cache}
-
-  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, errs, _eval_keys, cache),
-    do: {{:error, List.flatten(errs)}, cache}
+  defp reduce_patterns_with_match_cache([], _data_list, _path, _root, errs, eval_keys, cache),
+    do: {finalize_eval_result(errs, eval_keys), cache}
 
   defp reduce_patterns_with_match_cache(
          [{regex, schema} | rest_patterns],
@@ -662,7 +733,7 @@ defmodule JSONSchex.Validator.Keywords do
     if Pattern.match?(regex, key, [key | path]) do
       cache = mark_pattern_match(cache, key)
 
-      case Validator.validate_entry(schema, val, [key | path], root) do
+      case Validator.validate_entry(schema, val, [key | path], root, nil) do
         {:error, new_errs} ->
           reduce_pattern_data_with_match_cache(
             rest,
@@ -683,7 +754,7 @@ defmodule JSONSchex.Validator.Keywords do
             path,
             root,
             errs,
-            [key | eval_keys],
+            record_eval(eval_keys, key),
             cache
           )
       end
@@ -704,14 +775,8 @@ defmodule JSONSchex.Validator.Keywords do
   # additionalProperties ran first and already checked each non-property key up
   # to its first match. Preserve pattern-major validation while skipping only
   # those regex calls whose result is already known.
-  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, [], [], cache),
-    do: {:ok, cache}
-
-  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, [], eval_keys, cache),
-    do: {{:ok, MapSet.new(eval_keys)}, cache}
-
-  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, errs, _eval_keys, cache),
-    do: {{:error, List.flatten(errs)}, cache}
+  defp reduce_patterns_after_additional([], _data_list, _path, _root, _index, errs, eval_keys, cache),
+    do: {finalize_eval_result(errs, eval_keys), cache}
 
   defp reduce_patterns_after_additional(
          [{regex, schema} | rest_patterns],
@@ -773,7 +838,7 @@ defmodule JSONSchex.Validator.Keywords do
          cache
        ) do
     if pattern_matches_after_additional?(cache, key, index, regex, path) do
-      case Validator.validate_entry(schema, val, [key | path], root) do
+      case Validator.validate_entry(schema, val, [key | path], root, nil) do
         {:error, new_errs} ->
           reduce_pattern_data_after_additional(
             rest,
@@ -796,7 +861,7 @@ defmodule JSONSchex.Validator.Keywords do
             root,
             index,
             errs,
-            [key | eval_keys],
+            record_eval(eval_keys, key),
             cache
           )
       end
@@ -838,13 +903,8 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp reduce_patterns([], _data_list, _path, _root, [], []), do: :ok
-
-  defp reduce_patterns([], _data_list, _path, _root, [], eval_keys),
-    do: {:ok, MapSet.new(eval_keys)}
-
-  defp reduce_patterns([], _data_list, _path, _root, errs, _eval_keys),
-    do: {:error, List.flatten(errs)}
+  defp reduce_patterns([], _data_list, _path, _root, errs, eval_keys),
+    do: finalize_eval_result(errs, eval_keys)
 
   defp reduce_patterns([{regex, schema} | rest_patterns], data_list, path, root, errs, eval_keys) do
     {errs2, eval_keys2} =
@@ -858,12 +918,20 @@ defmodule JSONSchex.Validator.Keywords do
 
   defp reduce_pattern_data([{key, val} | rest], regex, schema, path, root, errs, eval_keys) do
     if Pattern.match?(regex, key, [key | path]) do
-      case Validator.validate_entry(schema, val, [key | path], root) do
+      case Validator.validate_entry(schema, val, [key | path], root, nil) do
         {:error, new_errs} ->
           reduce_pattern_data(rest, regex, schema, path, root, [new_errs | errs], eval_keys)
 
         {:ok, _} ->
-          reduce_pattern_data(rest, regex, schema, path, root, errs, [key | eval_keys])
+          reduce_pattern_data(
+            rest,
+            regex,
+            schema,
+            path,
+            root,
+            errs,
+            record_eval(eval_keys, key)
+          )
       end
     else
       reduce_pattern_data(rest, regex, schema, path, root, errs, eval_keys)
@@ -873,12 +941,21 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates additional properties not covered by `properties` or `patternProperties`.
   """
-  def validate_additional_properties(data, schema, known_props_set, patterns, path, root)
+  def validate_additional_properties(data, schema, known_props_set, patterns, path, root, evaluated)
       when is_map(data) do
-    reduce_additional(Map.to_list(data), schema, known_props_set, patterns, path, root, [], [])
+    reduce_additional(
+      Map.to_list(data),
+      schema,
+      known_props_set,
+      patterns,
+      path,
+      root,
+      [],
+      initial_eval_acc(evaluated)
+    )
   end
 
-  def validate_additional_properties(_, _, _, _, _, _), do: :ok
+  def validate_additional_properties(_, _, _, _, _, _, _), do: :ok
 
   @doc false
   def validate_additional_properties_with_match_cache(
@@ -888,6 +965,7 @@ defmodule JSONSchex.Validator.Keywords do
         patterns,
         path,
         root,
+        evaluated,
         %{source: source} = cache
       )
       when is_map(data) and source in [nil, :additional_properties] do
@@ -901,7 +979,7 @@ defmodule JSONSchex.Validator.Keywords do
       path,
       root,
       [],
-      [],
+      initial_eval_acc(evaluated),
       cache
     )
   end
@@ -913,6 +991,7 @@ defmodule JSONSchex.Validator.Keywords do
         _patterns,
         path,
         root,
+        evaluated,
         %{source: :pattern_properties} = cache
       )
       when is_map(data) do
@@ -923,7 +1002,7 @@ defmodule JSONSchex.Validator.Keywords do
       path,
       root,
       [],
-      [],
+      initial_eval_acc(evaluated),
       cache
     )
   end
@@ -935,9 +1014,11 @@ defmodule JSONSchex.Validator.Keywords do
         patterns,
         path,
         root,
+        evaluated,
         cache
       ) do
-    {validate_additional_properties(data, schema, known_props_set, patterns, path, root), cache}
+    {validate_additional_properties(data, schema, known_props_set, patterns, path, root, evaluated),
+     cache}
   end
 
   defp reduce_additional_with_match_cache(
@@ -947,37 +1028,11 @@ defmodule JSONSchex.Validator.Keywords do
          _patterns,
          _path,
          _root,
-         [],
-         [],
-         cache
-       ),
-       do: {:ok, cache}
-
-  defp reduce_additional_with_match_cache(
-         [],
-         _schema,
-         _known,
-         _patterns,
-         _path,
-         _root,
-         [],
+         errs,
          eval_keys,
          cache
        ),
-       do: {{:ok, MapSet.new(eval_keys)}, cache}
-
-  defp reduce_additional_with_match_cache(
-         [],
-         _schema,
-         _known,
-         _patterns,
-         _path,
-         _root,
-         errs,
-         _eval_keys,
-         cache
-       ),
-       do: {{:error, List.flatten(errs)}, cache}
+       do: {finalize_eval_result(errs, eval_keys), cache}
 
   defp reduce_additional_with_match_cache(
          [{key, val} | rest],
@@ -1007,7 +1062,7 @@ defmodule JSONSchex.Validator.Keywords do
 
       case classification do
         :no_match ->
-          case Validator.validate_entry(schema, val, [key | path], root) do
+          case Validator.validate_entry(schema, val, [key | path], root, nil) do
             {:error, new_errs} ->
               reduce_additional_with_match_cache(
                 rest,
@@ -1030,7 +1085,7 @@ defmodule JSONSchex.Validator.Keywords do
                 path,
                 root,
                 errs,
-                [key | eval_keys],
+                record_eval(eval_keys, key),
                 cache
               )
           end
@@ -1051,14 +1106,8 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, [], [], cache),
-    do: {:ok, cache}
-
-  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, [], eval_keys, cache),
-    do: {{:ok, MapSet.new(eval_keys)}, cache}
-
-  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, errs, _eval_keys, cache),
-    do: {{:error, List.flatten(errs)}, cache}
+  defp reduce_additional_after_pattern([], _schema, _known, _path, _root, errs, eval_keys, cache),
+    do: {finalize_eval_result(errs, eval_keys), cache}
 
   defp reduce_additional_after_pattern(
          [{key, val} | rest],
@@ -1078,7 +1127,7 @@ defmodule JSONSchex.Validator.Keywords do
         reduce_additional_after_pattern(rest, schema, known, path, root, errs, eval_keys, cache)
 
       true ->
-        case Validator.validate_entry(schema, val, [key | path], root) do
+        case Validator.validate_entry(schema, val, [key | path], root, nil) do
           {:error, new_errs} ->
             reduce_additional_after_pattern(
               rest,
@@ -1099,7 +1148,7 @@ defmodule JSONSchex.Validator.Keywords do
               path,
               root,
               errs,
-              [key | eval_keys],
+              record_eval(eval_keys, key),
               cache
             )
         end
@@ -1127,13 +1176,8 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], []), do: :ok
-
-  defp reduce_additional([], _schema, _known, _patterns, _path, _root, [], eval_keys),
-    do: {:ok, MapSet.new(eval_keys)}
-
-  defp reduce_additional([], _schema, _known, _patterns, _path, _root, errs, _eval_keys),
-    do: {:error, List.flatten(errs)}
+  defp reduce_additional([], _schema, _known, _patterns, _path, _root, errs, eval_keys),
+    do: finalize_eval_result(errs, eval_keys)
 
   defp reduce_additional(
          [{key, val} | rest],
@@ -1153,7 +1197,7 @@ defmodule JSONSchex.Validator.Keywords do
         reduce_additional(rest, schema, known, patterns, path, root, errs, eval_keys)
 
       true ->
-        case Validator.validate_entry(schema, val, [key | path], root) do
+        case Validator.validate_entry(schema, val, [key | path], root, nil) do
           {:error, new_errs} ->
             reduce_additional(
               rest,
@@ -1167,7 +1211,16 @@ defmodule JSONSchex.Validator.Keywords do
             )
 
           {:ok, _} ->
-            reduce_additional(rest, schema, known, patterns, path, root, errs, [key | eval_keys])
+            reduce_additional(
+              rest,
+              schema,
+              known,
+              patterns,
+              path,
+              root,
+              errs,
+              record_eval(eval_keys, key)
+            )
         end
     end
   end
@@ -1176,23 +1229,26 @@ defmodule JSONSchex.Validator.Keywords do
   Collects additional property keys as evaluated without validation.
   Used when the `additionalProperties` sub-schema always passes (e.g., `true`).
   """
-  def collect_additional_keys(data, known_props_set, patterns, path \\ [])
-
-  def collect_additional_keys(data, known_props_set, patterns, path) when is_map(data) do
-    reduce_collect_additional(Map.to_list(data), known_props_set, patterns, path, [])
+  def collect_additional_keys(data, known_props_set, patterns, path, evaluated) when is_map(data) do
+    reduce_collect_additional(
+      Map.to_list(data),
+      known_props_set,
+      patterns,
+      path,
+      initial_eval_acc(evaluated)
+    )
   end
 
-  def collect_additional_keys(_, _, _, _), do: :ok
+  def collect_additional_keys(_, _, _, _, _), do: :ok
 
   @doc false
-  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache, path \\ [])
-
   def collect_additional_keys_with_match_cache(
         data,
         known_props_set,
         patterns,
         %{source: source} = cache,
-        path
+        path,
+        evaluated
       )
       when is_map(data) and source in [nil, :additional_properties] do
     cache = if source == nil, do: %{cache | source: :additional_properties}, else: cache
@@ -1202,7 +1258,7 @@ defmodule JSONSchex.Validator.Keywords do
       known_props_set,
       patterns,
       path,
-      [],
+      initial_eval_acc(evaluated),
       cache
     )
   end
@@ -1212,21 +1268,30 @@ defmodule JSONSchex.Validator.Keywords do
         known_props_set,
         _patterns,
         %{source: :pattern_properties} = cache,
-        _path
+        _path,
+        evaluated
       )
       when is_map(data) do
-    reduce_collect_additional_after_pattern(Map.to_list(data), known_props_set, [], cache)
+    if evaluated == nil do
+      {:ok, cache}
+    else
+      reduce_collect_additional_after_pattern(Map.to_list(data), known_props_set, [], cache)
+    end
   end
 
-  def collect_additional_keys_with_match_cache(data, known_props_set, patterns, cache, path) do
-    {collect_additional_keys(data, known_props_set, patterns, path), cache}
+  def collect_additional_keys_with_match_cache(
+        data,
+        known_props_set,
+        patterns,
+        cache,
+        path,
+        evaluated
+      ) do
+    {collect_additional_keys(data, known_props_set, patterns, path, evaluated), cache}
   end
-
-  defp reduce_collect_additional_with_match_cache([], _known, _patterns, _path, [], cache),
-    do: {:ok, cache}
 
   defp reduce_collect_additional_with_match_cache([], _known, _patterns, _path, eval_keys, cache),
-    do: {{:ok, MapSet.new(eval_keys)}, cache}
+    do: {finalize_eval_result([], eval_keys), cache}
 
   defp reduce_collect_additional_with_match_cache(
          [{key, _val} | rest],
@@ -1243,7 +1308,14 @@ defmodule JSONSchex.Validator.Keywords do
 
       case classification do
         :no_match ->
-          reduce_collect_additional_with_match_cache(rest, known, patterns, path, [key | eval_keys], cache)
+          reduce_collect_additional_with_match_cache(
+            rest,
+            known,
+            patterns,
+            path,
+            record_eval(eval_keys, key),
+            cache
+          )
 
         {:first_match, _index} ->
           reduce_collect_additional_with_match_cache(rest, known, patterns, path, eval_keys, cache)
@@ -1251,10 +1323,8 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp reduce_collect_additional_after_pattern([], _known, [], cache), do: {:ok, cache}
-
   defp reduce_collect_additional_after_pattern([], _known, eval_keys, cache),
-    do: {{:ok, MapSet.new(eval_keys)}, cache}
+    do: {finalize_eval_result([], eval_keys), cache}
 
   defp reduce_collect_additional_after_pattern(
          [{key, _val} | rest],
@@ -1274,10 +1344,8 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  defp reduce_collect_additional([], _known, _patterns, _path, []), do: :ok
-
   defp reduce_collect_additional([], _known, _patterns, _path, eval_keys),
-    do: {:ok, MapSet.new(eval_keys)}
+    do: finalize_eval_result([], eval_keys)
 
   defp reduce_collect_additional([{key, _val} | rest], known, patterns, path, eval_keys) do
     cond do
@@ -1288,13 +1356,37 @@ defmodule JSONSchex.Validator.Keywords do
         reduce_collect_additional(rest, known, patterns, path, eval_keys)
 
       true ->
-        reduce_collect_additional(rest, known, patterns, path, [key | eval_keys])
+        reduce_collect_additional(rest, known, patterns, path, record_eval(eval_keys, key))
     end
   end
 
   @doc """
   Validates data against an `if`/`then`/`else` conditional schema.
   """
+  def validate_if(data, compiled_if, compiled_then, compiled_else, path, root, nil) do
+    case Validator.validate_entry(compiled_if, data, path, root, nil) do
+      {:ok, _} ->
+        if compiled_then do
+          case Validator.validate_entry(compiled_then, data, path, root, nil) do
+            {:ok, _} -> :ok
+            {:error, errs} -> {:error, errs}
+          end
+        else
+          :ok
+        end
+
+      {:error, _if_errors} ->
+        if compiled_else do
+          case Validator.validate_entry(compiled_else, data, path, root, nil) do
+            {:ok, _} -> :ok
+            {:error, errs} -> {:error, errs}
+          end
+        else
+          :ok
+        end
+    end
+  end
+
   def validate_if(data, compiled_if, compiled_then, compiled_else, path, root, evaluated) do
     case Validator.validate_entry(compiled_if, data, path, root, evaluated) do
       {:ok, if_keys} ->
@@ -1348,11 +1440,11 @@ defmodule JSONSchex.Validator.Keywords do
   @doc """
   Validates dependent required properties (`dependentRequired`).
   """
-  def validate_dependent_required(data, deps, path, _root) when is_map(data) do
+  def validate_dependent_required(data, deps, path) when is_map(data) do
     reduce_dependent_required(Map.to_list(deps), data, path, [])
   end
 
-  def validate_dependent_required(_, _, _, _), do: :ok
+  def validate_dependent_required(_, _, _), do: :ok
 
   defp reduce_dependent_required([], _data, _path, []), do: :ok
   defp reduce_dependent_required([], _data, _path, errs), do: {:error, errs}
@@ -1393,11 +1485,21 @@ defmodule JSONSchex.Validator.Keywords do
   Validates an object against dependent schemas (`dependentSchemas`).
   Also used by the legacy `dependencies` keyword for schema-valued entries.
   """
-  def validate_dependent_schemas(data, compiled_deps, path, root) when is_map(data) do
-    reduce_dependent_schemas(Map.to_list(compiled_deps), data, path, root, [], [])
+  def validate_dependent_schemas(data, compiled_deps, path, root, evaluated) when is_map(data) do
+    reduce_dependent_schemas(
+      Map.to_list(compiled_deps),
+      data,
+      path,
+      root,
+      [],
+      initial_eval_acc(evaluated)
+    )
   end
 
-  def validate_dependent_schemas(_, _, _, _), do: :ok
+  def validate_dependent_schemas(_, _, _, _, _), do: :ok
+
+  defp reduce_dependent_schemas([], _data, _path, _root, [], nil), do: :ok
+  defp reduce_dependent_schemas([], _data, _path, _root, [], []), do: :ok
 
   defp reduce_dependent_schemas([], _data, _path, _root, [], eval_keys) do
     {:ok, MapSet.new(List.flatten(eval_keys))}
@@ -1409,15 +1511,16 @@ defmodule JSONSchex.Validator.Keywords do
 
   defp reduce_dependent_schemas([{prop, schema} | rest], data, path, root, errs, eval_keys) do
     if Map.has_key?(data, prop) do
-      case Validator.validate_entry(schema, data, path, root) do
+      case Validator.validate_entry(schema, data, path, root, sub_evaluated(eval_keys)) do
         {:ok, new_keys} ->
-          if MapSet.size(new_keys) == 0 do
-            reduce_dependent_schemas(rest, data, path, root, errs, eval_keys)
-          else
-            reduce_dependent_schemas(rest, data, path, root, errs, [
-              MapSet.to_list(new_keys) | eval_keys
-            ])
-          end
+          reduce_dependent_schemas(
+            rest,
+            data,
+            path,
+            root,
+            errs,
+            record_sub_eval(eval_keys, new_keys)
+          )
 
         {:error, new_errs} ->
           reduce_dependent_schemas(rest, data, path, root, [new_errs | errs], eval_keys)
@@ -1520,8 +1623,7 @@ defmodule JSONSchex.Validator.Keywords do
         content_media_type,
         content_encoding,
         path,
-        root,
-        _evaluated
+        root
       )
       when is_binary(data) do
     normalized_encoding = normalize_content_encoding(content_encoding)
@@ -1539,7 +1641,7 @@ defmodule JSONSchex.Validator.Keywords do
     end
   end
 
-  def validate_content_schema(_, _, _, _, _, _, _), do: :ok
+  def validate_content_schema(_, _, _, _, _, _), do: :ok
 
   @doc "Validates content encoding and media type without applying a content schema."
   def validate_content_assertion(data, media_type, encoding, path) when is_binary(data) do

@@ -8,9 +8,9 @@ defmodule JSONSchex.Validator.Rules do
   """
 
   alias JSONSchex.Compiler.Predicates
+  alias JSONSchex.Guards
   alias JSONSchex.Types.{Error, ErrorContext, Rule}
   alias JSONSchex.Validator.{Keywords, Reference}
-  alias JSONSchex.Validator.Keywords.AnnotationFree
 
   @type validation_context :: {list(), MapSet.t() | nil, term()}
   @type result :: :ok | {:ok, MapSet.t() | nil} | {:error, list(Error.t()) | ErrorContext.t()}
@@ -44,17 +44,9 @@ defmodule JSONSchex.Validator.Rules do
         :contentSchema,
         %{schema: compiled_sub, media_type: media_type, encoding: encoding},
         data,
-        {path, evaluated, root}
+        {path, _evaluated, root}
       ) do
-    Keywords.validate_content_schema(
-      data,
-      compiled_sub,
-      media_type,
-      encoding,
-      path,
-      root,
-      evaluated
-    )
+    Keywords.validate_content_schema(data, compiled_sub, media_type, encoding, path, root)
   end
 
   def apply_rule(:format, format, data, _ctx) do
@@ -66,13 +58,12 @@ defmodule JSONSchex.Validator.Rules do
   end
 
   # Inlined hot scalar checks (atom-keyed jump table, avoiding extra remote calls on pass)
-  def apply_rule(:type, "string", data, _ctx) when is_binary(data), do: :ok
-  def apply_rule(:type, "integer", data, _ctx) when is_integer(data), do: :ok
-  def apply_rule(:type, "number", data, _ctx) when is_number(data), do: :ok
-  def apply_rule(:type, "boolean", data, _ctx) when is_boolean(data), do: :ok
-  def apply_rule(:type, "object", data, _ctx) when is_map(data), do: :ok
-  def apply_rule(:type, "array", data, _ctx) when is_list(data), do: :ok
-  def apply_rule(:type, "null", nil, _ctx), do: :ok
+  for type <- Guards.json_types() do
+    def apply_rule(:type, unquote(type), data, _ctx)
+        when unquote(Guards.type_check_ast(type, Macro.var(:data, nil))),
+        do: :ok
+  end
+
   def apply_rule(:type, types, data, _ctx), do: Predicates.check_type(data, types)
 
   def apply_rule(:minimum, minimum, data, _ctx) when is_number(data) and data >= minimum, do: :ok
@@ -106,8 +97,8 @@ defmodule JSONSchex.Validator.Rules do
   def apply_rule(:maxLength, max_length, data, _ctx),
     do: Predicates.check_max_length(data, max_length)
 
-  def apply_rule(:pattern, %{regex: regex, matcher: matcher}, data, {path, _, _}) do
-    Predicates.check_pattern(data, regex, matcher, path)
+  def apply_rule(:pattern, %{regex: regex, matcher: matcher}, data, _ctx) do
+    Predicates.check_predefined_pattern(data, regex, matcher)
   end
 
   def apply_rule(:pattern, %{regex: regex}, data, {path, _, _}) do
@@ -141,8 +132,9 @@ defmodule JSONSchex.Validator.Rules do
   def apply_rule(:uniqueItems, unique_items, data, _ctx),
     do: Predicates.check_unique_items(data, unique_items)
 
-  def apply_rule(:enum, values, data, _ctx),
-    do: Predicates.check_enum(data, values)
+  def apply_rule(:enum, values, data, _ctx) do
+    if Enum.any?(values, &(&1 == data)), do: :ok, else: {:error, %ErrorContext{contrast: values, input: data}}
+  end
 
   def apply_rule(:const, value, data, _ctx) do
     if data == value, do: :ok, else: {:error, %ErrorContext{contrast: value, input: data}}
@@ -159,20 +151,12 @@ defmodule JSONSchex.Validator.Rules do
     end
   end
 
-  def apply_rule(:properties, compiled_props, data, {path, nil, root}) do
-    AnnotationFree.validate_properties_map(data, compiled_props, path, root)
+  def apply_rule(:properties, compiled_props, data, {path, evaluated, root}) do
+    Keywords.validate_properties_map(data, compiled_props, path, root, evaluated)
   end
 
-  def apply_rule(:properties, compiled_props, data, {path, _evaluated, root}) do
-    Keywords.validate_properties_map(data, compiled_props, path, root)
-  end
-
-  def apply_rule(:patternProperties, compiled_patterns, data, {path, nil, root}) do
-    AnnotationFree.validate_pattern_properties(data, compiled_patterns, path, root)
-  end
-
-  def apply_rule(:patternProperties, compiled_patterns, data, {path, _evaluated, root}) do
-    Keywords.validate_pattern_properties(data, compiled_patterns, path, root)
+  def apply_rule(:patternProperties, compiled_patterns, data, {path, evaluated, root}) do
+    Keywords.validate_pattern_properties(data, compiled_patterns, path, root, evaluated)
   end
 
   def apply_rule(
@@ -188,42 +172,37 @@ defmodule JSONSchex.Validator.Rules do
         :additionalProperties,
         %{known_props: known_props, patterns: patterns, always_valid?: true},
         data,
-        {path, _evaluated, _root}
+        {path, evaluated, _root}
       ) do
-    Keywords.collect_additional_keys(data, known_props, patterns, path)
+    Keywords.collect_additional_keys(data, known_props, patterns, path, evaluated)
   end
 
   def apply_rule(
         :additionalProperties,
         %{schema: compiled_sub, known_props: known_props, patterns: patterns},
         data,
-        {path, nil, root}
+        {path, evaluated, root}
       ) do
-    AnnotationFree.validate_additional_properties(data, compiled_sub, known_props, patterns, path, root)
-  end
-
-  def apply_rule(
-        :additionalProperties,
-        %{schema: compiled_sub, known_props: known_props, patterns: patterns},
-        data,
-        {path, _evaluated, root}
-      ) do
-    Keywords.validate_additional_properties(data, compiled_sub, known_props, patterns, path, root)
+    Keywords.validate_additional_properties(
+      data,
+      compiled_sub,
+      known_props,
+      patterns,
+      path,
+      root,
+      evaluated
+    )
   end
 
   def apply_rule(:dependencies, :ok, _data, _ctx), do: :ok
   def apply_rule(:dependencies, _params, data, _ctx) when not is_map(data), do: :ok
 
-  def apply_rule(:dependencies, %{mode: :required, required: required_deps}, data, {path, _evaluated, root}) do
-    Keywords.validate_dependent_required(data, required_deps, path, root)
+  def apply_rule(:dependencies, %{mode: :required, required: required_deps}, data, {path, _evaluated, _root}) do
+    Keywords.validate_dependent_required(data, required_deps, path)
   end
 
-  def apply_rule(:dependencies, %{mode: :schemas, schemas: compiled_schemas}, data, {path, nil, root}) do
-    AnnotationFree.validate_dependent_schemas(data, compiled_schemas, path, root)
-  end
-
-  def apply_rule(:dependencies, %{mode: :schemas, schemas: compiled_schemas}, data, {path, _evaluated, root}) do
-    Keywords.validate_dependent_schemas(data, compiled_schemas, path, root)
+  def apply_rule(:dependencies, %{mode: :schemas, schemas: compiled_schemas}, data, {path, evaluated, root}) do
+    Keywords.validate_dependent_schemas(data, compiled_schemas, path, root, evaluated)
   end
 
   def apply_rule(
@@ -232,106 +211,56 @@ defmodule JSONSchex.Validator.Rules do
         data,
         {path, evaluated, root}
       ) do
-    required_result = Keywords.validate_dependent_required(data, required_deps, path, root)
-
-    schema_result =
-      if evaluated == nil do
-        AnnotationFree.validate_dependent_schemas(data, compiled_schemas, path, root)
-      else
-        Keywords.validate_dependent_schemas(data, compiled_schemas, path, root)
-      end
-
+    required_result = Keywords.validate_dependent_required(data, required_deps, path)
+    schema_result = Keywords.validate_dependent_schemas(data, compiled_schemas, path, root, evaluated)
     merge_dependency_results(required_result, schema_result)
   end
 
-  def apply_rule(:dependentRequired, deps, data, {path, _evaluated, root}) do
-    Keywords.validate_dependent_required(data, deps, path, root)
+  def apply_rule(:dependentRequired, deps, data, {path, _evaluated, _root}) do
+    Keywords.validate_dependent_required(data, deps, path)
   end
 
-  def apply_rule(:dependentSchemas, compiled_deps, data, {path, nil, root}) do
-    AnnotationFree.validate_dependent_schemas(data, compiled_deps, path, root)
-  end
-
-  def apply_rule(:dependentSchemas, compiled_deps, data, {path, _evaluated, root}) do
-    Keywords.validate_dependent_schemas(data, compiled_deps, path, root)
+  def apply_rule(:dependentSchemas, compiled_deps, data, {path, evaluated, root}) do
+    Keywords.validate_dependent_schemas(data, compiled_deps, path, root, evaluated)
   end
 
   def apply_rule(:propertyNames, compiled_sub, data, {path, _evaluated, root}) do
     Keywords.validate_property_names(data, compiled_sub, path, root)
   end
 
-  def apply_rule(:prefixItems, compiled_schemas, data, {path, nil, root}) do
-    AnnotationFree.validate_prefix_items(data, compiled_schemas, path, root)
-  end
-
-  def apply_rule(:prefixItems, compiled_schemas, data, {path, _evaluated, root}) do
-    Keywords.validate_prefix_items(data, compiled_schemas, path, root)
+  def apply_rule(:prefixItems, compiled_schemas, data, {path, evaluated, root}) do
+    Keywords.validate_prefix_items(data, compiled_schemas, path, root, evaluated)
   end
 
   def apply_rule(
         :items,
         %{draft: "draft7", schemas: schemas, additional: additional},
         data,
-        {path, nil, root}
+        {path, evaluated, root}
       ) do
-    AnnotationFree.validate_tuple_items(data, schemas, additional, path, root)
-  end
-
-  def apply_rule(
-        :items,
-        %{draft: "draft7", schemas: schemas, additional: additional},
-        data,
-        {path, _evaluated, root}
-      ) do
-    Keywords.validate_tuple_items(data, schemas, additional, path, root)
+    Keywords.validate_tuple_items(data, schemas, additional, path, root, evaluated)
   end
 
   def apply_rule(
         :items,
         %{start_index: start_index, schema: compiled_sub},
         data,
-        {path, nil, root}
+        {path, evaluated, root}
       ) do
-    AnnotationFree.validate_items_array(data, compiled_sub, start_index, path, root)
-  end
-
-  def apply_rule(
-        :items,
-        %{start_index: start_index, schema: compiled_sub},
-        data,
-        {path, _evaluated, root}
-      ) do
-    Keywords.validate_items_array(data, compiled_sub, start_index, path, root)
+    Keywords.validate_items_array(data, compiled_sub, start_index, path, root, evaluated)
   end
 
   def apply_rule(
         :contains,
         %{schema: compiled_sub, min: min, max: max},
         data,
-        {path, nil, root}
+        {path, evaluated, root}
       ) do
-    AnnotationFree.validate_contains(data, compiled_sub, min, max, path, root)
-  end
-
-  def apply_rule(
-        :contains,
-        %{schema: compiled_sub, min: min, max: max},
-        data,
-        {path, _evaluated, root}
-      ) do
-    Keywords.validate_contains(data, compiled_sub, min, max, path, root)
-  end
-
-  def apply_rule(:allOf, compiled_schemas, data, {path, nil, root}) do
-    AnnotationFree.validate_all_of(data, compiled_schemas, path, root)
+    Keywords.validate_contains(data, compiled_sub, min, max, path, root, evaluated)
   end
 
   def apply_rule(:allOf, compiled_schemas, data, {path, evaluated, root}) do
     Keywords.validate_allOf(data, compiled_schemas, path, root, evaluated)
-  end
-
-  def apply_rule(:anyOf, compiled_schemas, data, {path, nil, root}) do
-    AnnotationFree.validate_any_of(data, compiled_schemas, path, root)
   end
 
   def apply_rule(:anyOf, compiled_schemas, data, {path, evaluated, root}) do
@@ -344,15 +273,6 @@ defmodule JSONSchex.Validator.Rules do
 
   def apply_rule(:not, compiled_sub, data, {path, evaluated, root}) do
     Keywords.validate_not(data, compiled_sub, path, root, evaluated)
-  end
-
-  def apply_rule(
-        :if,
-        %{if: compiled_if, then: compiled_then, else: compiled_else},
-        data,
-        {path, nil, root}
-      ) do
-    AnnotationFree.validate_if(data, compiled_if, compiled_then, compiled_else, path, root)
   end
 
   def apply_rule(
@@ -435,14 +355,15 @@ defmodule JSONSchex.Validator.Rules do
   def apply(
         %Rule{name: :patternProperties, params: compiled_patterns},
         data,
-        {path, _evaluated, root},
+        {path, evaluated, root},
         cache
       ) do
-    Keywords.validate_pattern_properties(
+    Keywords.validate_pattern_properties_with_match_cache(
       data,
       compiled_patterns,
       path,
       root,
+      evaluated,
       cache
     )
   end
@@ -453,10 +374,17 @@ defmodule JSONSchex.Validator.Rules do
           params: %{known_props: known_props, patterns: patterns, always_valid?: true}
         },
         data,
-        {path, _evaluated, _root},
+        {path, evaluated, _root},
         cache
       ) do
-    Keywords.collect_additional_keys_with_match_cache(data, known_props, patterns, cache, path)
+    Keywords.collect_additional_keys_with_match_cache(
+      data,
+      known_props,
+      patterns,
+      cache,
+      path,
+      evaluated
+    )
   end
 
   def apply(
@@ -465,7 +393,7 @@ defmodule JSONSchex.Validator.Rules do
           params: %{schema: compiled_sub, known_props: known_props, patterns: patterns}
         },
         data,
-        {path, _evaluated, root},
+        {path, evaluated, root},
         cache
       ) do
     Keywords.validate_additional_properties_with_match_cache(
@@ -475,6 +403,7 @@ defmodule JSONSchex.Validator.Rules do
       patterns,
       path,
       root,
+      evaluated,
       cache
     )
   end

@@ -10,6 +10,7 @@ defmodule JSONSchex.StaticCompiler do
   original root schema and the enclosing resource's reference scope.
   """
 
+  alias JSONSchex.Guards
   alias JSONSchex.Types.{Rule, Schema, ValidationContext}
   alias JSONSchex.Validator.{Reference, ShortCircuit}
 
@@ -131,39 +132,7 @@ defmodule JSONSchex.StaticCompiler do
     optional_props = Enum.reject(props_list, fn {k, _} -> MapSet.member?(required_set, k) end)
 
     {opt_checks, state} =
-      Enum.reduce(optional_props, {[], state}, fn {key, sub_schema}, {checks, acc_state} ->
-        {prop_var, acc_state} = next_var("opt", acc_state)
-        {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
-
-        case split_const_bool(sub_ast) do
-          {:ok, [], true} ->
-            {checks, acc_state}
-
-          {:ok, stmts, true} ->
-            check_ast =
-              quote do
-                case unquote(var) do
-                  %{unquote(key) => unquote(prop_var)} -> unquote(prepend_stmts(stmts, :ok))
-                  _ -> :ok
-                end
-
-                true
-              end
-
-            {[check_ast | checks], acc_state}
-
-          _ ->
-            check_ast =
-              quote do
-                case unquote(var) do
-                  %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
-                  _ -> true
-                end
-              end
-
-            {[check_ast | checks], acc_state}
-        end
-      end)
+      compile_optional_properties(optional_props, "opt", var, state)
 
     # Remaining rules on the object (e.g. additionalProperties, minProperties, maxProperties)
     {rem_ast, state} =
@@ -173,7 +142,7 @@ defmodule JSONSchex.StaticCompiler do
       end
 
     all_checks =
-      (Enum.reverse(req_checks) ++ Enum.reverse(opt_checks) ++ [rem_ast])
+      (Enum.reverse(req_checks) ++ opt_checks ++ [rem_ast])
       |> combine_and()
 
     ast =
@@ -236,7 +205,7 @@ defmodule JSONSchex.StaticCompiler do
     ast =
       quote do
         byte_size(unquote(var)) <= unquote(max) or
-          JSONSchex.Compiler.Predicates.check_max_length(unquote(var), unquote(max)) == :ok
+          JSONSchex.Compiler.Predicates.valid_max_length?(unquote(var), unquote(max))
       end
 
     {ast, state}
@@ -342,7 +311,7 @@ defmodule JSONSchex.StaticCompiler do
     check =
       quote do
         byte_size(unquote(var)) >= unquote(min) and
-          JSONSchex.Compiler.Predicates.check_min_length(unquote(var), unquote(min)) == :ok
+          JSONSchex.Compiler.Predicates.valid_min_length?(unquote(var), unquote(min))
       end
 
     ast =
@@ -357,7 +326,7 @@ defmodule JSONSchex.StaticCompiler do
     check =
       quote do
         (byte_size(unquote(var)) <= unquote(max) and String.valid?(unquote(var))) or
-          JSONSchex.Compiler.Predicates.check_max_length(unquote(var), unquote(max)) == :ok
+          JSONSchex.Compiler.Predicates.valid_max_length?(unquote(var), unquote(max))
       end
 
     ast =
@@ -444,7 +413,7 @@ defmodule JSONSchex.StaticCompiler do
   end
 
   defp compile_rule(%Rule{name: :uniqueItems, params: true}, type, _schema, var, state) do
-    check = quote(do: JSONSchex.Compiler.Predicates.check_unique_items(unquote(var), true) == :ok)
+    check = quote(do: JSONSchex.Compiler.Predicates.valid_unique_items?(unquote(var)))
 
     ast =
       if type == "array", do: check, else: quote(do: not is_list(unquote(var)) or unquote(check))
@@ -490,42 +459,8 @@ defmodule JSONSchex.StaticCompiler do
   end
 
   defp compile_rule(%Rule{name: :properties, params: compiled_props}, type, _schema, var, state) do
-    {checks, state} =
-      Enum.reduce(compiled_props, {[], state}, fn {key, sub_schema}, {acc, acc_state} ->
-        {prop_var, acc_state} = next_var("prop", acc_state)
-        {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
-
-        case split_const_bool(sub_ast) do
-          {:ok, [], true} ->
-            {acc, acc_state}
-
-          {:ok, stmts, true} ->
-            check =
-              quote do
-                case unquote(var) do
-                  %{unquote(key) => unquote(prop_var)} -> unquote(prepend_stmts(stmts, :ok))
-                  _ -> :ok
-                end
-
-                true
-              end
-
-            {[check | acc], acc_state}
-
-          _ ->
-            check =
-              quote do
-                case unquote(var) do
-                  %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
-                  _ -> true
-                end
-              end
-
-            {[check | acc], acc_state}
-        end
-      end)
-
-    combined = checks |> Enum.reverse() |> combine_and()
+    {checks, state} = compile_optional_properties(compiled_props, "prop", var, state)
+    combined = combine_and(checks)
 
     ast =
       case split_const_bool(combined) do
@@ -821,6 +756,45 @@ defmodule JSONSchex.StaticCompiler do
 
   # --- Helpers ---
 
+  defp compile_optional_properties(props, var_prefix, var, state) do
+    {checks, state} =
+      Enum.reduce(props, {[], state}, fn {key, sub_schema}, {acc, acc_state} ->
+        {prop_var, acc_state} = next_var(var_prefix, acc_state)
+        {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
+
+        case split_const_bool(sub_ast) do
+          {:ok, [], true} ->
+            {acc, acc_state}
+
+          {:ok, stmts, true} ->
+            check =
+              quote do
+                case unquote(var) do
+                  %{unquote(key) => unquote(prop_var)} -> unquote(prepend_stmts(stmts, :ok))
+                  _ -> :ok
+                end
+
+                true
+              end
+
+            {[check | acc], acc_state}
+
+          _ ->
+            check =
+              quote do
+                case unquote(var) do
+                  %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
+                  _ -> true
+                end
+              end
+
+            {[check | acc], acc_state}
+        end
+      end)
+
+    {Enum.reverse(checks), state}
+  end
+
   defp fallback_schema(%Schema{} = schema, var, state) do
     {context_helper, state} = fallback_context(state)
 
@@ -843,21 +817,11 @@ defmodule JSONSchex.StaticCompiler do
 
   defp fallback_context(%{context_helper: name} = state), do: {name, state}
 
-  defp compile_type_check("string", var), do: quote(do: is_binary(unquote(var)))
-
-  defp compile_type_check("integer", var) do
-    quote do: is_integer(unquote(var)) or (is_float(unquote(var)) and unquote(var) == trunc(unquote(var)))
-  end
-
-  defp compile_type_check("number", var), do: quote(do: is_number(unquote(var)))
-  defp compile_type_check("boolean", var), do: quote(do: is_boolean(unquote(var)))
-  defp compile_type_check("object", var), do: quote(do: is_map(unquote(var)))
-  defp compile_type_check("array", var), do: quote(do: is_list(unquote(var)))
-  defp compile_type_check("null", var), do: quote(do: is_nil(unquote(var)))
-
   defp compile_type_check(types, var) when is_list(types) do
-    types |> Enum.map(&compile_type_check(&1, var)) |> combine_or()
+    types |> Enum.map(&Guards.type_check_ast(&1, var)) |> combine_or()
   end
+
+  defp compile_type_check(type, var), do: Guards.type_check_ast(type, var)
 
   defp combine_and([]), do: true
   defp combine_and([single]), do: single
