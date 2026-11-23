@@ -113,7 +113,12 @@ defmodule JSONSchex.StaticCompiler do
           {:ok, sub_schema} ->
             {prop_var, acc_state} = next_var("v", acc_state)
             {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
-            {[{key, prop_var} | pairs], [sub_ast | checks], acc_state}
+
+            if sub_ast === true do
+              {[{key, quote(do: _)} | pairs], checks, acc_state}
+            else
+              {[{key, prop_var} | pairs], [sub_ast | checks], acc_state}
+            end
 
           :error ->
             {[{key, quote(do: _)} | pairs], checks, acc_state}
@@ -128,15 +133,19 @@ defmodule JSONSchex.StaticCompiler do
         {prop_var, acc_state} = next_var("opt", acc_state)
         {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
 
-        check_ast =
-          quote do
-            case unquote(var) do
-              %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
-              _ -> true
+        if sub_ast === true do
+          {checks, acc_state}
+        else
+          check_ast =
+            quote do
+              case unquote(var) do
+                %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
+                _ -> true
+              end
             end
-          end
 
-        {[check_ast | checks], acc_state}
+          {[check_ast | checks], acc_state}
+        end
       end)
 
     # Remaining rules on the object (e.g. additionalProperties, minProperties, maxProperties)
@@ -150,13 +159,17 @@ defmodule JSONSchex.StaticCompiler do
       (Enum.reverse(req_checks) ++ Enum.reverse(opt_checks) ++ [rem_ast])
       |> combine_and()
 
-    map_pattern = {:%{}, [], Enum.reverse(map_pairs)}
-
     ast =
-      quote do
-        case unquote(var) do
-          unquote(map_pattern) -> unquote(all_checks)
-          _ -> false
+      if all_checks === false do
+        false
+      else
+        map_pattern = {:%{}, [], Enum.reverse(map_pairs)}
+
+        quote do
+          case unquote(var) do
+            unquote(map_pattern) -> unquote(all_checks)
+            _ -> false
+          end
         end
       end
 
@@ -451,24 +464,28 @@ defmodule JSONSchex.StaticCompiler do
         {prop_var, acc_state} = next_var("prop", acc_state)
         {sub_ast, acc_state} = compile_schema(sub_schema, prop_var, acc_state)
 
-        check =
-          quote do
-            case unquote(var) do
-              %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
-              _ -> true
+        if sub_ast === true do
+          {acc, acc_state}
+        else
+          check =
+            quote do
+              case unquote(var) do
+                %{unquote(key) => unquote(prop_var)} -> unquote(sub_ast)
+                _ -> true
+              end
             end
-          end
 
-        {[check | acc], acc_state}
+          {[check | acc], acc_state}
+        end
       end)
 
     combined = checks |> Enum.reverse() |> combine_and()
 
     ast =
-      if type == "object" do
-        combined
-      else
-        quote do: not is_map(unquote(var)) or unquote(combined)
+      cond do
+        combined === true -> true
+        type == "object" -> combined
+        true -> quote(do: not is_map(unquote(var)) or unquote(combined))
       end
 
     {ast, state}
@@ -497,8 +514,10 @@ defmodule JSONSchex.StaticCompiler do
     known_list = MapSet.to_list(known)
 
     check =
-      quote do
-        Enum.all?(Map.keys(unquote(var)), &(&1 in unquote(known_list)))
+      if known_list == [] do
+        quote do: map_size(unquote(var)) == 0
+      else
+        quote do: Enum.all?(Map.keys(unquote(var)), &(&1 in unquote(known_list)))
       end
 
     ast =
@@ -518,31 +537,43 @@ defmodule JSONSchex.StaticCompiler do
          var,
          state
        ) do
-    {helper_name, state} = next_helper_name("items", state)
     item_var = Macro.var(:item, __MODULE__)
-    rest_var = Macro.var(:rest, __MODULE__)
     {item_ast, state} = compile_schema(sub_schema, item_var, state)
 
-    helper_def =
-      quote do
-        defp unquote(helper_name)([]), do: true
+    case item_ast do
+      true ->
+        {true, state}
 
-        defp unquote(helper_name)([unquote(item_var) | unquote(rest_var)]) do
-          unquote(item_ast) and unquote(helper_name)(unquote(rest_var))
-        end
-      end
+      false ->
+        check = quote(do: unquote(var) == [])
+        ast = if type == "array", do: check, else: quote(do: not is_list(unquote(var)) or unquote(check))
+        {ast, state}
 
-    state = %{state | helpers: [helper_def | state.helpers]}
-    call = quote(do: unquote(helper_name)(unquote(var)))
+      _ ->
+        {helper_name, state} = next_helper_name("items", state)
+        rest_var = Macro.var(:rest, __MODULE__)
 
-    ast =
-      if type == "array" do
-        call
-      else
-        quote do: not is_list(unquote(var)) or unquote(call)
-      end
+        helper_def =
+          quote do
+            defp unquote(helper_name)([]), do: true
 
-    {ast, state}
+            defp unquote(helper_name)([unquote(item_var) | unquote(rest_var)]) do
+              unquote(item_ast) and unquote(helper_name)(unquote(rest_var))
+            end
+          end
+
+        state = %{state | helpers: [helper_def | state.helpers]}
+        call = quote(do: unquote(helper_name)(unquote(var)))
+
+        ast =
+          if type == "array" do
+            call
+          else
+            quote do: not is_list(unquote(var)) or unquote(call)
+          end
+
+        {ast, state}
+    end
   end
 
   defp compile_rule(%Rule{name: :allOf, params: schemas}, _type, _schema, var, state) do
@@ -597,7 +628,15 @@ defmodule JSONSchex.StaticCompiler do
 
   defp compile_rule(%Rule{name: :not, params: sub_schema}, _type, _schema, var, state) do
     {sub_ast, state} = compile_schema(sub_schema, var, state)
-    {quote(do: not unquote(sub_ast)), state}
+
+    ast =
+      case sub_ast do
+        true -> false
+        false -> true
+        _ -> quote(do: not unquote(sub_ast))
+      end
+
+    {ast, state}
   end
 
   defp compile_rule(
@@ -607,7 +646,10 @@ defmodule JSONSchex.StaticCompiler do
          var,
          state
        ) do
-    {if_ast, state} = compile_schema(compiled_if, var, state)
+    prev_abort? = state.may_abort_on_pattern?
+    {if_ast, state} = compile_schema(compiled_if, var, %{state | may_abort_on_pattern?: false})
+    if_may_abort? = state.may_abort_on_pattern?
+    state = %{state | may_abort_on_pattern?: prev_abort? or if_may_abort?}
 
     {then_ast, state} =
       if compiled_then != nil, do: compile_schema(compiled_then, var, state), else: {true, state}
@@ -616,12 +658,34 @@ defmodule JSONSchex.StaticCompiler do
       if compiled_else != nil, do: compile_schema(compiled_else, var, state), else: {true, state}
 
     ast =
-      quote do
-        if unquote(if_ast) do
-          unquote(then_ast)
-        else
-          unquote(else_ast)
-        end
+      cond do
+        if_ast === true ->
+          then_ast
+
+        if_ast === false ->
+          else_ast
+
+        then_ast === true and else_ast === true ->
+          if if_may_abort? do
+            quote do
+              _ = unquote(if_ast)
+              true
+            end
+          else
+            true
+          end
+
+        then_ast === false and else_ast === false ->
+          false
+
+        true ->
+          quote do
+            if unquote(if_ast) do
+              unquote(then_ast)
+            else
+              unquote(else_ast)
+            end
+          end
       end
 
     {ast, state}
@@ -691,7 +755,13 @@ defmodule JSONSchex.StaticCompiler do
   defp combine_or([single]), do: single
 
   defp combine_or(exprs) do
-    Enum.reduce(Enum.reverse(exprs), fn expr, acc -> quote(do: unquote(expr) or unquote(acc)) end)
+    filtered = Enum.reject(exprs, &(&1 === false))
+
+    case filtered do
+      [] -> false
+      [single] -> single
+      list -> Enum.reduce(Enum.reverse(list), fn expr, acc -> quote(do: unquote(expr) or unquote(acc)) end)
+    end
   end
 
   defp next_var(base, %{counter: n} = state) do

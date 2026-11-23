@@ -283,6 +283,197 @@ defmodule JSONSchex.Test.StaticValidatorTest do
     refute SigilAndUseValidators.validate_signed_bounds?(-1)
   end
 
+  test "defvalidator compiles constant subschemas without compiler warnings and preserves semantics" do
+    mod = :"JSONSchex.Test.ConstantBranches#{System.unique_integer([:positive])}"
+
+    warnings =
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        Code.compile_string("""
+        defmodule #{inspect(mod)} do
+          use JSONSchex
+
+          defvalidator :props_true, %{
+            "type" => "object",
+            "required" => ["a"],
+            "properties" => %{"a" => %{}, "b" => true, "c" => %{"description" => "meta"}},
+            "additionalProperties" => false
+          }
+
+          defvalidator :req_false, %{
+            "type" => "object",
+            "required" => ["a"],
+            "properties" => %{"a" => false}
+          }
+
+          defvalidator :props_only_true, %{
+            "properties" => %{"a" => %{}, "b" => true},
+            "additionalProperties" => false
+          }
+
+          defvalidator :props_mixed, %{
+            "properties" => %{"a" => true, "b" => %{"type" => "integer"}}
+          }
+
+          defvalidator :empty_object, %{"type" => "object", "additionalProperties" => false}
+          defvalidator :empty_object_untyped, %{"additionalProperties" => false}
+          defvalidator :items_true, %{"type" => "array", "items" => true}
+          defvalidator :items_false, %{"type" => "array", "items" => false}
+          defvalidator :items_false_untyped, %{"items" => false}
+
+          defvalidator :not_true, %{"not" => true}
+          defvalidator :not_false, %{"not" => false}
+          defvalidator :not_int, %{"not" => %{"type" => "integer"}}
+
+          defvalidator :if_true, %{
+            "if" => true,
+            "then" => %{"type" => "integer"},
+            "else" => %{"type" => "string"}
+          }
+
+          defvalidator :if_false, %{
+            "if" => false,
+            "then" => %{"type" => "integer"},
+            "else" => %{"type" => "string"}
+          }
+
+          defvalidator :if_noop, %{"if" => %{"required" => ["a"]}, "minProperties" => 1}
+          defvalidator :if_pattern_noop, %{"if" => %{"pattern" => "^(?:(a+)+b|a+!)$"}}
+
+          defvalidator :if_both_false, %{
+            "if" => %{"type" => "integer"},
+            "then" => false,
+            "else" => false
+          }
+
+          defvalidator :if_pattern_both_false, %{
+            "if" => %{"pattern" => "^(?:(a+)+b|a+!)$"},
+            "then" => false,
+            "else" => false
+          }
+
+          defvalidator :if_dynamic, %{
+            "if" => %{"type" => "integer"},
+            "then" => %{"minimum" => 10},
+            "else" => %{"type" => "string"}
+          }
+
+          defvalidator :pattern_and_if_noop, %{
+            "pattern" => "^(?:(a+)+b|a+!)$",
+            "if" => %{"type" => "string"}
+          }
+
+          defvalidator :any_of_all_false, %{"anyOf" => [false, false]}
+          defvalidator :any_of_single_after_false, %{"anyOf" => [false, %{"type" => "integer"}, false]}
+          defvalidator :any_of_multi_with_false, %{"anyOf" => [false, %{"type" => "integer"}, %{"type" => "string"}]}
+        end
+        """)
+      end)
+
+    assert warnings == ""
+
+    assert mod.props_true?(%{"a" => 1, "b" => "any"})
+    refute mod.props_true?(%{"a" => 1, "extra" => 2})
+
+    refute mod.req_false?(%{"a" => 1})
+    refute mod.req_false?(%{})
+    refute mod.req_false?("not a map")
+
+    assert mod.props_only_true?(%{"a" => 1})
+    refute mod.props_only_true?(%{"extra" => 1})
+
+    assert mod.props_mixed?(%{"a" => "any", "b" => 1})
+    assert mod.props_mixed?("not a map")
+    refute mod.props_mixed?(%{"a" => "any", "b" => "bad"})
+
+    assert mod.empty_object?(%{})
+    refute mod.empty_object?(%{"a" => 1})
+    refute mod.empty_object?("not a map")
+
+    assert mod.empty_object_untyped?(%{})
+    assert mod.empty_object_untyped?("not a map")
+    refute mod.empty_object_untyped?(%{"a" => 1})
+
+    assert mod.items_true?([1, "two", %{}])
+    assert mod.items_false?([])
+    refute mod.items_false?([1])
+    refute mod.items_false?("not a list")
+
+    assert mod.items_false_untyped?([])
+    assert mod.items_false_untyped?("not a list")
+    refute mod.items_false_untyped?([1])
+
+    refute mod.not_true?("anything")
+    assert mod.not_false?("anything")
+    assert mod.not_int?("str")
+    refute mod.not_int?(42)
+
+    assert mod.if_true?(1)
+    refute mod.if_true?("str")
+    assert mod.if_false?("str")
+    refute mod.if_false?(1)
+
+    assert mod.if_noop?(%{"x" => 1})
+    refute mod.if_noop?(%{})
+
+    long = String.duplicate("a", 25) <> "!"
+    assert mod.if_pattern_noop?("aaa!")
+    refute mod.if_pattern_noop?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.if_pattern_noop(long)
+
+    refute mod.if_both_false?(1)
+    refute mod.if_both_false?("str")
+    refute mod.if_pattern_both_false?("aaa!")
+    assert {:error, [%{rule: :boolean_schema}]} = mod.if_pattern_both_false("aaa!")
+    refute mod.if_pattern_both_false?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.if_pattern_both_false(long)
+
+    assert mod.if_dynamic?(10)
+    refute mod.if_dynamic?(5)
+    assert mod.if_dynamic?("ok")
+    refute mod.if_dynamic?(true)
+
+    assert mod.pattern_and_if_noop?("aaa!")
+    refute mod.pattern_and_if_noop?(long)
+    assert {:error, [%{rule: :indeterminate_pattern}]} = mod.pattern_and_if_noop(long)
+
+    refute mod.any_of_all_false?(1)
+    assert mod.any_of_single_after_false?(42)
+    refute mod.any_of_single_after_false?("42")
+    assert mod.any_of_multi_with_false?(42)
+    assert mod.any_of_multi_with_false?("42")
+    refute mod.any_of_multi_with_false?(true)
+
+    # Verify AST simplifications directly on StaticCompiler.compile/2
+    for {raw, expected_ast} <- [
+          {%{"type" => "object", "required" => ["a"], "properties" => %{"a" => false}}, false},
+          {%{"not" => true}, false},
+          {%{"not" => false}, true},
+          {%{"if" => %{"type" => "integer"}, "then" => false, "else" => false}, false},
+          {%{"anyOf" => [false, false]}, false}
+        ] do
+      {:ok, compiled} = JSONSchex.compile(raw)
+      assert {^expected_ast, [], false} = JSONSchex.StaticCompiler.compile(:c, compiled)
+    end
+
+    # items: true and items: false do not emit recursive list helpers
+    {:ok, items_true_schema} = JSONSchex.compile(%{"type" => "array", "items" => true})
+    {:ok, items_false_schema} = JSONSchex.compile(%{"type" => "array", "items" => false})
+    assert {_, [], false} = JSONSchex.StaticCompiler.compile(:t, items_true_schema)
+    assert {_, [], false} = JSONSchex.StaticCompiler.compile(:f, items_false_schema)
+
+    # combine_or drops false branches instead of emitting `false or ...`
+    {:ok, single_or} = JSONSchex.compile(%{"anyOf" => [false, %{"type" => "integer"}, false]})
+    {single_or_ast, [], false} = JSONSchex.StaticCompiler.compile(:s, single_or)
+    assert Macro.to_string(single_or_ast) == "is_integer(data) or (is_float(data) and data == trunc(data))"
+
+    {:ok, multi_or} = JSONSchex.compile(%{"anyOf" => [false, %{"type" => "string"}, %{"type" => "boolean"}]})
+    {multi_or_ast, [], false} = JSONSchex.StaticCompiler.compile(:m, multi_or)
+    assert Macro.to_string(multi_or_ast) == "is_binary(data) or is_boolean(data)"
+
+    :code.purge(mod)
+    :code.delete(mod)
+  end
+
   test "defvalidator rejects options when passed an already-compiled ~X schema" do
     assert_raise CompileError, ~r/does not accept options when given an already-compiled schema/, fn ->
       Code.compile_string("""
