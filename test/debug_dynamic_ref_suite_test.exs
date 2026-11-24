@@ -4,7 +4,7 @@ defmodule JSONSchex.Test.DebugDynamicRefSuite do
   alias JSONSchex.JSON
 
   # Directly runs ONLY this file, ignoring any global ignore lists
-  #run_suite("test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12/dynamicRef.json")
+  #run_suite("test/fixtures/JSON-Schema-Test-Suite/validation/tests/dynamicRef.json")
 
   #test "$ref and $dynamicAnchor are independent of order - $defs first" do
   #  schema = """

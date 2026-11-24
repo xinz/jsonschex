@@ -7,7 +7,16 @@ defmodule JSONSchex.Test.RefRemote do
       "$ref" => "http://localhost:1234/different-id-ref-string.json"
     }
 
-    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
+    loader =
+      JSONSchex.Test.SuiteLoader.loader(%{
+        "http://localhost:1234/different-id-ref-string.json" => %{
+          "$id" => "http://localhost:1234/real-id-ref-string.json",
+          "$defs" => %{"bar" => %{"type" => "string"}},
+          "$ref" => "#/$defs/bar"
+        }
+      })
+
+    assert {:ok, c} = JSONSchex.compile(schema, loader: loader)
     assert {:error, _e} = JSONSchex.validate(c, 1)
   end
 
@@ -45,10 +54,26 @@ defmodule JSONSchex.Test.RefRemote do
       "$id" => "http://localhost:1234/draft2020-12/object",
       "type" => "object",
       "properties" => %{
-          "name" => %{"$ref" => "name-defs.json#/$defs/orNull"}
+        "name" => %{"$ref" => "name-defs.json#/$defs/orNull"}
       }
     }
-    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
+
+    loader =
+      JSONSchex.Test.SuiteLoader.loader(%{
+        "http://localhost:1234/draft2020-12/name-defs.json" => %{
+          "$defs" => %{
+            "orNull" => %{
+              "anyOf" => [
+                %{"type" => "null"},
+                %{"$ref" => "#"}
+              ]
+            }
+          },
+          "type" => "string"
+        }
+      })
+
+    assert {:ok, c} = JSONSchex.compile(schema, loader: loader)
     assert :ok == JSONSchex.validate(c, %{"name" => "foo"})
     assert :ok == JSONSchex.validate(c, %{"name" => nil})
     assert {:error, _} = JSONSchex.validate(c, 1)
@@ -61,23 +86,31 @@ defmodule JSONSchex.Test.RefRemote do
       "$id" => "http://localhost:1234/draft2020-12/scope_change_defs2.json",
       "type" => "object",
       "properties" => %{
-          "list" => %{
-              "$ref" => "baseUriChangeFolderInSubschema/#/$defs/bar"
-          }
+        "list" => %{
+          "$ref" => "baseUriChangeFolderInSubschema/#/$defs/bar"
+        }
       },
       "$defs" => %{
-        "baz"=> %{
-           "$id" => "baseUriChangeFolderInSubschema/",
-           "$defs" => %{
-             "bar" => %{
-               "type" => "array",
-               "items" => %{"$ref" => "folderInteger.json"}
-             }
-           }
+        "baz" => %{
+          "$id" => "baseUriChangeFolderInSubschema/",
+          "$defs" => %{
+            "bar" => %{
+              "type" => "array",
+              "items" => %{"$ref" => "folderInteger.json"}
+            }
+          }
         }
       }
     }
-    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
+
+    loader =
+      JSONSchex.Test.SuiteLoader.loader(%{
+        "http://localhost:1234/draft2020-12/baseUriChangeFolderInSubschema/folderInteger.json" => %{
+          "type" => "integer"
+        }
+      })
+
+    assert {:ok, c} = JSONSchex.compile(schema, loader: loader)
     assert :ok == JSONSchex.validate(c, %{"list" => [1]})
     assert {:error, [e]} = JSONSchex.validate(c, %{"list" => ["1"]})
     assert e.rule == :type
@@ -88,10 +121,24 @@ defmodule JSONSchex.Test.RefRemote do
       "$schema" => "https://json-schema.org/draft/2020-12/schema",
       "$id" => "http://localhost:1234/draft2020-12/some-id",
       "properties" => %{
-          "name" => %{"$ref" => "nested/foo-ref-string.json"}
+        "name" => %{"$ref" => "nested/foo-ref-string.json"}
       }
     }
-    assert {:ok, c} = JSONSchex.compile(schema, loader: &JSONSchex.Test.SuiteLoader.load/1)
+
+    loader =
+      JSONSchex.Test.SuiteLoader.loader(%{
+        "http://localhost:1234/draft2020-12/nested/foo-ref-string.json" => %{
+          "type" => "object",
+          "properties" => %{
+            "foo" => %{"$ref" => "string.json"}
+          }
+        },
+        "http://localhost:1234/draft2020-12/nested/string.json" => %{
+          "type" => "string"
+        }
+      })
+
+    assert {:ok, c} = JSONSchex.compile(schema, loader: loader)
     assert :ok == JSONSchex.validate(c, %{"name" => %{"foo" => "a"}})
     assert {:error, _e} = JSONSchex.validate(c, %{"name" => %{"foo" => 1}})
   end

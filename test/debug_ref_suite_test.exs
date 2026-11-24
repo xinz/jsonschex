@@ -4,7 +4,7 @@ defmodule JSONSchex.Test.DebugRefSuite do
   # alias JSONSchex.JSON
 
   # Directly runs ONLY this file, ignoring any global ignore lists
-  run_suite("test/fixtures/JSON-Schema-Test-Suite/tests/draft2020-12/ref.json")
+  run_suite("test/fixtures/JSON-Schema-Test-Suite/validation/tests/ref.json")
 
   #test "tmp" do
   #  schema = """
