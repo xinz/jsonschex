@@ -12,6 +12,7 @@ defmodule JSONSchex.MixProject do
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
       docs: docs(),
       description: @description,
@@ -138,5 +139,30 @@ defmodule JSONSchex.MixProject do
       {:idna, "~> 8.0", optional: true},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
+  end
+
+  defp aliases do
+    [
+      "hex.build": [&with_hex_readme("hex.build", &1)],
+      "hex.publish": [&with_hex_readme("hex.publish", &1)]
+    ]
+  end
+
+  defp with_hex_readme(task, args) do
+    original = File.read!("README.md")
+
+    rewritten =
+      Regex.replace(
+        ~r/\]\(guide\/([a-z0-9_-]+)\.md(#[^)]*)?\)/,
+        original,
+        "](https://jsonschex.hexdocs.pm/\\1.html\\2)"
+      )
+
+    try do
+      File.write!("README.md", rewritten)
+      Mix.Task.run(task, args)
+    after
+      File.write!("README.md", original)
+    end
   end
 end

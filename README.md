@@ -195,7 +195,7 @@ error details, and guidance on avoiding excessive backtracking.
 
 The canonical Draft 2020-12 dialect treats `format` as annotation-only by default.
 In Draft 2020-12, omitting `$schema` or using an unresolved custom meta-schema activates a fallback vocabulary set that includes format assertions, even with `format_assertion: false`. See the [content and format guide](guide/content_and_format.md)
-for assertion behavior and the [dialect guide](guide//dialect_and_vocabulary.md) for vocabulary selection.
+for assertion behavior and the [dialect guide](guide/dialect_and_vocabulary.md) for vocabulary selection.
 
 ## Fragments and reference resolution
 
