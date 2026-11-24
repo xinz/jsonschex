@@ -26,21 +26,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.93 M      518.09 ns  ±1211.62%         459 ns         625 ns
-JSV              1.61 M      620.92 ns  ±1172.29%         583 ns         750 ns
-JsonXema         1.09 M      913.40 ns  ±1095.43%         709 ns        1834 ns
+JSONSchex        3.86 M      259.11 ns  ±2932.30%         208 ns         375 ns
+JSV              1.57 M      638.06 ns  ±1448.17%         583 ns         792 ns
+JsonXema         0.99 M     1007.75 ns  ±1415.34%         750 ns        2750 ns
 
 Comparison:
-JSONSchex        1.93 M
-JSV              1.61 M - 1.20x slower +102.83 ns
-JsonXema         1.09 M - 1.76x slower +395.31 ns
+JSONSchex        3.86 M
+JSV              1.57 M - 2.46x slower +378.95 ns
+JsonXema         0.99 M - 3.89x slower +748.64 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex           328 B
-JSV                 808 B - 2.46x memory usage +480 B
-JsonXema            264 B - 0.80x memory usage -64 B
+JSONSchex           392 B
+JSV                 704 B - 1.80x memory usage +312 B
+JsonXema            264 B - 0.67x memory usage -128 B
 
 **All measurements for memory usage were the same**
 
@@ -71,18 +71,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.89 M      529.03 ns  ±1355.82%         500 ns         625 ns
-JSV              1.59 M      629.35 ns   ±874.41%         583 ns         792 ns
+JSONSchex        3.22 M      310.11 ns  ±1725.87%         209 ns         375 ns
+JSV              1.56 M      643.03 ns  ±1045.06%         584 ns         792 ns
 
 Comparison:
-JSONSchex        1.89 M
-JSV              1.59 M - 1.19x slower +100.32 ns
+JSONSchex        3.22 M
+JSV              1.56 M - 2.07x slower +332.92 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex           416 B
-JSV                 880 B - 2.12x memory usage +464 B
+JSONSchex           480 B
+JSV                 776 B - 1.62x memory usage +296 B
 
 **All measurements for memory usage were the same**
 
@@ -114,21 +114,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      552.82 K        1.81 μs   ±436.42%        1.71 μs        2.42 μs
-JSV            341.30 K        2.93 μs   ±250.15%        2.79 μs        4.13 μs
-JsonXema       230.56 K        4.34 μs   ±453.20%        3.67 μs        8.38 μs
+JSONSchex      616.59 K        1.62 μs   ±575.42%        1.54 μs        2.08 μs
+JSV            408.44 K        2.45 μs   ±352.54%        2.33 μs        3.29 μs
+JsonXema       232.19 K        4.31 μs   ±506.90%        3.67 μs        8.63 μs
 
 Comparison:
-JSONSchex      552.82 K
-JSV            341.30 K - 1.62x slower +1.12 μs
-JsonXema       230.56 K - 2.40x slower +2.53 μs
+JSONSchex      616.59 K
+JSV            408.44 K - 1.51x slower +0.83 μs
+JsonXema       232.19 K - 2.66x slower +2.69 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         3.53 KB
-JSV               7.67 KB - 2.17x memory usage +4.14 KB
-JsonXema          1.69 KB - 0.48x memory usage -1.84375 KB
+JSONSchex         2.31 KB
+JSV               5.80 KB - 2.51x memory usage +3.49 KB
+JsonXema          1.62 KB - 0.70x memory usage -0.69531 KB
 
 **All measurements for memory usage were the same**
 
@@ -160,21 +160,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JsonXema       886.78 K        1.13 μs   ±516.00%        1.08 μs        1.38 μs
-JSONSchex      818.68 K        1.22 μs   ±696.78%        0.79 μs       13.42 μs
-JSV            378.44 K        2.64 μs   ±288.70%        2.50 μs        3.58 μs
+JSONSchex     1162.82 K        0.86 μs   ±874.85%        0.79 μs        1.13 μs
+JsonXema       872.39 K        1.15 μs   ±622.17%        1.08 μs        1.50 μs
+JSV            408.98 K        2.45 μs   ±229.82%        2.25 μs        5.25 μs
 
 Comparison:
-JsonXema       886.78 K
-JSONSchex      818.68 K - 1.08x slower +0.0938 μs
-JSV            378.44 K - 2.34x slower +1.51 μs
+JSONSchex     1162.82 K
+JsonXema       872.39 K - 1.33x slower +0.29 μs
+JSV            408.98 K - 2.84x slower +1.59 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JsonXema          2.80 KB
-JSONSchex         2.45 KB - 0.87x memory usage -0.35156 KB
-JSV               8.13 KB - 2.90x memory usage +5.33 KB
+JSONSchex         2.33 KB
+JsonXema          2.84 KB - 1.22x memory usage +0.51 KB
+JSV               7.13 KB - 3.06x memory usage +4.80 KB
 
 **All measurements for memory usage were the same**
 
@@ -205,18 +205,18 @@ Calculating statistics...
 Formatting results...
 
 Name                                       ips        average  deviation         median         99th %
-$ref/$id draft-2020-12 JSONSchex      248.81 K        4.02 μs   ±202.35%        3.88 μs        5.04 μs
-$ref/$id draft-2020-12 JSV            152.84 K        6.54 μs   ±151.16%        6.33 μs       11.04 μs
+$ref/$id draft-2020-12 JSONSchex      284.15 K        3.52 μs   ±182.96%        3.38 μs        5.21 μs
+$ref/$id draft-2020-12 JSV            173.94 K        5.75 μs   ±251.25%        5.33 μs       13.21 μs
 
 Comparison:
-$ref/$id draft-2020-12 JSONSchex      248.81 K
-$ref/$id draft-2020-12 JSV            152.84 K - 1.63x slower +2.52 μs
+$ref/$id draft-2020-12 JSONSchex      284.15 K
+$ref/$id draft-2020-12 JSV            173.94 K - 1.63x slower +2.23 μs
 
 Memory usage statistics:
 
 Name                                Memory usage
-$ref/$id draft-2020-12 JSONSchex         7.30 KB
-$ref/$id draft-2020-12 JSV              16.91 KB - 2.32x memory usage +9.62 KB
+$ref/$id draft-2020-12 JSONSchex         4.56 KB
+$ref/$id draft-2020-12 JSV              12.78 KB - 2.80x memory usage +8.22 KB
 
 **All measurements for memory usage were the same**
 
@@ -247,18 +247,18 @@ Calculating statistics...
 Formatting results...
 
 Name                                       ips        average  deviation         median         99th %
-$ref/$id draft-2020-12 JSONSchex      564.79 K        1.77 μs   ±418.13%        1.67 μs        2.38 μs
-$ref/$id draft-2020-12 JSV            265.10 K        3.77 μs   ±238.76%        3.54 μs        7.75 μs
+$ref/$id draft-2020-12 JSONSchex      502.35 K        1.99 μs  ±1575.02%        1.67 μs        3.67 μs
+$ref/$id draft-2020-12 JSV            294.89 K        3.39 μs   ±262.52%        3.21 μs        4.88 μs
 
 Comparison:
-$ref/$id draft-2020-12 JSONSchex      564.79 K
-$ref/$id draft-2020-12 JSV            265.10 K - 2.13x slower +2.00 μs
+$ref/$id draft-2020-12 JSONSchex      502.35 K
+$ref/$id draft-2020-12 JSV            294.89 K - 1.70x slower +1.40 μs
 
 Memory usage statistics:
 
 Name                                Memory usage
-$ref/$id draft-2020-12 JSONSchex         3.34 KB
-$ref/$id draft-2020-12 JSV               9.77 KB - 2.93x memory usage +6.43 KB
+$ref/$id draft-2020-12 JSONSchex         2.88 KB
+$ref/$id draft-2020-12 JSV               8.31 KB - 2.89x memory usage +5.44 KB
 
 **All measurements for memory usage were the same**
 
@@ -290,21 +290,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      294.93 K        3.39 μs   ±263.18%        2.79 μs          16 μs
-JsonXema       210.21 K        4.76 μs   ±174.71%        4.63 μs        6.50 μs
-JSV            141.11 K        7.09 μs    ±89.68%        6.83 μs       16.29 μs
+JSONSchex      412.51 K        2.42 μs   ±383.17%        2.29 μs        3.46 μs
+JsonXema       198.66 K        5.03 μs   ±406.79%        4.67 μs       10.88 μs
+JSV            169.83 K        5.89 μs   ±255.61%        5.54 μs       13.08 μs
 
 Comparison:
-JSONSchex      294.93 K
-JsonXema       210.21 K - 1.40x slower +1.37 μs
-JSV            141.11 K - 2.09x slower +3.70 μs
+JSONSchex      412.51 K
+JsonXema       198.66 K - 2.08x slower +2.61 μs
+JSV            169.83 K - 2.43x slower +3.46 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         7.65 KB
-JsonXema          4.22 KB - 0.55x memory usage -3.42969 KB
-JSV              19.65 KB - 2.57x memory usage +12 KB
+JSONSchex         4.33 KB
+JsonXema          4.22 KB - 0.97x memory usage -0.10938 KB
+JSV              14.50 KB - 3.35x memory usage +10.17 KB
 
 **All measurements for memory usage were the same**
 
@@ -336,21 +336,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex       33.07 K       30.24 μs    ±30.97%       29.75 μs       39.33 μs
-JsonXema        21.73 K       46.02 μs     ±6.04%       45.33 μs       56.67 μs
-JSV             14.52 K       68.87 μs     ±6.46%       67.79 μs       82.22 μs
+JSONSchex       44.36 K       22.54 μs   ±119.08%       21.38 μs       38.75 μs
+JsonXema        21.25 K       47.07 μs    ±26.38%       45.62 μs       65.50 μs
+JSV             17.73 K       56.42 μs    ±12.25%       55.04 μs       79.04 μs
 
 Comparison:
-JSONSchex       33.07 K
-JsonXema        21.73 K - 1.52x slower +15.78 μs
-JSV             14.52 K - 2.28x slower +38.63 μs
+JSONSchex       44.36 K
+JsonXema        21.25 K - 2.09x slower +24.53 μs
+JSV             17.73 K - 2.50x slower +33.87 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex        73.71 KB
-JsonXema         42.16 KB - 0.57x memory usage -31.54688 KB
-JSV             191.81 KB - 2.60x memory usage +118.10 KB
+JSONSchex        43.81 KB
+JsonXema         42.24 KB - 0.96x memory usage -1.57031 KB
+JSV             141.13 KB - 3.22x memory usage +97.31 KB
 
 **All measurements for memory usage were the same**
 
@@ -382,21 +382,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      252.16 K        3.97 μs   ±213.37%        2.88 μs       16.63 μs
-JsonXema       148.53 K        6.73 μs   ±118.55%        6.50 μs       13.42 μs
-JSV             71.47 K       13.99 μs    ±78.80%       11.29 μs       28.07 μs
+JSONSchex      343.72 K        2.91 μs   ±339.85%        2.75 μs        4.71 μs
+JsonXema       148.85 K        6.72 μs   ±111.42%        6.42 μs       14.25 μs
+JSV            103.95 K        9.62 μs   ±224.93%           9 μs       20.63 μs
 
 Comparison:
-JSONSchex      252.16 K
-JsonXema       148.53 K - 1.70x slower +2.77 μs
-JSV             71.47 K - 3.53x slower +10.03 μs
+JSONSchex      343.72 K
+JsonXema       148.85 K - 2.31x slower +3.81 μs
+JSV            103.95 K - 3.31x slower +6.71 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         9.84 KB
-JsonXema         21.84 KB - 2.22x memory usage +12 KB
-JSV              33.97 KB - 3.45x memory usage +24.13 KB
+JSONSchex         9.70 KB
+JsonXema         21.71 KB - 2.24x memory usage +12.01 KB
+JSV              30.02 KB - 3.09x memory usage +20.31 KB
 
 **All measurements for memory usage were the same**
 
@@ -427,18 +427,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.34 M        0.75 μs   ±780.38%        0.50 μs       12.79 μs
-JSV              0.62 M        1.60 μs   ±380.00%        1.50 μs        2.13 μs
+JSONSchex        1.94 M        0.52 μs  ±1165.32%        0.46 μs        0.67 μs
+JSV              0.67 M        1.49 μs   ±501.97%        1.42 μs           2 μs
 
 Comparison:
-JSONSchex        1.34 M
-JSV              0.62 M - 2.14x slower +0.86 μs
+JSONSchex        1.94 M
+JSV              0.67 M - 2.89x slower +0.98 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.22 KB
-JSV               5.55 KB - 2.50x memory usage +3.33 KB
+JSONSchex         1.74 KB
+JSV               4.40 KB - 2.52x memory usage +2.66 KB
 
 **All measurements for memory usage were the same**
 
@@ -469,18 +469,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.38 M        0.73 μs  ±1009.48%        0.38 μs       12.46 μs
-JSV              0.59 M        1.70 μs   ±466.99%        1.63 μs        2.29 μs
+JSONSchex        1.89 M        0.53 μs  ±1006.82%        0.50 μs        0.71 μs
+JSV              0.60 M        1.67 μs   ±322.93%        1.54 μs        2.38 μs
 
 Comparison:
-JSONSchex        1.38 M
-JSV              0.59 M - 2.34x slower +0.97 μs
+JSONSchex        1.89 M
+JSV              0.60 M - 3.15x slower +1.14 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.21 KB
-JSV               6.19 KB - 2.80x memory usage +3.98 KB
+JSONSchex         2.29 KB
+JSV               5.30 KB - 2.31x memory usage +3.01 KB
 
 **All measurements for memory usage were the same**
 
@@ -512,21 +512,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JsonXema       286.37 K        3.49 μs    ±96.47%        3.38 μs        5.79 μs
-JSONSchex      262.41 K        3.81 μs   ±206.62%        3.67 μs        5.63 μs
-JSV            229.11 K        4.36 μs   ±136.06%        4.21 μs        7.79 μs
+JsonXema       274.39 K        3.64 μs    ±32.19%        3.54 μs        5.17 μs
+JSONSchex      268.65 K        3.72 μs   ±166.17%        3.54 μs        8.63 μs
+JSV            219.55 K        4.55 μs   ±214.37%        4.33 μs        9.17 μs
 
 Comparison:
-JsonXema       286.37 K
-JSONSchex      262.41 K - 1.09x slower +0.32 μs
-JSV            229.11 K - 1.25x slower +0.87 μs
+JsonXema       274.39 K
+JSONSchex      268.65 K - 1.02x slower +0.0779 μs
+JSV            219.55 K - 1.25x slower +0.91 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JsonXema          0.37 KB
-JSONSchex        13.34 KB - 36.32x memory usage +12.97 KB
-JSV              16.51 KB - 44.96x memory usage +16.14 KB
+JsonXema          0.41 KB
+JSONSchex        13.38 KB - 32.94x memory usage +12.98 KB
+JSV              16.55 KB - 40.73x memory usage +16.14 KB
 
 **All measurements for memory usage were the same**
 
@@ -558,21 +558,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      257.63 K        3.88 μs   ±222.72%        3.67 μs        9.17 μs
-JsonXema       241.55 K        4.14 μs   ±113.13%        3.96 μs        8.63 μs
-JSV            222.75 K        4.49 μs   ±268.34%        4.29 μs        9.75 μs
+JSONSchex      269.47 K        3.71 μs   ±181.48%        3.54 μs        8.50 μs
+JsonXema       228.95 K        4.37 μs   ±238.96%        4.04 μs       11.25 μs
+JSV            211.82 K        4.72 μs   ±374.85%        4.38 μs       12.33 μs
 
 Comparison:
-JSONSchex      257.63 K
-JsonXema       241.55 K - 1.07x slower +0.26 μs
-JSV            222.75 K - 1.16x slower +0.61 μs
+JSONSchex      269.47 K
+JsonXema       228.95 K - 1.18x slower +0.66 μs
+JSV            211.82 K - 1.27x slower +1.01 μs
 
 Memory usage statistics:
 
 Name         Memory usage
 JSONSchex        13.57 KB
-JsonXema          2.48 KB - 0.18x memory usage -11.08594 KB
-JSV              16.71 KB - 1.23x memory usage +3.14 KB
+JsonXema          2.52 KB - 0.19x memory usage -11.04688 KB
+JSV              16.75 KB - 1.23x memory usage +3.18 KB
 
 **All measurements for memory usage were the same**
 
@@ -604,21 +604,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      923.45 K        1.08 μs   ±656.17%        0.75 μs       13.21 μs
-JsonXema       760.61 K        1.31 μs   ±429.98%        1.29 μs        1.50 μs
-JSV            630.20 K        1.59 μs   ±386.15%        1.50 μs        2.08 μs
+JSONSchex     1825.50 K        0.55 μs  ±1307.85%        0.50 μs        0.67 μs
+JSV            759.43 K        1.32 μs   ±699.43%        1.21 μs        2.50 μs
+JsonXema       737.55 K        1.36 μs   ±588.35%        1.25 μs        1.79 μs
 
 Comparison:
-JSONSchex      923.45 K
-JsonXema       760.61 K - 1.21x slower +0.23 μs
-JSV            630.20 K - 1.47x slower +0.50 μs
+JSONSchex     1825.50 K
+JSV            759.43 K - 2.40x slower +0.77 μs
+JsonXema       737.55 K - 2.48x slower +0.81 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.74 KB
-JsonXema          0.91 KB - 0.52x memory usage -0.82813 KB
-JSV               4.33 KB - 2.48x memory usage +2.59 KB
+JSONSchex           832 B
+JSV                3304 B - 3.97x memory usage +2472 B
+JsonXema            936 B - 1.13x memory usage +104 B
 
 **All measurements for memory usage were the same**
 
@@ -650,21 +650,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     1252.81 K        0.80 μs   ±728.40%        0.50 μs       12.63 μs
-JSV            608.08 K        1.64 μs   ±428.86%        1.54 μs        2.46 μs
-JsonXema       448.08 K        2.23 μs   ±567.05%        2.13 μs        2.88 μs
+JSONSchex     1223.56 K        0.82 μs   ±811.27%        0.54 μs       12.75 μs
+JSV            478.76 K        2.09 μs   ±449.23%        1.46 μs       14.67 μs
+JsonXema       447.03 K        2.24 μs   ±322.07%        2.13 μs        3.17 μs
 
 Comparison:
-JSONSchex     1252.81 K
-JSV            608.08 K - 2.06x slower +0.85 μs
-JsonXema       448.08 K - 2.80x slower +1.43 μs
+JSONSchex     1223.56 K
+JSV            478.76 K - 2.56x slower +1.27 μs
+JsonXema       447.03 K - 2.74x slower +1.42 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.55 KB
-JSV               5.18 KB - 3.35x memory usage +3.63 KB
-JsonXema          5.69 KB - 3.68x memory usage +4.14 KB
+JSONSchex         1.43 KB
+JSV               4.35 KB - 3.04x memory usage +2.92 KB
+JsonXema          5.69 KB - 3.98x memory usage +4.26 KB
 
 **All measurements for memory usage were the same**
 
@@ -696,21 +696,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JsonXema      1029.84 K        0.97 μs   ±814.09%        0.92 μs        1.21 μs
-JSONSchex      988.71 K        1.01 μs   ±554.16%        0.71 μs       13.13 μs
-JSV            468.21 K        2.14 μs   ±304.52%        2.04 μs        2.88 μs
+JSONSchex        1.16 M      859.83 ns   ±895.00%         625 ns    12706.60 ns
+JsonXema         1.04 M      962.94 ns   ±833.78%         875 ns        1208 ns
+JSV              0.53 M     1883.15 ns   ±412.89%        1750 ns        2583 ns
 
 Comparison:
-JsonXema      1029.84 K
-JSONSchex      988.71 K - 1.04x slower +0.0404 μs
-JSV            468.21 K - 2.20x slower +1.16 μs
+JSONSchex        1.16 M
+JsonXema         1.04 M - 1.12x slower +103.11 ns
+JSV              0.53 M - 2.19x slower +1023.32 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JsonXema          0.77 KB
-JSONSchex         2.16 KB - 2.80x memory usage +1.39 KB
-JSV               6.38 KB - 8.24x memory usage +5.60 KB
+JSONSchex         1.69 KB
+JsonXema          0.77 KB - 0.46x memory usage -0.91406 KB
+JSV               5.11 KB - 3.03x memory usage +3.42 KB
 
 **All measurements for memory usage were the same**
 
@@ -742,21 +742,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     1407.39 K        0.71 μs   ±890.43%        0.67 μs        0.88 μs
-JsonXema       810.43 K        1.23 μs   ±680.35%        1.13 μs        1.58 μs
-JSV            451.90 K        2.21 μs   ±368.27%        2.08 μs        3.33 μs
+JSONSchex      995.33 K        1.00 μs   ±458.69%        0.71 μs       13.13 μs
+JsonXema       826.85 K        1.21 μs   ±452.26%        1.17 μs        1.54 μs
+JSV            486.97 K        2.05 μs   ±458.95%        1.92 μs        3.42 μs
 
 Comparison:
-JSONSchex     1407.39 K
-JsonXema       810.43 K - 1.74x slower +0.52 μs
-JSV            451.90 K - 3.11x slower +1.50 μs
+JSONSchex      995.33 K
+JsonXema       826.85 K - 1.20x slower +0.20 μs
+JSV            486.97 K - 2.04x slower +1.05 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.21 KB
-JsonXema          2.52 KB - 1.14x memory usage +0.31 KB
-JSV               6.88 KB - 3.11x memory usage +4.67 KB
+JSONSchex         2.19 KB
+JsonXema          2.52 KB - 1.15x memory usage +0.34 KB
+JSV               5.77 KB - 2.64x memory usage +3.59 KB
 
 **All measurements for memory usage were the same**
 
@@ -788,21 +788,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     1093.86 K        0.91 μs   ±959.49%        0.83 μs        1.21 μs
-JsonXema       725.46 K        1.38 μs   ±467.54%        1.33 μs        1.67 μs
-JSV            351.79 K        2.84 μs   ±251.83%        2.67 μs        4.25 μs
+JSONSchex      883.28 K        1.13 μs   ±668.95%        0.79 μs       13.42 μs
+JsonXema       731.02 K        1.37 μs   ±508.37%        1.29 μs        1.75 μs
+JSV            402.54 K        2.48 μs   ±474.07%        2.33 μs        3.58 μs
 
 Comparison:
-JSONSchex     1093.86 K
-JsonXema       725.46 K - 1.51x slower +0.46 μs
-JSV            351.79 K - 3.11x slower +1.93 μs
+JSONSchex      883.28 K
+JsonXema       731.02 K - 1.21x slower +0.24 μs
+JSV            402.54 K - 2.19x slower +1.35 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.63 KB
-JsonXema          1.65 KB - 0.63x memory usage -0.97656 KB
-JSV               8.40 KB - 3.20x memory usage +5.77 KB
+JSONSchex         2.34 KB
+JsonXema          1.65 KB - 0.70x memory usage -0.69531 KB
+JSV               6.80 KB - 2.90x memory usage +4.45 KB
 
 **All measurements for memory usage were the same**
 
@@ -834,21 +834,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      810.97 K        1.23 μs   ±631.80%        0.79 μs       13.38 μs
-JsonXema       612.79 K        1.63 μs   ±401.15%        1.58 μs        2.08 μs
-JSV            326.06 K        3.07 μs   ±213.59%        2.63 μs       15.63 μs
+JSONSchex      784.36 K        1.27 μs   ±888.39%        0.83 μs       13.54 μs
+JsonXema       406.78 K        2.46 μs   ±357.95%        1.58 μs       15.08 μs
+JSV            295.55 K        3.38 μs   ±238.32%        2.42 μs       16.42 μs
 
 Comparison:
-JSONSchex      810.97 K
-JsonXema       612.79 K - 1.32x slower +0.40 μs
-JSV            326.06 K - 2.49x slower +1.83 μs
+JSONSchex      784.36 K
+JsonXema       406.78 K - 1.93x slower +1.18 μs
+JSV            295.55 K - 2.65x slower +2.11 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.90 KB
-JsonXema          3.93 KB - 1.36x memory usage +1.03 KB
-JSV               8.92 KB - 3.08x memory usage +6.02 KB
+JSONSchex         2.87 KB
+JsonXema          3.93 KB - 1.37x memory usage +1.06 KB
+JSV               7.48 KB - 2.61x memory usage +4.61 KB
 
 **All measurements for memory usage were the same**
 
@@ -880,21 +880,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        3.51 M      284.98 ns  ±2548.91%         167 ns         334 ns
-JsonXema         1.48 M      674.05 ns   ±967.03%         625 ns         875 ns
-JSV              1.46 M      683.82 ns  ±1070.54%         625 ns         875 ns
+JSONSchex        2.82 M      354.79 ns  ±2379.83%         250 ns         459 ns
+JSV              1.65 M      605.61 ns   ±965.02%         542 ns         750 ns
+JsonXema         1.49 M      671.81 ns   ±938.80%         625 ns         834 ns
 
 Comparison:
-JSONSchex        3.51 M
-JsonXema         1.48 M - 2.37x slower +389.08 ns
-JSV              1.46 M - 2.40x slower +398.85 ns
+JSONSchex        2.82 M
+JSV              1.65 M - 1.71x slower +250.82 ns
+JsonXema         1.49 M - 1.89x slower +317.02 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex           576 B
-JsonXema            656 B - 1.14x memory usage +80 B
-JSV                2064 B - 3.58x memory usage +1488 B
+JSONSchex           568 B
+JSV                1656 B - 2.92x memory usage +1088 B
+JsonXema            656 B - 1.15x memory usage +88 B
 
 **All measurements for memory usage were the same**
 
@@ -926,21 +926,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        2.72 M      367.66 ns  ±2338.38%         250 ns         500 ns
-JSV              1.13 M      882.96 ns   ±830.07%         584 ns       13125 ns
-JsonXema         1.11 M      899.81 ns   ±587.97%         875 ns        1084 ns
+JSONSchex        2.93 M      341.15 ns  ±3089.33%         250 ns         375 ns
+JSV              1.32 M      756.97 ns   ±799.44%         500 ns       12791 ns
+JsonXema         1.07 M      935.04 ns   ±723.57%         875 ns        1291 ns
 
 Comparison:
-JSONSchex        2.72 M
-JSV              1.13 M - 2.40x slower +515.30 ns
-JsonXema         1.11 M - 2.45x slower +532.15 ns
+JSONSchex        2.93 M
+JSV              1.32 M - 2.22x slower +415.82 ns
+JsonXema         1.07 M - 2.74x slower +593.89 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         0.65 KB
-JSV               1.77 KB - 2.72x memory usage +1.12 KB
-JsonXema          1.34 KB - 2.06x memory usage +0.69 KB
+JSONSchex         0.48 KB
+JSV               1.33 KB - 2.74x memory usage +0.84 KB
+JsonXema          1.34 KB - 2.76x memory usage +0.85 KB
 
 **All measurements for memory usage were the same**
 
@@ -972,21 +972,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      817.04 K        1.22 μs   ±457.03%        0.96 μs       13.29 μs
-JSV            519.49 K        1.92 μs   ±345.41%        1.83 μs        2.33 μs
-JsonXema       492.40 K        2.03 μs   ±355.73%        1.83 μs        3.58 μs
+JSONSchex     1269.40 K        0.79 μs  ±1007.29%        0.75 μs        0.96 μs
+JSV            608.15 K        1.64 μs   ±366.65%        1.54 μs        2.21 μs
+JsonXema       494.89 K        2.02 μs   ±570.33%        1.83 μs        3.29 μs
 
 Comparison:
-JSONSchex      817.04 K
-JSV            519.49 K - 1.57x slower +0.70 μs
-JsonXema       492.40 K - 1.66x slower +0.81 μs
+JSONSchex     1269.40 K
+JSV            608.15 K - 2.09x slower +0.86 μs
+JsonXema       494.89 K - 2.57x slower +1.23 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.52 KB
-JSV               3.94 KB - 2.60x memory usage +2.42 KB
-JsonXema          0.79 KB - 0.52x memory usage -0.72656 KB
+JSONSchex           688 B
+JSV                3032 B - 4.41x memory usage +2344 B
+JsonXema            808 B - 1.17x memory usage +120 B
 
 **All measurements for memory usage were the same**
 
@@ -1018,21 +1018,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     1129.11 K        0.89 μs   ±635.93%        0.83 μs        1.08 μs
-JSV            497.90 K        2.01 μs   ±314.64%        1.92 μs        2.58 μs
-JsonXema       482.01 K        2.07 μs   ±332.58%        1.88 μs        3.71 μs
+JSONSchex     1078.45 K        0.93 μs  ±1040.37%        0.75 μs        5.50 μs
+JSV            563.42 K        1.77 μs   ±381.78%        1.67 μs        2.38 μs
+JsonXema       480.61 K        2.08 μs   ±389.86%        1.88 μs        3.79 μs
 
 Comparison:
-JSONSchex     1129.11 K
-JSV            497.90 K - 2.27x slower +1.12 μs
-JsonXema       482.01 K - 2.34x slower +1.19 μs
+JSONSchex     1078.45 K
+JSV            563.42 K - 1.91x slower +0.85 μs
+JsonXema       480.61 K - 2.24x slower +1.15 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.40 KB
-JSV               4.40 KB - 3.15x memory usage +3 KB
-JsonXema          1.07 KB - 0.77x memory usage -0.32813 KB
+JSONSchex         0.86 KB
+JSV               3.49 KB - 4.06x memory usage +2.63 KB
+JsonXema          1.07 KB - 1.25x memory usage +0.21 KB
 
 **All measurements for memory usage were the same**
 
@@ -1064,21 +1064,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     1187.02 K        0.84 μs   ±824.63%        0.79 μs           1 μs
-JSV            486.88 K        2.05 μs   ±318.96%        1.96 μs        2.75 μs
-JsonXema       452.46 K        2.21 μs   ±326.56%        2.04 μs        3.88 μs
+JSONSchex     1140.98 K        0.88 μs   ±869.56%        0.71 μs        4.67 μs
+JsonXema       445.19 K        2.25 μs   ±386.68%        2.04 μs           4 μs
+JSV            421.08 K        2.37 μs   ±360.10%        1.71 μs          15 μs
 
 Comparison:
-JSONSchex     1187.02 K
-JSV            486.88 K - 2.44x slower +1.21 μs
-JsonXema       452.46 K - 2.62x slower +1.37 μs
+JSONSchex     1140.98 K
+JsonXema       445.19 K - 2.56x slower +1.37 μs
+JSV            421.08 K - 2.71x slower +1.50 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.42 KB
-JSV               4.73 KB - 3.32x memory usage +3.30 KB
-JsonXema          2.91 KB - 2.04x memory usage +1.48 KB
+JSONSchex         0.91 KB
+JsonXema          2.84 KB - 3.11x memory usage +1.93 KB
+JSV               3.86 KB - 4.22x memory usage +2.95 KB
 
 **All measurements for memory usage were the same**
 
@@ -1110,21 +1110,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      455.52 K        2.20 μs   ±325.28%        1.88 μs       14.54 μs
-JSV            366.29 K        2.73 μs   ±295.31%        2.63 μs        3.38 μs
-JsonXema       162.72 K        6.15 μs  ±1051.28%        4.08 μs       10.13 μs
+JSONSchex      501.27 K        1.99 μs   ±303.66%        1.71 μs       14.04 μs
+JSV            413.99 K        2.42 μs   ±380.87%        2.33 μs        3.04 μs
+JsonXema       201.88 K        4.95 μs   ±388.85%        4.08 μs           9 μs
 
 Comparison:
-JSONSchex      455.52 K
-JSV            366.29 K - 1.24x slower +0.53 μs
-JsonXema       162.72 K - 2.80x slower +3.95 μs
+JSONSchex      501.27 K
+JSV            413.99 K - 1.21x slower +0.42 μs
+JsonXema       201.88 K - 2.48x slower +2.96 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.83 KB
-JSV               3.79 KB - 2.07x memory usage +1.96 KB
-JsonXema          1.82 KB - 1.00x memory usage -0.00781 KB
+JSONSchex         1.38 KB
+JSV               2.93 KB - 2.12x memory usage +1.55 KB
+JsonXema          1.82 KB - 1.32x memory usage +0.44 KB
 
 **All measurements for memory usage were the same**
 
@@ -1156,21 +1156,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      628.19 K        1.59 μs   ±489.20%        1.29 μs       13.75 μs
-JSV            461.89 K        2.17 μs   ±388.33%        2.08 μs        2.79 μs
-JsonXema       222.49 K        4.49 μs   ±273.75%        3.83 μs        8.96 μs
+JSONSchex      660.51 K        1.51 μs   ±426.60%        1.25 μs       13.63 μs
+JSV            442.90 K        2.26 μs   ±431.31%        1.83 μs       14.54 μs
+JsonXema       192.68 K        5.19 μs   ±224.37%        3.88 μs       20.83 μs
 
 Comparison:
-JSONSchex      628.19 K
-JSV            461.89 K - 1.36x slower +0.57 μs
-JsonXema       222.49 K - 2.82x slower +2.90 μs
+JSONSchex      660.51 K
+JSV            442.90 K - 1.49x slower +0.74 μs
+JsonXema       192.68 K - 3.43x slower +3.68 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.35 KB
-JSV               3.54 KB - 2.62x memory usage +2.19 KB
-JsonXema          5.23 KB - 3.87x memory usage +3.88 KB
+JSONSchex         1.12 KB
+JSV               2.95 KB - 2.64x memory usage +1.84 KB
+JsonXema          5.20 KB - 4.65x memory usage +4.08 KB
 
 **All measurements for memory usage were the same**
 
@@ -1202,21 +1202,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JsonXema      1013.02 K        0.99 μs   ±789.80%        0.92 μs        1.21 μs
-JSONSchex      976.62 K        1.02 μs   ±421.62%        0.75 μs       13.13 μs
-JSV            729.37 K        1.37 μs   ±616.42%        1.29 μs        1.75 μs
+JSONSchex        1.16 M      860.41 ns  ±1005.92%         583 ns       12458 ns
+JsonXema         1.01 M      993.72 ns   ±897.70%         917 ns        1209 ns
+JSV              0.95 M     1048.94 ns   ±644.27%        1000 ns        1333 ns
 
 Comparison:
-JsonXema      1013.02 K
-JSONSchex      976.62 K - 1.04x slower +0.0368 μs
-JSV            729.37 K - 1.39x slower +0.38 μs
+JSONSchex        1.16 M
+JsonXema         1.01 M - 1.15x slower +133.31 ns
+JSV              0.95 M - 1.22x slower +188.53 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JsonXema          1.21 KB
-JSONSchex         1.70 KB - 1.40x memory usage +0.48 KB
-JSV               3.57 KB - 2.95x memory usage +2.36 KB
+JSONSchex         1.31 KB
+JsonXema          1.12 KB - 0.85x memory usage -0.19531 KB
+JSV               2.58 KB - 1.96x memory usage +1.27 KB
 
 **All measurements for memory usage were the same**
 
@@ -1248,21 +1248,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        2.16 M      463.27 ns  ±1445.81%         416 ns         584 ns
-JsonXema         1.14 M      877.78 ns   ±979.46%         792 ns        1125 ns
-JSV              0.83 M     1202.07 ns   ±752.66%        1084 ns        1750 ns
+JSONSchex        1.53 M      653.83 ns   ±882.43%         458 ns       12292 ns
+JsonXema         1.14 M      876.34 ns   ±929.17%         792 ns        1125 ns
+JSV              0.73 M     1370.69 ns   ±595.45%         958 ns       13708 ns
 
 Comparison:
-JSONSchex        2.16 M
-JsonXema         1.14 M - 1.89x slower +414.51 ns
-JSV              0.83 M - 2.59x slower +738.79 ns
+JSONSchex        1.53 M
+JsonXema         1.14 M - 1.34x slower +222.51 ns
+JSV              0.73 M - 2.10x slower +716.86 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.28 KB
-JsonXema          2.32 KB - 1.81x memory usage +1.04 KB
-JSV               3.64 KB - 2.84x memory usage +2.36 KB
+JSONSchex         1.30 KB
+JsonXema          2.32 KB - 1.79x memory usage +1.02 KB
+JSV               3.05 KB - 2.35x memory usage +1.75 KB
 
 **All measurements for memory usage were the same**
 
@@ -1293,18 +1293,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      985.61 K        1.01 μs   ±612.86%        0.71 μs       13.17 μs
-JSV            625.53 K        1.60 μs   ±429.81%        1.50 μs        2.13 μs
+JSONSchex      884.81 K        1.13 μs   ±556.85%        0.79 μs       13.33 μs
+JSV            689.34 K        1.45 μs   ±952.31%        1.29 μs        2.21 μs
 
 Comparison:
-JSONSchex      985.61 K
-JSV            625.53 K - 1.58x slower +0.58 μs
+JSONSchex      884.81 K
+JSV            689.34 K - 1.28x slower +0.32 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.73 KB
-JSV               4.93 KB - 2.86x memory usage +3.20 KB
+JSONSchex         1.70 KB
+JSV               4.13 KB - 2.43x memory usage +2.43 KB
 
 **All measurements for memory usage were the same**
 
@@ -1335,18 +1335,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.37 M        0.73 μs   ±899.45%        0.54 μs        3.04 μs
-JSV              0.61 M        1.64 μs   ±528.57%        1.54 μs        2.21 μs
+JSONSchex        1.03 M        0.97 μs   ±649.96%        0.67 μs       13.13 μs
+JSV              0.67 M        1.49 μs   ±466.05%        1.38 μs           2 μs
 
 Comparison:
-JSONSchex        1.37 M
-JSV              0.61 M - 2.25x slower +0.91 μs
+JSONSchex        1.03 M
+JSV              0.67 M - 1.53x slower +0.52 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.60 KB
-JSV               5.12 KB - 3.20x memory usage +3.52 KB
+JSONSchex         1.57 KB
+JSV               4.38 KB - 2.79x memory usage +2.81 KB
 
 **All measurements for memory usage were the same**
 
@@ -1377,18 +1377,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.03 M        0.97 μs   ±706.26%        0.63 μs       13.04 μs
-JSV              0.54 M        1.86 μs   ±440.99%        1.75 μs        2.63 μs
+JSONSchex      908.61 K        1.10 μs   ±576.28%        0.79 μs       13.33 μs
+JSV            393.74 K        2.54 μs   ±665.60%        1.71 μs       15.46 μs
 
 Comparison:
-JSONSchex        1.03 M
-JSV              0.54 M - 1.92x slower +0.89 μs
+JSONSchex      908.61 K
+JSV            393.74 K - 2.31x slower +1.44 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.07 KB
-JSV               5.78 KB - 2.79x memory usage +3.71 KB
+JSONSchex         2.04 KB
+JSV               5.01 KB - 2.46x memory usage +2.97 KB
 
 **All measurements for memory usage were the same**
 
@@ -1419,18 +1419,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.05 M        0.95 μs   ±790.20%        0.67 μs          13 μs
-JSV              0.66 M        1.52 μs   ±451.61%        1.42 μs        2.17 μs
+JSONSchex        1.62 M        0.62 μs  ±1246.55%        0.46 μs        1.29 μs
+JSV              0.84 M        1.18 μs   ±598.88%        1.13 μs        1.54 μs
 
 Comparison:
-JSONSchex        1.05 M
-JSV              0.66 M - 1.60x slower +0.57 μs
+JSONSchex        1.62 M
+JSV              0.84 M - 1.92x slower +0.57 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.62 KB
-JSV               3.98 KB - 2.46x memory usage +2.36 KB
+JSONSchex         0.70 KB
+JSV               2.98 KB - 4.29x memory usage +2.29 KB
 
 **All measurements for memory usage were the same**
 
@@ -1461,18 +1461,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.66 M        0.60 μs  ±1113.94%        0.42 μs        5.46 μs
-JSV              0.92 M        1.09 μs   ±692.87%           1 μs        1.46 μs
+JSONSchex        1.83 M        0.55 μs  ±1998.24%        0.38 μs        1.17 μs
+JSV              0.97 M        1.03 μs  ±2137.39%        0.83 μs        1.58 μs
 
 Comparison:
-JSONSchex        1.66 M
-JSV              0.92 M - 1.81x slower +0.49 μs
+JSONSchex        1.83 M
+JSV              0.97 M - 1.89x slower +0.48 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.06 KB
-JSV               2.93 KB - 2.76x memory usage +1.87 KB
+JSONSchex         0.74 KB
+JSV               2.19 KB - 2.95x memory usage +1.45 KB
 
 **All measurements for memory usage were the same**
 
@@ -1503,18 +1503,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        1.25 M        0.80 μs   ±811.42%        0.54 μs       12.83 μs
-JSV              0.64 M        1.55 μs   ±539.46%        1.46 μs        2.04 μs
+JSONSchex        1.46 M        0.69 μs   ±744.82%        0.50 μs       12.29 μs
+JSV              0.52 M        1.91 μs   ±665.49%        1.29 μs       14.50 μs
 
 Comparison:
-JSONSchex        1.25 M
-JSV              0.64 M - 1.95x slower +0.76 μs
+JSONSchex        1.46 M
+JSV              0.52 M - 2.79x slower +1.23 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.34 KB
-JSV               4.28 KB - 3.20x memory usage +2.95 KB
+JSONSchex         1.02 KB
+JSV               3.33 KB - 3.25x memory usage +2.30 KB
 
 **All measurements for memory usage were the same**
 
@@ -1546,21 +1546,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        8.38 K      119.33 μs     ±6.67%      117.00 μs      151.80 μs
-JsonXema         5.53 K      180.85 μs    ±10.26%      176.63 μs      226.12 μs
-JSV              2.96 K      337.42 μs    ±11.81%      328.63 μs      466.09 μs
+JSONSchex        8.09 K      123.55 μs    ±50.83%      118.67 μs      222.92 μs
+JsonXema         5.69 K      175.65 μs     ±5.52%      172.29 μs      210.50 μs
+JSV              3.79 K      264.09 μs    ±15.84%      258.33 μs      365.28 μs
 
 Comparison:
-JSONSchex        8.38 K
-JsonXema         5.53 K - 1.52x slower +61.52 μs
-JSV              2.96 K - 2.83x slower +218.09 μs
+JSONSchex        8.09 K
+JsonXema         5.69 K - 1.42x slower +52.10 μs
+JSV              3.79 K - 2.14x slower +140.54 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex       278.52 KB
-JsonXema        133.40 KB - 0.48x memory usage -145.12500 KB
-JSV             806.55 KB - 2.90x memory usage +528.02 KB
+JSONSchex       166.23 KB
+JsonXema        133.67 KB - 0.80x memory usage -32.56250 KB
+JSV             581.77 KB - 3.50x memory usage +415.53 KB
 
 **All measurements for memory usage were the same**
 
@@ -1592,21 +1592,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        6.74 K      148.29 μs    ±13.59%      146.38 μs      195.33 μs
-JsonXema         5.61 K      178.13 μs    ±17.75%      173.25 μs      237.34 μs
-JSV              2.26 K      441.55 μs    ±12.62%      436.50 μs      592.45 μs
+JSONSchex        8.73 K      114.58 μs    ±25.98%      113.67 μs      155.75 μs
+JsonXema         4.21 K      237.39 μs    ±22.73%      245.41 μs      322.35 μs
+JSV              2.88 K      347.73 μs    ±12.50%      343.12 μs      497.34 μs
 
 Comparison:
-JSONSchex        6.74 K
-JsonXema         5.61 K - 1.20x slower +29.84 μs
-JSV              2.26 K - 2.98x slower +293.26 μs
+JSONSchex        8.73 K
+JsonXema         4.21 K - 2.07x slower +122.81 μs
+JSV              2.88 K - 3.03x slower +233.15 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex       243.51 KB
-JsonXema        168.66 KB - 0.69x memory usage -74.85156 KB
-JSV             734.20 KB - 3.02x memory usage +490.69 KB
+JSONSchex       154.04 KB
+JsonXema        168.66 KB - 1.09x memory usage +14.62 KB
+JSV             535.41 KB - 3.48x memory usage +381.37 KB
 
 **All measurements for memory usage were the same**
 
@@ -1638,21 +1638,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      146.10 K        6.84 μs    ±89.12%        5.96 μs       20.79 μs
-JSV            124.65 K        8.02 μs    ±50.04%        7.83 μs       12.13 μs
-JsonXema        82.35 K       12.14 μs   ±264.70%       10.17 μs       24.17 μs
+JSONSchex      154.11 K        6.49 μs    ±88.03%        6.25 μs       12.04 μs
+JSV            124.22 K        8.05 μs    ±79.42%        7.79 μs       15.08 μs
+JsonXema        76.65 K       13.05 μs   ±264.36%       10.42 μs       39.74 μs
 
 Comparison:
-JSONSchex      146.10 K
-JSV            124.65 K - 1.17x slower +1.18 μs
-JsonXema        82.35 K - 1.77x slower +5.30 μs
+JSONSchex      154.11 K
+JSV            124.22 K - 1.24x slower +1.56 μs
+JsonXema        76.65 K - 2.01x slower +6.56 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex            4 KB
-JSV               8.96 KB - 2.24x memory usage +4.96 KB
-JsonXema          2.50 KB - 0.63x memory usage -1.50000 KB
+JSONSchex         4.13 KB
+JSV               7.09 KB - 1.72x memory usage +2.97 KB
+JsonXema          2.50 KB - 0.61x memory usage -1.62500 KB
 
 **All measurements for memory usage were the same**
 
@@ -1684,21 +1684,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      134.76 K        7.42 μs    ±84.49%        6.38 μs       21.46 μs
-JSV            113.35 K        8.82 μs    ±68.33%        8.50 μs       15.50 μs
-JsonXema        68.54 K       14.59 μs   ±112.66%       12.33 μs       58.17 μs
+JSONSchex      144.45 K        6.92 μs   ±190.14%        6.67 μs       12.92 μs
+JSV            114.81 K        8.71 μs    ±91.54%        8.42 μs       16.04 μs
+JsonXema        71.83 K       13.92 μs   ±124.29%       11.96 μs       80.71 μs
 
 Comparison:
-JSONSchex      134.76 K
-JSV            113.35 K - 1.19x slower +1.40 μs
-JsonXema        68.54 K - 1.97x slower +7.17 μs
+JSONSchex      144.45 K
+JSV            114.81 K - 1.26x slower +1.79 μs
+JsonXema        71.83 K - 2.01x slower +7.00 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         4.48 KB
-JSV              10.05 KB - 2.25x memory usage +5.58 KB
-JsonXema          7.18 KB - 1.60x memory usage +2.70 KB
+JSONSchex         4.59 KB
+JSV               8.21 KB - 1.79x memory usage +3.63 KB
+JsonXema          7.18 KB - 1.57x memory usage +2.59 KB
 
 **All measurements for memory usage were the same**
 
@@ -1730,20 +1730,20 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     1014.53 K        0.99 μs   ±562.24%        0.75 μs       12.88 μs
-JSV            393.50 K        2.54 μs   ±345.01%        2.33 μs        5.79 μs
-JsonXema       345.24 K        2.90 μs  ±1194.96%        2.08 μs        6.54 μs
+JSONSchex     1201.06 K        0.83 μs  ±1226.26%        0.75 μs        1.08 μs
+JSV            389.86 K        2.57 μs   ±259.42%        2.33 μs        7.21 μs
+JsonXema       350.57 K        2.85 μs  ±1348.75%        2.04 μs        6.46 μs
 
 Comparison:
-JSONSchex     1014.53 K
-JSV            393.50 K - 2.58x slower +1.56 μs
-JsonXema       345.24 K - 2.94x slower +1.91 μs
+JSONSchex     1201.06 K
+JSV            389.86 K - 3.08x slower +1.73 μs
+JsonXema       350.57 K - 3.43x slower +2.02 μs
 
 Memory usage statistics:
 
 Name         Memory usage
 JSONSchex         1.09 KB
-JSV              15.73 KB - 14.39x memory usage +14.64 KB
+JSV              15.63 KB - 14.29x memory usage +14.54 KB
 JsonXema          0.55 KB - 0.50x memory usage -0.54688 KB
 
 **All measurements for memory usage were the same**
@@ -1776,20 +1776,20 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex     3894.20 K        0.26 μs  ±2206.20%        0.21 μs        0.33 μs
-JSV            474.63 K        2.11 μs   ±347.91%        1.96 μs        3.17 μs
-JsonXema       402.92 K        2.48 μs   ±544.89%           2 μs        5.71 μs
+JSONSchex     3795.84 K        0.26 μs  ±1735.86%        0.21 μs        0.33 μs
+JSV            467.98 K        2.14 μs   ±740.52%        1.96 μs        3.67 μs
+JsonXema       381.83 K        2.62 μs   ±731.45%        1.96 μs        6.25 μs
 
 Comparison:
-JSONSchex     3894.20 K
-JSV            474.63 K - 8.20x slower +1.85 μs
-JsonXema       402.92 K - 9.66x slower +2.23 μs
+JSONSchex     3795.84 K
+JSV            467.98 K - 8.11x slower +1.87 μs
+JsonXema       381.83 K - 9.94x slower +2.36 μs
 
 Memory usage statistics:
 
 Name         Memory usage
 JSONSchex         0.38 KB
-JSV              10.52 KB - 27.49x memory usage +10.14 KB
+JSV              10.42 KB - 27.22x memory usage +10.04 KB
 JsonXema          1.24 KB - 3.24x memory usage +0.86 KB
 
 **All measurements for memory usage were the same**
@@ -1822,21 +1822,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        4.71 M      212.31 ns  ±4052.49%         125 ns         291 ns
-JSV              3.17 M      315.03 ns  ±2363.49%         250 ns         417 ns
-JsonXema         0.65 M     1530.82 ns   ±671.68%        1292 ns        2458 ns
+JSONSchex        6.88 M      145.30 ns  ±5424.81%         125 ns         167 ns
+JSV              3.28 M      304.75 ns  ±2601.05%         250 ns         417 ns
+JsonXema         0.64 M     1571.11 ns   ±659.73%        1333 ns        3166 ns
 
 Comparison:
-JSONSchex        4.71 M
-JSV              3.17 M - 1.48x slower +102.72 ns
-JsonXema         0.65 M - 7.21x slower +1318.51 ns
+JSONSchex        6.88 M
+JSV              3.28 M - 2.10x slower +159.45 ns
+JsonXema         0.64 M - 10.81x slower +1425.81 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         0.56 KB
-JSV               1.05 KB - 1.86x memory usage +0.48 KB
-JsonXema          1.06 KB - 1.89x memory usage +0.50 KB
+JSONSchex           248 B
+JSV                 968 B - 3.90x memory usage +720 B
+JsonXema           1088 B - 4.39x memory usage +840 B
 
 **All measurements for memory usage were the same**
 
@@ -1868,21 +1868,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        4.85 M      206.14 ns  ±3407.22%         125 ns         250 ns
-JSV              2.39 M      418.66 ns  ±1423.03%         375 ns         583 ns
-JsonXema         0.73 M     1364.76 ns   ±782.87%        1125 ns        2417 ns
+JSONSchex        5.71 M      175.14 ns  ±4262.69%         125 ns         209 ns
+JSV              2.35 M      424.84 ns  ±1275.44%         375 ns         583 ns
+JsonXema         0.71 M     1415.35 ns   ±976.00%        1125 ns     2665.59 ns
 
 Comparison:
-JSONSchex        4.85 M
-JSV              2.39 M - 2.03x slower +212.51 ns
-JsonXema         0.73 M - 6.62x slower +1158.62 ns
+JSONSchex        5.71 M
+JSV              2.35 M - 2.43x slower +249.70 ns
+JsonXema         0.71 M - 8.08x slower +1240.20 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         0.46 KB
-JSV               1.20 KB - 2.59x memory usage +0.73 KB
-JsonXema          1.05 KB - 2.29x memory usage +0.59 KB
+JSONSchex         0.42 KB
+JSV               1.09 KB - 2.59x memory usage +0.67 KB
+JsonXema          1.05 KB - 2.50x memory usage +0.63 KB
 
 **All measurements for memory usage were the same**
 
@@ -1913,18 +1913,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSV            327.76 K        3.05 μs   ±234.76%        2.75 μs        8.67 μs
-JSONSchex      231.66 K        4.32 μs   ±207.25%        3.79 μs        9.50 μs
+JSV            306.95 K        3.26 μs   ±306.74%        2.83 μs       10.54 μs
+JSONSchex      290.41 K        3.44 μs   ±301.35%           3 μs           7 μs
 
 Comparison:
-JSV            327.76 K
-JSONSchex      231.66 K - 1.41x slower +1.27 μs
+JSV            306.95 K
+JSONSchex      290.41 K - 1.06x slower +0.185 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSV              12.57 KB
-JSONSchex         3.03 KB - 0.24x memory usage -9.53906 KB
+JSV              12.47 KB
+JSONSchex         2.91 KB - 0.23x memory usage -9.55469 KB
 
 **All measurements for memory usage were the same**
 
@@ -1955,18 +1955,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSV              1.39 M        0.72 μs  ±1015.80%        0.67 μs           1 μs
-JSONSchex        0.21 M        4.76 μs   ±244.73%        4.21 μs        9.33 μs
+JSV              1.36 M        0.73 μs   ±669.27%        0.67 μs        1.17 μs
+JSONSchex        0.25 M        3.96 μs   ±358.55%        3.38 μs       10.21 μs
 
 Comparison:
-JSV              1.39 M
-JSONSchex        0.21 M - 6.61x slower +4.04 μs
+JSV              1.36 M
+JSONSchex        0.25 M - 5.40x slower +3.23 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSV               3.58 KB
-JSONSchex         3.41 KB - 0.95x memory usage -0.16406 KB
+JSV               3.48 KB
+JSONSchex         3.30 KB - 0.95x memory usage -0.17969 KB
 
 **All measurements for memory usage were the same**
 
@@ -1998,21 +1998,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      561.95 K        1.78 μs   ±586.52%        1.21 μs       14.13 μs
-JSV            191.62 K        5.22 μs   ±143.74%        4.83 μs       19.13 μs
-JsonXema       184.37 K        5.42 μs   ±344.40%        4.79 μs        9.29 μs
+JSONSchex     1193.33 K        0.84 μs   ±765.46%        0.75 μs        1.13 μs
+JsonXema       181.10 K        5.52 μs   ±314.98%        4.83 μs        9.63 μs
+JSV            175.37 K        5.70 μs   ±766.15%        4.92 μs       19.17 μs
 
 Comparison:
-JSONSchex      561.95 K
-JSV            191.62 K - 2.93x slower +3.44 μs
-JsonXema       184.37 K - 3.05x slower +3.64 μs
+JSONSchex     1193.33 K
+JsonXema       181.10 K - 6.59x slower +4.68 μs
+JSV            175.37 K - 6.80x slower +4.86 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.06 KB
-JSV              28.36 KB - 26.69x memory usage +27.30 KB
-JsonXema          1.34 KB - 1.26x memory usage +0.28 KB
+JSONSchex         0.95 KB
+JsonXema          1.24 KB - 1.31x memory usage +0.30 KB
+JSV              28.26 KB - 29.89x memory usage +27.31 KB
 
 **All measurements for memory usage were the same**
 
@@ -2044,21 +2044,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      463.15 K        2.16 μs   ±355.77%        1.46 μs       14.58 μs
-JSV            236.26 K        4.23 μs   ±156.44%           4 μs       13.33 μs
-JsonXema       105.71 K        9.46 μs   ±106.35%        8.58 μs       18.42 μs
+JSONSchex      946.52 K        1.06 μs   ±772.36%           1 μs        1.33 μs
+JSV            223.22 K        4.48 μs   ±518.10%           4 μs       13.04 μs
+JsonXema       100.43 K        9.96 μs   ±322.13%        8.63 μs       21.92 μs
 
 Comparison:
-JSONSchex      463.15 K
-JSV            236.26 K - 1.96x slower +2.07 μs
-JsonXema       105.71 K - 4.38x slower +7.30 μs
+JSONSchex      946.52 K
+JSV            223.22 K - 4.24x slower +3.42 μs
+JsonXema       100.43 K - 9.42x slower +8.90 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         1.24 KB
-JSV              26.15 KB - 21.05x memory usage +24.91 KB
-JsonXema          3.70 KB - 2.97x memory usage +2.45 KB
+JSONSchex         1.13 KB
+JSV              25.98 KB - 23.09x memory usage +24.85 KB
+JsonXema          3.70 KB - 3.28x memory usage +2.57 KB
 
 **All measurements for memory usage were the same**
 
@@ -2090,20 +2090,20 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        4.14 M      241.66 ns  ±3052.76%         208 ns         333 ns
-JSV              2.62 M      381.21 ns  ±1558.58%         333 ns         541 ns
-JsonXema         0.85 M     1170.35 ns   ±800.36%        1000 ns        2250 ns
+JSONSchex        3.69 M      270.89 ns  ±2960.95%         209 ns         375 ns
+JSV              2.75 M      363.37 ns  ±1719.23%         333 ns         500 ns
+JsonXema         0.82 M     1222.13 ns   ±926.56%        1000 ns        3667 ns
 
 Comparison:
-JSONSchex        4.14 M
-JSV              2.62 M - 1.58x slower +139.56 ns
-JsonXema         0.85 M - 4.84x slower +928.69 ns
+JSONSchex        3.69 M
+JSV              2.75 M - 1.34x slower +92.47 ns
+JsonXema         0.82 M - 4.51x slower +951.24 ns
 
 Memory usage statistics:
 
 Name         Memory usage
 JSONSchex           760 B
-JSV                1384 B - 1.82x memory usage +624 B
+JSV                1280 B - 1.68x memory usage +520 B
 JsonXema            240 B - 0.32x memory usage -520 B
 
 **All measurements for memory usage were the same**
@@ -2136,20 +2136,20 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        6.09 M      164.26 ns  ±3957.34%         125 ns         167 ns
-JSV              1.49 M      673.40 ns   ±867.35%         625 ns         875 ns
-JsonXema         0.89 M     1128.89 ns   ±775.45%         959 ns        1542 ns
+JSONSchex        4.97 M      201.11 ns  ±3543.84%         125 ns         250 ns
+JSV              1.22 M      822.15 ns  ±1148.12%         667 ns        1500 ns
+JsonXema         0.59 M     1685.62 ns  ±3054.53%        1000 ns        3583 ns
 
 Comparison:
-JSONSchex        6.09 M
-JSV              1.49 M - 4.10x slower +509.14 ns
-JsonXema         0.89 M - 6.87x slower +964.63 ns
+JSONSchex        4.97 M
+JSV              1.22 M - 4.09x slower +621.05 ns
+JsonXema         0.59 M - 8.38x slower +1484.52 ns
 
 Memory usage statistics:
 
 Name         Memory usage
 JSONSchex           464 B
-JSV                2240 B - 4.83x memory usage +1776 B
+JSV                2136 B - 4.60x memory usage +1672 B
 JsonXema            928 B - 2.00x memory usage +464 B
 
 **All measurements for memory usage were the same**
@@ -2182,21 +2182,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      403.27 K        2.48 μs   ±258.60%        2.25 μs        4.25 μs
-JSV            145.22 K        6.89 μs   ±102.69%        6.50 μs       14.38 μs
-JsonXema       106.39 K        9.40 μs   ±175.43%        8.09 μs       19.13 μs
+JSONSchex      418.33 K        2.39 μs  ±1115.34%        1.71 μs       15.17 μs
+JSV            145.91 K        6.85 μs   ±152.56%        6.25 μs       16.67 μs
+JsonXema        98.66 K       10.14 μs   ±336.41%        8.17 μs       24.04 μs
 
 Comparison:
-JSONSchex      403.27 K
-JSV            145.22 K - 2.78x slower +4.41 μs
-JsonXema       106.39 K - 3.79x slower +6.92 μs
+JSONSchex      418.33 K
+JSV            145.91 K - 2.87x slower +4.46 μs
+JsonXema        98.66 K - 4.24x slower +7.75 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         3.41 KB
-JSV              31.59 KB - 9.27x memory usage +28.18 KB
-JsonXema          2.82 KB - 0.83x memory usage -0.58594 KB
+JSONSchex         2.63 KB
+JSV              30.88 KB - 11.73x memory usage +28.24 KB
+JsonXema          3.09 KB - 1.17x memory usage +0.45 KB
 
 **All measurements for memory usage were the same**
 
@@ -2228,21 +2228,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      477.33 K        2.10 μs   ±352.31%        1.50 μs       14.88 μs
-JSV            138.90 K        7.20 μs   ±115.55%        5.25 μs       21.00 μs
-JsonXema        86.00 K       11.63 μs    ±87.62%        9.46 μs       32.67 μs
+JSONSchex      659.92 K        1.52 μs   ±935.14%           1 μs       14.04 μs
+JSV            189.51 K        5.28 μs   ±305.55%        4.96 μs       12.04 μs
+JsonXema        91.12 K       10.97 μs   ±128.34%        9.50 μs       35.07 μs
 
 Comparison:
-JSONSchex      477.33 K
-JSV            138.90 K - 3.44x slower +5.10 μs
-JsonXema        86.00 K - 5.55x slower +9.53 μs
+JSONSchex      659.92 K
+JSV            189.51 K - 3.48x slower +3.76 μs
+JsonXema        91.12 K - 7.24x slower +9.46 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         2.45 KB
-JSV              22.96 KB - 9.39x memory usage +20.52 KB
-JsonXema          6.14 KB - 2.51x memory usage +3.70 KB
+JSONSchex         2.24 KB
+JSV              22.41 KB - 9.99x memory usage +20.16 KB
+JsonXema          6.21 KB - 2.77x memory usage +3.97 KB
 
 **All measurements for memory usage were the same**
 
@@ -2274,21 +2274,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        3.51 M      284.75 ns  ±2134.37%         208 ns         334 ns
-JSV              2.82 M      354.18 ns  ±1443.76%         333 ns         459 ns
-JsonXema         1.56 M      640.99 ns   ±993.41%         584 ns         833 ns
+JSONSchex        4.17 M      240.09 ns  ±3359.07%         167 ns         292 ns
+JSV              2.93 M      341.06 ns  ±1988.27%         292 ns         458 ns
+JsonXema         1.62 M      618.22 ns  ±1320.58%         542 ns         792 ns
 
 Comparison:
-JSONSchex        3.51 M
-JSV              2.82 M - 1.24x slower +69.42 ns
-JsonXema         1.56 M - 2.25x slower +356.24 ns
+JSONSchex        4.17 M
+JSV              2.93 M - 1.42x slower +100.97 ns
+JsonXema         1.62 M - 2.57x slower +378.13 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex           392 B
-JSV                 968 B - 2.47x memory usage +576 B
-JsonXema            504 B - 1.29x memory usage +112 B
+JSONSchex           264 B
+JSV                 760 B - 2.88x memory usage +496 B
+JsonXema            504 B - 1.91x memory usage +240 B
 
 **All measurements for memory usage were the same**
 
@@ -2314,27 +2314,34 @@ Estimated total run time: 27 s
 Excluding outliers: false
 
 Benchmarking JSONSchex ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
 Benchmarking JSV ...
 Benchmarking JsonXema ...
 Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        4.16 M      240.25 ns  ±3147.29%         166 ns         292 ns
-JSV              1.79 M      558.69 ns  ±1016.11%         417 ns        1583 ns
-JsonXema         0.78 M     1278.05 ns   ±611.45%        1209 ns        1584 ns
+JSONSchex        5.87 M      170.25 ns  ±1234.75%         150 ns         250 ns
+JSV              2.40 M      416.87 ns  ±1008.43%         375 ns         542 ns
+JsonXema         0.73 M     1366.05 ns  ±1156.75%        1250 ns        2000 ns
 
 Comparison:
-JSONSchex        4.16 M
-JSV              1.79 M - 2.33x slower +318.44 ns
-JsonXema         0.78 M - 5.32x slower +1037.80 ns
+JSONSchex        5.87 M
+JSV              2.40 M - 2.45x slower +246.62 ns
+JsonXema         0.73 M - 8.02x slower +1195.79 ns
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         0.48 KB
-JSV               1.33 KB - 2.74x memory usage +0.84 KB
-JsonXema          3.37 KB - 6.95x memory usage +2.88 KB
+JSONSchex         0.46 KB
+JSV               1.11 KB - 2.41x memory usage +0.65 KB
+JsonXema          3.37 KB - 7.31x memory usage +2.91 KB
 
 **All measurements for memory usage were the same**
 
@@ -2366,21 +2373,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex       11.58 K       86.35 μs    ±21.41%       83.13 μs      146.34 μs
-JsonXema         8.99 K      111.29 μs    ±22.81%      108.96 μs      186.70 μs
-JSV              3.64 K      274.79 μs     ±6.47%      273.13 μs      318.44 μs
+JSONSchex       12.43 K       80.44 μs    ±19.55%       76.25 μs      130.68 μs
+JsonXema        11.81 K       84.65 μs     ±9.12%       82.71 μs      106.17 μs
+JSV              4.07 K      245.63 μs     ±7.69%      242.54 μs      316.11 μs
 
 Comparison:
-JSONSchex       11.58 K
-JsonXema         8.99 K - 1.29x slower +24.94 μs
-JSV              3.64 K - 3.18x slower +188.44 μs
+JSONSchex       12.43 K
+JsonXema        11.81 K - 1.05x slower +4.21 μs
+JSV              4.07 K - 3.05x slower +165.19 μs
 
 Memory usage statistics:
 
 Name         Memory usage
 JSONSchex           248 B
 JsonXema            160 B - 0.65x memory usage -88 B
-JSV             1600880 B - 6455.16x memory usage +1600632 B
+JSV             1600776 B - 6454.74x memory usage +1600528 B
 
 **All measurements for memory usage were the same**
 
@@ -2412,21 +2419,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex        6.76 K      147.95 μs     ±6.53%      145.25 μs      173.84 μs
-JSV              5.11 K      195.68 μs    ±16.47%      192.04 μs      252.75 μs
-JsonXema         3.02 K      331.34 μs     ±9.46%      337.30 μs      405.74 μs
+JSONSchex        6.67 K      149.82 μs   ±105.70%      141.00 μs      241.21 μs
+JSV              5.19 K      192.62 μs    ±30.49%      187.42 μs      256.16 μs
+JsonXema         2.99 K      334.36 μs     ±9.22%      340.42 μs      426.48 μs
 
 Comparison:
-JSONSchex        6.76 K
-JSV              5.11 K - 1.32x slower +47.73 μs
-JsonXema         3.02 K - 2.24x slower +183.38 μs
+JSONSchex        6.67 K
+JSV              5.19 K - 1.29x slower +42.80 μs
+JsonXema         2.99 K - 2.23x slower +184.54 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex        18.21 KB
-JSV              85.02 KB - 4.67x memory usage +66.81 KB
-JsonXema         61.25 KB - 3.36x memory usage +43.04 KB
+JSONSchex        15.11 KB
+JSV              83.43 KB - 5.52x memory usage +68.32 KB
+JsonXema         61.74 KB - 4.09x memory usage +46.63 KB
 
 **All measurements for memory usage were the same**
 
@@ -2458,21 +2465,21 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex      185.08 K        5.40 μs   ±147.16%        4.58 μs       18.13 μs
-JsonXema       154.70 K        6.46 μs   ±196.52%        6.21 μs        9.83 μs
-JSV             59.19 K       16.89 μs    ±15.11%       16.63 μs       23.83 μs
+JSONSchex      226.55 K        4.41 μs   ±185.56%        4.29 μs        5.71 μs
+JSV            220.95 K        4.53 μs   ±167.98%        4.38 μs        6.63 μs
+JsonXema       155.00 K        6.45 μs   ±144.54%        6.21 μs       10.79 μs
 
 Comparison:
-JSONSchex      185.08 K
-JsonXema       154.70 K - 1.20x slower +1.06 μs
-JSV             59.19 K - 3.13x slower +11.49 μs
+JSONSchex      226.55 K
+JSV            220.95 K - 1.03x slower +0.112 μs
+JsonXema       155.00 K - 1.46x slower +2.04 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex         0.38 KB
-JsonXema          5.54 KB - 14.47x memory usage +5.16 KB
-JSV               2.73 KB - 7.12x memory usage +2.34 KB
+JSONSchex           368 B
+JSV                 672 B - 1.83x memory usage +304 B
+JsonXema           5672 B - 15.41x memory usage +5304 B
 
 **All measurements for memory usage were the same**
 
@@ -2503,18 +2510,18 @@ Calculating statistics...
 Formatting results...
 
 Name                ips        average  deviation         median         99th %
-JSONSchex       74.95 K       13.34 μs    ±34.40%       11.50 μs       27.25 μs
-JSV             31.76 K       31.49 μs    ±20.95%       27.83 μs       48.29 μs
+JSONSchex       84.53 K       11.83 μs    ±30.75%       11.42 μs       21.33 μs
+JSV             40.75 K       24.54 μs    ±13.61%       23.92 μs       33.96 μs
 
 Comparison:
-JSONSchex       74.95 K
-JSV             31.76 K - 2.36x slower +18.15 μs
+JSONSchex       84.53 K
+JSV             40.75 K - 2.07x slower +12.71 μs
 
 Memory usage statistics:
 
 Name         Memory usage
-JSONSchex        21.29 KB
-JSV              39.77 KB - 1.87x memory usage +18.48 KB
+JSONSchex        20.27 KB
+JSV              37.10 KB - 1.83x memory usage +16.84 KB
 
 **All measurements for memory usage were the same**
 
