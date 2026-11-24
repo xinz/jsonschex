@@ -2,6 +2,27 @@
 
 Use `defvalidator` when a schema is known at compile time and callers should validate a value by name, without passing a schema around. `~X` and `JSONSchex.Schema.compile!/2` produce a reusable schema **value**; `defvalidator` uses that value (or a raw schema) to define **functions** in the caller module. For schemas supplied at runtime, use `JSONSchex.compile/2` instead.
 
+## Comparing `defvalidator` with `~X` and `compile!/2`
+
+All three compile-time APIs avoid compiling raw JSON Schema maps on every request, but they serve different needs:
+
+| API | What it embeds | How validation executes | When to choose it |
+| --- | --- | --- | --- |
+| `JSONSchex.Schema.compile!/2` | `%JSONSchex.Types.Schema{}` struct value | Runtime interpreter via `JSONSchex.validate/2` or `JSONSchex.valid?/2` | You need a schema value (for registries, router metadata, dynamic dispatch) with explicit compile options such as `:draft`, `:base_uri`, or `:loader` |
+| `~X` sigil | Same `%JSONSchex.Types.Schema{}` struct value | Same runtime interpreter as `compile!/2` | Compact literal syntax for schema values (supports `f` / `c` modifiers) |
+| `defvalidator/2,3` | Specialized Elixir function clauses & guards (plus embedded schema when needed) | Direct BEAM-JIT execution, with transparent fallback for non-static keywords | Fixed hot-path schemas called by function name where throughput and low memory allocation matter most |
+
+### Performance characteristics and trade-offs
+
+Because `defvalidator` lowers the static subset into native BEAM map pattern matches (`%{"a" => v1, "b" => v2}`), guards (`is_integer/1`, `>=`, `byte_size/1`), direct binary format/pattern calls, and tail-recursive list loops, it avoids walking compiled rule lists and allocating intermediate structures on hot paths:
+
+- **Valid inputs (`name/1` and `name?/1`):** For fully specialized schemas without PCRE regex or interpreted fallbacks, `name/1` runs `name?/1` and returns `:ok` immediately on success. Both `name/1` and `name?/1` achieve nearly identical throughput — in local [Benchee benchmarks](https://github.com/xinz/jsonschex/blob/main/bench/static_schema_comparison_results.txt), roughly **1.7×–3.5× faster** than `~X` + `JSONSchex.validate/2` (and **1.5×–2.8× faster** than `~X` + `JSONSchex.valid?/2`) on user, nested order, and batch workloads, with up to **6× lower memory allocation** on nested objects.
+- **Invalid inputs (`name?/1` vs `name/1`):**
+  - The boolean predicate `name?/1` short-circuits directly inside compiled guards and clauses with near-zero allocation (often **2.5×–3.5× faster** than `~X` + `JSONSchex.valid?/2`).
+  - The diagnostic function `name/1`, on an **invalid** input, first executes the fast predicate (returning `false`) and then calls `JSONSchex.validate/2` to collect full error details. When most inputs are valid (typical API traffic), this is a net win; if a workload expects predominantly invalid inputs and always requires full diagnostics, calling `JSONSchex.validate/2` directly on a `~X` / `compile!/2` schema avoids that extra predicate check.
+- **Fallback-heavy and PCRE-heavy schemas:** When a schema relies heavily on `$ref`, `$dynamicRef`, `unevaluatedProperties`, or complex regex `pattern`s, `name/1` delegates directly to `JSONSchex.validate/2` (avoiding double evaluation), so runtime performance approaches `~X` + `validate/2` / `valid?/2`.
+- **Module size:** Each `defvalidator` emits specialized bytecode in the caller module. If you have hundreds of large schemas that are validated infrequently, storing compiled values with `~X` / `compile!/2` keeps compiled module size smaller.
+
 ## Choose the return value by naming the function
 
 `use JSONSchex` imports both `~X` and `defvalidator`. Define validators in the module body, using a literal atom for the function name:

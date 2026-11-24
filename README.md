@@ -66,11 +66,16 @@ The `:draft` option accepts `"draft7"` and `"draft2020_12"` as strings, not atom
 
 ## Compile-time schemas
 
-For static schemas, compile and embed a `Schema` struct in a module attribute with `JSONSchex.Schema.compile!/2` or the compact `~X` sigil.
+When a schema is known at compile time, JSONSchex provides two compile-time approaches:
+
+| Approach | Produces | Runtime path | Best for |
+| --- | --- | --- | --- |
+| `JSONSchex.Schema.compile!/2` / `~X` | Embedded `Schema` struct value | Interpreter (`JSONSchex.validate/2` or fail-fast `JSONSchex.valid?/2`) | Storing schemas in maps/routers, passing schemas across functions, or dynamic selection |
+| `defvalidator/2,3` | Named functions (`name/1`, `name?/1`) | Specialized BEAM pattern matches & guards (auto-fallback for `$ref`/`unevaluated*`) | Fixed hot-path schemas where callers validate by name for peak throughput and minimal allocation |
 
 ### Using `JSONSchex.Schema.compile!/2`
 
-You can embed the compiled schema directly in your module with `JSONSchex.Schema.compile!/2`:
+Embed a compiled `Schema` struct directly in a module attribute when you want to avoid runtime compilation while keeping the schema as a reusable value:
 
 ```elixir
 defmodule MyApp.UserSchema do
@@ -85,11 +90,12 @@ defmodule MyApp.UserSchema do
 end
 
 :ok = JSONSchex.validate(MyApp.UserSchema.schema(), "user@example.com")
+true = JSONSchex.valid?(MyApp.UserSchema.schema(), "user@example.com")
 ```
 
 ### Using the `~X` sigil
 
-`use JSONSchex` imports the `~X` sigil for Elixir schema literals:
+`use JSONSchex` imports the `~X` sigil for compact compile-time schema literals (producing the same embedded `Schema` struct as `compile!/2`):
 
 ```elixir
 defmodule MyApp.NumberSchema do
@@ -111,9 +117,9 @@ captures like `&MyLoader.fetch/1` over anonymous functions.
 
 `~X` is preferred over `~J` to avoid the common sigil-name conflict with Jason.
 
-### Defining named validators
+### Defining named validators (`defvalidator`)
 
-If callers only need a validation function, `use JSONSchex` also imports `defvalidator`. It accepts a raw Elixir schema or a compiled schema such as `~X`:
+Unlike `~X` and `compile!/2` — which embed a `Schema` **value** evaluated by the runtime interpreter — `defvalidator` compiles static schema keywords directly into specialized BEAM-JIT-friendly **functions** (map pattern matches, guard checks, binary format/pattern calls, and tail-recursive loops). `use JSONSchex` imports `defvalidator` alongside `~X`, and it accepts a raw Elixir schema or an already-compiled schema such as `~X`:
 
 ```elixir
 defmodule MyApp.Quantity do
@@ -122,10 +128,13 @@ defmodule MyApp.Quantity do
 end
 
 true = MyApp.Quantity.validate?(1)
+:ok = MyApp.Quantity.validate(1)
 {:error, [%{rule: :minimum}]} = MyApp.Quantity.validate(0)
 ```
 
-See the [`defvalidator` guide](guide/defvalidator.md) for predicate-only functions, map examples, and where to set compile options.
+For schemas within the static subset, `defvalidator` typically delivers **1.5×–3.5× higher throughput** and **lower memory allocation** on valid and predicate (`?`) paths compared to calling `JSONSchex.validate/2` or `JSONSchex.valid?/2` with `~X` / `compile!/2`, while transparently falling back to the embedded validator for keywords such as `$ref` or `unevaluatedProperties`.
+
+See the [`defvalidator` guide](guide/defvalidator.md) for a detailed comparison with `~X` / `compile!/2`, performance trade-offs (including invalid-heavy workloads), predicate-only functions, `:loader` usage, and where to set compile options.
 
 ## How it works
 
