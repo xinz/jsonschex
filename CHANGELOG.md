@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Bug Fixes and Improvements
+
+Add fast-path validation with `JSONSchex.valid?/2`, compile-time `defvalidator`, binary format parsers, and predefined pattern matchers. ([#22](https://github.com/xinz/jsonschex/pull/22))
+
+  * Add `JSONSchex.valid?/2` — a fail-fast, short-circuiting boolean validator for runtime-compiled schemas that stops on the first mismatch, first matching `anyOf` branch (when annotations are unused), or second matching `oneOf` branch while delegating `unevaluatedProperties`/`unevaluatedItems` nodes to annotation-aware evaluation and preserving `:indeterminate_pattern` aborts under `not`.
+  * Add `JSONSchex.Schema.defvalidator/2,3` (imported by `use JSONSchex` alongside `~X`) — a compile-time macro that compiles static schemas (raw maps/booleans, module attributes, `~X`, `compile!/2`, or `compile_fragment!/2`) into specialized BEAM-JIT-friendly predicate (`name?/1`) and diagnostic (`name/1`) functions, transparently falling back to the embedded validator with preserved `$id`, `$ref`/`$dynamicRef`, fragment, and `:loader` context for keywords outside the static subset.
+  * Optimize hot-path rule dispatch and skip `MapSet` evaluated-key allocations in `JSONSchex.validate/2` whenever `unevaluatedProperties` and `unevaluatedItems` are absent (`needs_evaluated_annotations` on `JSONSchex.Types.Schema`), with shared JSON type guards in `JSONSchex.Guards`. Callers persisting compiled `Schema` structs across releases should recompile them from source.
+  * Replace regex/ISO8601 overhead with pure binary parsers for `uuid`, `date`, `date-time`, `time`, `duration`, and URI percent-encoding checks (including RFC 3339 `-00:00` offsets and UTC-adjusted leap seconds), and recognize common ASCII `pattern` shapes at compile time via `JSONSchex.PredefinedPattern` while retaining compiled `%Regex{}` values for diagnostics.
+  * Add [`guide/defvalidator.md`](guide/defvalidator.md), verify `JSONSchex.valid?/2` parity across all Draft 7 and Draft 2020-12 official suite cases, and add fast-path and static/module-based schema benchmarks under `bench/`.
+
 ## v0.11.3 (2026-11-19)
 
 ### Bug Fixes and Improvements
