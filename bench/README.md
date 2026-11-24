@@ -28,7 +28,26 @@ BENCH=format mix run libs_comparison.exs
 BENCH=scale mix run libs_comparison.exs
 ```
 
-Results are printed to stdout via [Benchee](https://github.com/bencheeorg/benchee), and some benchmark results from my local are [here](./results.txt).
+Local benchmark results are saved [here](./results.txt).
+
+### Static Schema & Short-Circuit Comparison
+
+Compare compile-time / module-based schemas and fail-fast short-circuit validation between JSONSchex (`defvalidator`, `~X`, `valid?/2`, `validate/2`) and JSV (`defschema` with compile-time `@root`, `valid?/2`, `validate/2`, with both `cast: false` and `cast: true`). The suite covers seven sections: `module`, `short_circuit`, `formats`, `patterns`, `annotations`, `ref`, and `compile`:
+
+```bash
+# Run all sections in the bench directory
+mix run static_schema_comparison.exs
+
+# Run a specific section only
+BENCH=module mix run static_schema_comparison.exs
+BENCH=short_circuit mix run static_schema_comparison.exs
+BENCH=formats mix run static_schema_comparison.exs
+
+# Customize Benchee durations (seconds)
+BENCH=module BENCH_WARMUP=0.5 BENCH_TIME=1 BENCH_MEMORY_TIME=0.5 mix run static_schema_comparison.exs
+```
+
+Local benchmark results are saved [here](./static_schema_comparison_results.txt).
 
 ### JSONSchex Version Comparison
 

@@ -1,0 +1,1805 @@
+========================================================================
+  Benchmark: module_user_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 1 min 12 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator ...
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex ~X valid? ...
+Benchmarking JSONSchex ~X validate ...
+Benchmarking JSV defschema valid? (cast: false) ...
+Benchmarking JSV defschema valid? (cast: true) ...
+Benchmarking JSV defschema validate (cast: false) ...
+Benchmarking JSV defschema validate (cast: true) ...
+Calculating statistics...
+Formatting results...
+
+Name                                           ips        average  deviation         median         99th %
+JSONSchex defvalidator                   1077.74 K        0.93 μs   ±626.21%        0.88 μs        1.13 μs
+JSONSchex defvalidator?                  1044.68 K        0.96 μs   ±513.43%        0.92 μs        1.13 μs
+JSONSchex ~X valid?                       626.04 K        1.60 μs   ±392.40%        1.50 μs        2.21 μs
+JSONSchex ~X validate                     578.56 K        1.73 μs   ±760.20%        1.63 μs        2.33 μs
+JSV defschema valid? (cast: false)        256.74 K        3.90 μs   ±172.70%        3.63 μs       11.25 μs
+JSV defschema validate (cast: false)      252.71 K        3.96 μs   ±207.55%        3.75 μs       10.96 μs
+JSV defschema valid? (cast: true)         222.89 K        4.49 μs   ±206.37%        4.21 μs       11.21 μs
+JSV defschema validate (cast: true)       218.43 K        4.58 μs   ±147.69%        4.29 μs       13.67 μs
+
+Comparison:
+JSONSchex defvalidator                   1077.74 K
+JSONSchex defvalidator?                  1044.68 K - 1.03x slower +0.0294 μs
+JSONSchex ~X valid?                       626.04 K - 1.72x slower +0.67 μs
+JSONSchex ~X validate                     578.56 K - 1.86x slower +0.80 μs
+JSV defschema valid? (cast: false)        256.74 K - 4.20x slower +2.97 μs
+JSV defschema validate (cast: false)      252.71 K - 4.26x slower +3.03 μs
+JSV defschema valid? (cast: true)         222.89 K - 4.84x slower +3.56 μs
+JSV defschema validate (cast: true)       218.43 K - 4.93x slower +3.65 μs
+
+Memory usage statistics:
+
+Name                                    Memory usage
+JSONSchex defvalidator                       1.11 KB
+JSONSchex defvalidator?                      1.11 KB - 1.00x memory usage +0 KB
+JSONSchex ~X valid?                          1.86 KB - 1.68x memory usage +0.75 KB
+JSONSchex ~X validate                        2.02 KB - 1.82x memory usage +0.91 KB
+JSV defschema valid? (cast: false)          16.87 KB - 15.20x memory usage +15.76 KB
+JSV defschema validate (cast: false)        17.45 KB - 15.73x memory usage +16.34 KB
+JSV defschema valid? (cast: true)           20.05 KB - 18.07x memory usage +18.94 KB
+JSV defschema validate (cast: true)         20.04 KB - 18.06x memory usage +18.93 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: module_user_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 1 min 12 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator ...
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex ~X valid? ...
+Benchmarking JSONSchex ~X validate ...
+Benchmarking JSV defschema valid? (cast: false) ...
+Benchmarking JSV defschema valid? (cast: true) ...
+Benchmarking JSV defschema validate (cast: false) ...
+Benchmarking JSV defschema validate (cast: true) ...
+Calculating statistics...
+Formatting results...
+
+Name                                           ips        average  deviation         median         99th %
+JSONSchex defvalidator?                    11.54 M      0.0866 μs  ±5852.37%      0.0830 μs      0.0840 μs
+JSONSchex ~X valid?                         3.45 M        0.29 μs  ±2292.46%        0.25 μs        0.38 μs
+JSV defschema valid? (cast: false)          1.96 M        0.51 μs  ±1531.88%        0.46 μs        0.63 μs
+JSV defschema valid? (cast: true)           1.83 M        0.55 μs  ±1092.94%        0.50 μs        0.67 μs
+JSONSchex ~X validate                       0.91 M        1.10 μs   ±475.01%        1.04 μs        1.33 μs
+JSONSchex defvalidator                      0.65 M        1.55 μs   ±606.02%        1.33 μs        2.88 μs
+JSV defschema validate (cast: false)        0.23 M        4.33 μs   ±223.38%        4.13 μs        8.54 μs
+JSV defschema validate (cast: true)         0.22 M        4.45 μs   ±176.30%        4.25 μs       11.50 μs
+
+Comparison:
+JSONSchex defvalidator?                    11.54 M
+JSONSchex ~X valid?                         3.45 M - 3.35x slower +0.20 μs
+JSV defschema valid? (cast: false)          1.96 M - 5.89x slower +0.42 μs
+JSV defschema valid? (cast: true)           1.83 M - 6.31x slower +0.46 μs
+JSONSchex ~X validate                       0.91 M - 12.65x slower +1.01 μs
+JSONSchex defvalidator                      0.65 M - 17.84x slower +1.46 μs
+JSV defschema validate (cast: false)        0.23 M - 50.01x slower +4.25 μs
+JSV defschema validate (cast: true)         0.22 M - 51.39x slower +4.37 μs
+
+Memory usage statistics:
+
+Name                                    Memory usage
+JSONSchex defvalidator?                         0 KB
+JSONSchex ~X valid?                         0.141 KB - ∞ x memory usage +0.141 KB
+JSV defschema valid? (cast: false)           1.26 KB - ∞ x memory usage +1.26 KB
+JSV defschema valid? (cast: true)            1.57 KB - ∞ x memory usage +1.57 KB
+JSONSchex ~X validate                        2.20 KB - ∞ x memory usage +2.20 KB
+JSONSchex defvalidator                       2.81 KB - ∞ x memory usage +2.81 KB
+JSV defschema validate (cast: false)        16.01 KB - ∞ x memory usage +16.01 KB
+JSV defschema validate (cast: true)         16.70 KB - ∞ x memory usage +16.70 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: module_order_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 1 min 12 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator ...
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex ~X valid? ...
+Benchmarking JSONSchex ~X validate ...
+Benchmarking JSV defschema valid? (cast: false) ...
+Benchmarking JSV defschema valid? (cast: true) ...
+Benchmarking JSV defschema validate (cast: false) ...
+Benchmarking JSV defschema validate (cast: true) ...
+Calculating statistics...
+Formatting results...
+
+Name                                           ips        average  deviation         median         99th %
+JSONSchex defvalidator                    556.04 K        1.80 μs   ±453.44%        1.71 μs        2.08 μs
+JSONSchex defvalidator?                   529.12 K        1.89 μs   ±335.97%        1.83 μs        2.21 μs
+JSONSchex ~X valid?                       195.69 K        5.11 μs   ±175.36%        4.92 μs           7 μs
+JSONSchex ~X validate                     161.03 K        6.21 μs   ±125.58%        6.04 μs        8.95 μs
+JSV defschema valid? (cast: false)         66.42 K       15.06 μs    ±22.69%       14.71 μs       24.38 μs
+JSV defschema validate (cast: false)       61.49 K       16.26 μs    ±37.57%       15.88 μs       23.46 μs
+JSV defschema valid? (cast: true)          50.11 K       19.96 μs    ±15.08%       19.50 μs       27.38 μs
+JSV defschema validate (cast: true)        47.33 K       21.13 μs    ±13.23%       20.71 μs       28.48 μs
+
+Comparison:
+JSONSchex defvalidator                    556.04 K
+JSONSchex defvalidator?                   529.12 K - 1.05x slower +0.0915 μs
+JSONSchex ~X valid?                       195.69 K - 2.84x slower +3.31 μs
+JSONSchex ~X validate                     161.03 K - 3.45x slower +4.41 μs
+JSV defschema valid? (cast: false)         66.42 K - 8.37x slower +13.26 μs
+JSV defschema validate (cast: false)       61.49 K - 9.04x slower +14.47 μs
+JSV defschema valid? (cast: true)          50.11 K - 11.10x slower +18.16 μs
+JSV defschema validate (cast: true)        47.33 K - 11.75x slower +19.33 μs
+
+Memory usage statistics:
+
+Name                                    Memory usage
+JSONSchex defvalidator                       1.50 KB
+JSONSchex defvalidator?                      1.50 KB - 1.00x memory usage +0 KB
+JSONSchex ~X valid?                          4.44 KB - 2.96x memory usage +2.94 KB
+JSONSchex ~X validate                        8.94 KB - 5.96x memory usage +7.44 KB
+JSV defschema valid? (cast: false)          26.82 KB - 17.88x memory usage +25.32 KB
+JSV defschema validate (cast: false)        30.94 KB - 20.63x memory usage +29.44 KB
+JSV defschema valid? (cast: true)           52.61 KB - 35.07x memory usage +51.11 KB
+JSV defschema validate (cast: true)         54.61 KB - 36.41x memory usage +53.11 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: module_order_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 1 min 3 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator ...
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex ~X valid? ...
+Benchmarking JSONSchex ~X validate ...
+Benchmarking JSV defschema valid? (cast: false) ...
+Benchmarking JSV defschema validate (cast: false) ...
+Benchmarking JSV defschema validate (cast: true) ...
+Calculating statistics...
+Formatting results...
+
+Name                                           ips        average  deviation         median         99th %
+JSONSchex defvalidator?                  2686.88 K        0.37 μs  ±1434.20%        0.33 μs        0.50 μs
+JSONSchex ~X valid?                       979.91 K        1.02 μs   ±755.59%        0.96 μs        1.17 μs
+JSONSchex ~X validate                     156.64 K        6.38 μs   ±184.96%        6.17 μs       13.04 μs
+JSONSchex defvalidator                    120.96 K        8.27 μs    ±77.07%        7.38 μs       20.71 μs
+JSV defschema valid? (cast: false)         80.50 K       12.42 μs    ±16.65%       12.17 μs       19.17 μs
+JSV defschema validate (cast: false)       58.78 K       17.01 μs    ±24.61%       16.58 μs       26.79 μs
+JSV defschema validate (cast: true)        46.87 K       21.33 μs    ±47.68%       20.83 μs          30 μs
+
+Comparison:
+JSONSchex defvalidator?                  2686.88 K
+JSONSchex ~X valid?                       979.91 K - 2.74x slower +0.65 μs
+JSONSchex ~X validate                     156.64 K - 17.15x slower +6.01 μs
+JSONSchex defvalidator                    120.96 K - 22.21x slower +7.89 μs
+JSV defschema valid? (cast: false)         80.50 K - 33.38x slower +12.05 μs
+JSV defschema validate (cast: false)       58.78 K - 45.71x slower +16.64 μs
+JSV defschema validate (cast: true)        46.87 K - 57.32x slower +20.96 μs
+
+Memory usage statistics:
+
+Name                                    Memory usage
+JSONSchex defvalidator?                      0.45 KB
+JSONSchex ~X valid?                          0.88 KB - 1.95x memory usage +0.43 KB
+JSONSchex ~X validate                        9.81 KB - 21.66x memory usage +9.36 KB
+JSONSchex defvalidator                      12.33 KB - 27.21x memory usage +11.88 KB
+JSV defschema valid? (cast: false)          22.74 KB - 50.19x memory usage +22.29 KB
+JSV defschema validate (cast: false)        33.55 KB - 74.05x memory usage +33.10 KB
+JSV defschema validate (cast: true)         54.58 KB - 120.45x memory usage +54.13 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: module_batch_100_users_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 1 min 3 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator ...
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex ~X valid? ...
+Benchmarking JSONSchex ~X validate ...
+Benchmarking JSV defschema valid? (cast: false) ...
+Benchmarking JSV defschema validate (cast: false) ...
+Benchmarking JSV defschema validate (cast: true) ...
+Calculating statistics...
+Formatting results...
+
+Name                                           ips        average  deviation         median         99th %
+JSONSchex defvalidator?                    10.46 K       95.62 μs     ±9.97%       93.92 μs      112.01 μs
+JSONSchex defvalidator                     10.36 K       96.57 μs     ±4.38%       95.12 μs      112.17 μs
+JSONSchex ~X valid?                         6.87 K      145.54 μs     ±4.31%      143.58 μs      163.95 μs
+JSONSchex ~X validate                       6.19 K      161.61 μs     ±4.23%      159.12 μs      184.21 μs
+JSV defschema valid? (cast: false)          2.24 K      446.41 μs     ±4.50%      442.33 μs      537.89 μs
+JSV defschema validate (cast: false)        2.16 K      463.38 μs     ±5.85%      458.91 μs      541.43 μs
+JSV defschema validate (cast: true)         1.85 K      539.82 μs     ±9.62%      528.10 μs      631.42 μs
+
+Comparison:
+JSONSchex defvalidator?                    10.46 K
+JSONSchex defvalidator                     10.36 K - 1.01x slower +0.95 μs
+JSONSchex ~X valid?                         6.87 K - 1.52x slower +49.92 μs
+JSONSchex ~X validate                       6.19 K - 1.69x slower +65.99 μs
+JSV defschema valid? (cast: false)          2.24 K - 4.67x slower +350.79 μs
+JSV defschema validate (cast: false)        2.16 K - 4.85x slower +367.77 μs
+JSV defschema validate (cast: true)         1.85 K - 5.65x slower +444.20 μs
+
+Memory usage statistics:
+
+Name                                    Memory usage
+JSONSchex defvalidator?                    110.86 KB
+JSONSchex defvalidator                     110.86 KB - 1.00x memory usage +0 KB
+JSONSchex ~X valid?                        169.99 KB - 1.53x memory usage +59.13 KB
+JSONSchex ~X validate                      217.71 KB - 1.96x memory usage +106.85 KB
+JSV defschema valid? (cast: false)        1909.58 KB - 17.23x memory usage +1798.72 KB
+JSV defschema validate (cast: false)      1949.95 KB - 17.59x memory usage +1839.09 KB
+JSV defschema validate (cast: true)       2251.95 KB - 20.31x memory usage +2141.09 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: module_batch_100_users_1st_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex ~X valid? ...
+Benchmarking JSONSchex ~X validate ...
+Benchmarking JSV defschema valid? (cast: false) ...
+Benchmarking JSV defschema validate (cast: false) ...
+Calculating statistics...
+Formatting results...
+
+Name                                           ips        average  deviation         median         99th %
+JSONSchex defvalidator?                 18492.12 K      0.0541 μs  ±1691.24%      0.0500 μs      0.0625 μs
+JSONSchex ~X valid?                      2845.88 K        0.35 μs  ±1768.71%        0.33 μs        0.46 μs
+JSONSchex ~X validate                       6.27 K      159.57 μs     ±5.46%      157.25 μs      181.04 μs
+JSV defschema valid? (cast: false)          2.26 K      441.87 μs     ±4.21%      436.70 μs      518.57 μs
+JSV defschema validate (cast: false)        2.16 K      461.97 μs     ±4.02%      459.45 μs      539.52 μs
+
+Comparison:
+JSONSchex defvalidator?                 18492.12 K
+JSONSchex ~X valid?                      2845.88 K - 6.50x slower +0.30 μs
+JSONSchex ~X validate                       6.27 K - 2950.71x slower +159.51 μs
+JSV defschema valid? (cast: false)          2.26 K - 8171.11x slower +441.82 μs
+JSV defschema validate (cast: false)        2.16 K - 8542.73x slower +461.91 μs
+
+Memory usage statistics:
+
+Name                                    Memory usage
+JSONSchex defvalidator?                         0 MB
+JSONSchex ~X valid?                       0.00018 MB - ∞ x memory usage +0.00018 MB
+JSONSchex ~X validate                        0.21 MB - ∞ x memory usage +0.21 MB
+JSV defschema valid? (cast: false)           1.85 MB - ∞ x memory usage +1.85 MB
+JSV defschema validate (cast: false)         1.90 MB - ∞ x memory usage +1.90 MB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_object_20_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex valid?/2        242.97 K        4.12 μs   ±363.05%        3.83 μs        5.33 μs
+JSONSchex validate/2      237.50 K        4.21 μs   ±218.49%        4.08 μs        5.38 μs
+JSV valid?/2              145.74 K        6.86 μs   ±108.58%        6.67 μs       11.58 μs
+JSV validate/2            135.17 K        7.40 μs   ±107.37%        7.17 μs       14.63 μs
+
+Comparison:
+JSONSchex valid?/2        242.97 K
+JSONSchex validate/2      237.50 K - 1.02x slower +0.0948 μs
+JSV valid?/2              145.74 K - 1.67x slower +2.75 μs
+JSV validate/2            135.17 K - 1.80x slower +3.28 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex valid?/2           0.82 KB
+JSONSchex validate/2         2.35 KB - 2.87x memory usage +1.53 KB
+JSV valid?/2                 7.40 KB - 9.02x memory usage +6.58 KB
+JSV validate/2               9.37 KB - 11.42x memory usage +8.55 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_object_20_all_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex valid?/2        537.11 K        1.86 μs   ±462.57%        1.71 μs        2.33 μs
+JSV valid?/2              499.37 K        2.00 μs   ±350.23%        1.92 μs        2.54 μs
+JSONSchex validate/2      220.53 K        4.53 μs   ±285.18%        4.38 μs        5.96 μs
+JSV validate/2             97.25 K       10.28 μs    ±38.70%        9.88 μs       19.21 μs
+
+Comparison:
+JSONSchex valid?/2        537.11 K
+JSV valid?/2              499.37 K - 1.08x slower +0.141 μs
+JSONSchex validate/2      220.53 K - 2.44x slower +2.67 μs
+JSV validate/2             97.25 K - 5.52x slower +8.42 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex valid?/2         0.0781 KB
+JSV valid?/2                 2.59 KB - 33.10x memory usage +2.51 KB
+JSONSchex validate/2         6.48 KB - 82.90x memory usage +6.40 KB
+JSV validate/2              22.32 KB - 285.70x memory usage +22.24 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_array_1000_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex valid?/2         32.70 K       30.59 μs    ±11.46%       29.83 μs       40.58 μs
+JSONSchex validate/2       28.94 K       34.56 μs     ±4.54%       34.42 μs       40.08 μs
+JSV valid?/2                9.31 K      107.45 μs    ±20.90%      103.17 μs      178.49 μs
+JSV validate/2              6.90 K      144.88 μs    ±15.70%      141.12 μs      242.91 μs
+
+Comparison:
+JSONSchex valid?/2         32.70 K
+JSONSchex validate/2       28.94 K - 1.13x slower +3.97 μs
+JSV valid?/2                9.31 K - 3.51x slower +76.86 μs
+JSV validate/2              6.90 K - 4.74x slower +114.29 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex valid?/2          39.10 KB
+JSONSchex validate/2       109.56 KB - 2.80x memory usage +70.46 KB
+JSV valid?/2               250.50 KB - 6.41x memory usage +211.40 KB
+JSV validate/2             383.25 KB - 9.80x memory usage +344.15 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_array_1000_1st_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex valid?/2       8195.77 K       0.122 μs  ±1239.21%      0.0833 μs        1.33 μs
+JSONSchex validate/2       28.67 K       34.88 μs     ±8.54%       34.50 μs       43.75 μs
+JSV valid?/2                9.17 K      109.01 μs    ±15.37%      105.04 μs      179.58 μs
+JSV validate/2              6.69 K      149.52 μs    ±18.96%      144.62 μs      260.64 μs
+
+Comparison:
+JSONSchex valid?/2       8195.77 K
+JSONSchex validate/2       28.67 K - 285.88x slower +34.76 μs
+JSV valid?/2                9.17 K - 893.41x slower +108.89 μs
+JSV validate/2              6.69 K - 1225.43x slower +149.40 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex valid?/2         0.0781 KB
+JSONSchex validate/2       109.86 KB - 1406.20x memory usage +109.78 KB
+JSV valid?/2               250.32 KB - 3204.10x memory usage +250.24 KB
+JSV validate/2             383.87 KB - 4913.50x memory usage +383.79 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_array_1000_all_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex valid?/2       8038.93 K       0.124 μs  ±1089.81%      0.0834 μs        1.34 μs
+JSV valid?/2              189.69 K        5.27 μs   ±183.62%        3.67 μs       26.79 μs
+JSONSchex validate/2       10.85 K       92.14 μs    ±39.52%       72.12 μs      215.87 μs
+JSV validate/2              2.27 K      440.46 μs    ±15.20%      429.95 μs      580.00 μs
+
+Comparison:
+JSONSchex valid?/2       8038.93 K
+JSV valid?/2              189.69 K - 42.38x slower +5.15 μs
+JSONSchex validate/2       10.85 K - 740.70x slower +92.01 μs
+JSV validate/2              2.27 K - 3540.79x slower +440.33 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex valid?/2         0.0781 KB
+JSV valid?/2                55.20 KB - 706.60x memory usage +55.13 KB
+JSONSchex validate/2       359.61 KB - 4603.00x memory usage +359.53 KB
+JSV validate/2            1015.95 KB - 13004.10x memory usage +1015.87 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_anyof_10_first_hit
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?    37625.83 K      0.0266 μs  ±2161.59%      0.0250 μs      0.0375 μs
+JSONSchex valid?/2          5238.43 K       0.191 μs  ±3753.63%       0.167 μs        0.29 μs
+JSONSchex validate/2         744.60 K        1.34 μs   ±633.37%        1.25 μs        1.71 μs
+JSV valid?/2                 324.07 K        3.09 μs   ±289.34%        2.96 μs        4.08 μs
+JSV validate/2               214.52 K        4.66 μs   ±203.01%        4.46 μs        8.71 μs
+
+Comparison:
+JSONSchex defvalidator?    37625.83 K
+JSONSchex valid?/2          5238.43 K - 7.18x slower +0.164 μs
+JSONSchex validate/2         744.60 K - 50.53x slower +1.32 μs
+JSV valid?/2                 324.07 K - 116.10x slower +3.06 μs
+JSV validate/2               214.52 K - 175.39x slower +4.63 μs
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?            0 KB
+JSONSchex valid?/2            0.0781 KB - ∞ x memory usage +0.0781 KB
+JSONSchex validate/2            4.20 KB - ∞ x memory usage +4.20 KB
+JSV valid?/2                    5.88 KB - ∞ x memory usage +5.88 KB
+JSV validate/2                 13.96 KB - ∞ x memory usage +13.96 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: short_circuit_oneof_10_early_2_hits
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       30.14 M       33.18 ns   ±148.19%          42 ns          42 ns
+JSONSchex valid?/2             7.10 M      140.76 ns  ±4664.16%         125 ns         208 ns
+JSONSchex validate/2           5.35 M      186.77 ns  ±4129.52%         166 ns         250 ns
+JSV valid?/2                   0.62 M     1600.86 ns   ±527.72%        1500 ns        2167 ns
+JSV validate/2                 0.57 M     1755.33 ns   ±358.71%        1666 ns        2458 ns
+
+Comparison:
+JSONSchex defvalidator?       30.14 M
+JSONSchex valid?/2             7.10 M - 4.24x slower +107.58 ns
+JSONSchex validate/2           5.35 M - 5.63x slower +153.58 ns
+JSV valid?/2                   0.62 M - 48.24x slower +1567.68 ns
+JSV validate/2                 0.57 M - 52.90x slower +1722.14 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?             0 B
+JSONSchex valid?/2                 80 B - ∞ x memory usage +80 B
+JSONSchex validate/2              480 B - ∞ x memory usage +480 B
+JSV valid?/2                     4576 B - ∞ x memory usage +4576 B
+JSV validate/2                   6536 B - ∞ x memory usage +6536 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_uuid_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       15.67 M       63.82 ns  ±9543.87%          42 ns          84 ns
+JSONSchex valid?/2             9.01 M      111.02 ns  ±6086.83%          83 ns         125 ns
+JSONSchex validate/2           7.21 M      138.67 ns  ±5350.68%         125 ns         167 ns
+JSV validate/2                 4.55 M      219.58 ns  ±3090.76%         208 ns         333 ns
+JSV valid?/2                   4.36 M      229.54 ns  ±2734.78%         208 ns         333 ns
+
+Comparison:
+JSONSchex defvalidator?       15.67 M
+JSONSchex valid?/2             9.01 M - 1.74x slower +47.20 ns
+JSONSchex validate/2           7.21 M - 2.17x slower +74.85 ns
+JSV validate/2                 4.55 M - 3.44x slower +155.77 ns
+JSV valid?/2                   4.36 M - 3.60x slower +165.72 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?            80 B
+JSONSchex valid?/2                160 B - 2.00x memory usage +80 B
+JSONSchex validate/2              248 B - 3.10x memory usage +168 B
+JSV validate/2                    528 B - 6.60x memory usage +448 B
+JSV valid?/2                      592 B - 7.40x memory usage +512 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_uuid_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       15.79 M       63.32 ns  ±8589.29%          42 ns          84 ns
+JSONSchex valid?/2             9.13 M      109.55 ns  ±6056.41%          83 ns         125 ns
+JSONSchex validate/2           7.28 M      137.35 ns  ±3183.01%         125 ns         208 ns
+JSV valid?/2                   2.77 M      361.43 ns  ±1586.85%         333 ns         458 ns
+JSV validate/2                 2.70 M      370.91 ns  ±2028.40%         333 ns         459 ns
+
+Comparison:
+JSONSchex defvalidator?       15.79 M
+JSONSchex valid?/2             9.13 M - 1.73x slower +46.23 ns
+JSONSchex validate/2           7.28 M - 2.17x slower +74.03 ns
+JSV valid?/2                   2.77 M - 5.71x slower +298.12 ns
+JSV validate/2                 2.70 M - 5.86x slower +307.59 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?            80 B
+JSONSchex valid?/2                160 B - 2.00x memory usage +80 B
+JSONSchex validate/2              432 B - 5.40x memory usage +352 B
+JSV valid?/2                      768 B - 9.60x memory usage +688 B
+JSV validate/2                    896 B - 11.20x memory usage +816 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_date_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       32.73 M       30.55 ns  ±5170.23%          25 ns       45.80 ns
+JSONSchex valid?/2             9.76 M      102.44 ns  ±5507.78%          83 ns         166 ns
+JSONSchex validate/2           7.61 M      131.39 ns  ±5321.35%          84 ns         167 ns
+JSV valid?/2                   3.47 M      288.33 ns  ±2285.57%         250 ns         417 ns
+JSV validate/2                 3.38 M      296.25 ns  ±2680.74%         250 ns         417 ns
+
+Comparison:
+JSONSchex defvalidator?       32.73 M
+JSONSchex valid?/2             9.76 M - 3.35x slower +71.89 ns
+JSONSchex validate/2           7.61 M - 4.30x slower +100.84 ns
+JSV valid?/2                   3.47 M - 9.44x slower +257.78 ns
+JSV validate/2                 3.38 M - 9.70x slower +265.69 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?            80 B
+JSONSchex valid?/2                160 B - 2.00x memory usage +80 B
+JSONSchex validate/2              248 B - 3.10x memory usage +168 B
+JSV valid?/2                     1032 B - 12.90x memory usage +952 B
+JSV validate/2                    968 B - 12.10x memory usage +888 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_datetime_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       21.70 M       46.09 ns  ±4039.39%       37.50 ns       54.20 ns
+JSONSchex valid?/2             8.09 M      123.60 ns  ±5910.47%          84 ns         125 ns
+JSONSchex validate/2           6.41 M      156.10 ns  ±4641.01%         125 ns         208 ns
+JSV validate/2                 1.90 M      526.49 ns  ±1285.43%         459 ns         667 ns
+JSV valid?/2                   1.87 M      535.82 ns  ±1342.88%         500 ns         708 ns
+
+Comparison:
+JSONSchex defvalidator?       21.70 M
+JSONSchex valid?/2             8.09 M - 2.68x slower +77.50 ns
+JSONSchex validate/2           6.41 M - 3.39x slower +110.01 ns
+JSV validate/2                 1.90 M - 11.42x slower +480.40 ns
+JSV valid?/2                   1.87 M - 11.62x slower +489.73 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?           104 B
+JSONSchex valid?/2                184 B - 1.77x memory usage +80 B
+JSONSchex validate/2              272 B - 2.62x memory usage +168 B
+JSV validate/2                   2128 B - 20.46x memory usage +2024 B
+JSV valid?/2                     2192 B - 21.08x memory usage +2088 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_time_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       27.03 M       37.00 ns  ±5284.47%       29.20 ns       41.70 ns
+JSONSchex valid?/2             9.21 M      108.62 ns  ±6209.72%          83 ns         125 ns
+JSONSchex validate/2           6.98 M      143.32 ns  ±5475.40%         125 ns         167 ns
+JSV validate/2                 2.80 M      357.13 ns  ±2113.55%         333 ns         500 ns
+JSV valid?/2                   2.75 M      364.24 ns  ±2075.65%         333 ns         500 ns
+
+Comparison:
+JSONSchex defvalidator?       27.03 M
+JSONSchex valid?/2             9.21 M - 2.94x slower +71.62 ns
+JSONSchex validate/2           6.98 M - 3.87x slower +106.32 ns
+JSV validate/2                 2.80 M - 9.65x slower +320.13 ns
+JSV valid?/2                   2.75 M - 9.84x slower +327.25 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?           104 B
+JSONSchex valid?/2                184 B - 1.77x memory usage +80 B
+JSONSchex validate/2              272 B - 2.62x memory usage +168 B
+JSV validate/2                   1384 B - 13.31x memory usage +1280 B
+JSV valid?/2                     1448 B - 13.92x memory usage +1344 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_duration_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?        5.30 M      188.80 ns   ±861.47%         175 ns      233.30 ns
+JSONSchex valid?/2             3.83 M      261.12 ns  ±2338.51%         250 ns         375 ns
+JSONSchex validate/2           2.90 M      344.68 ns  ±2510.16%         250 ns         375 ns
+JSV validate/2                 0.83 M     1202.10 ns   ±574.27%        1166 ns        1500 ns
+JSV valid?/2                   0.82 M     1219.39 ns   ±573.87%        1166 ns        1541 ns
+
+Comparison:
+JSONSchex defvalidator?        5.30 M
+JSONSchex valid?/2             3.83 M - 1.38x slower +72.32 ns
+JSONSchex validate/2           2.90 M - 1.83x slower +155.88 ns
+JSV validate/2                 0.83 M - 6.37x slower +1013.30 ns
+JSV valid?/2                   0.82 M - 6.46x slower +1030.59 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?           808 B
+JSONSchex valid?/2                888 B - 1.10x memory usage +80 B
+JSONSchex validate/2              976 B - 1.21x memory usage +168 B
+JSV validate/2                   2264 B - 2.80x memory usage +1456 B
+JSV valid?/2                     2808 B - 3.48x memory usage +2000 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_uri_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?      692.31 K        1.44 μs   ±395.93%        1.38 μs        1.79 μs
+JSONSchex valid?/2           665.14 K        1.50 μs   ±479.33%        1.42 μs        1.83 μs
+JSONSchex validate/2         648.24 K        1.54 μs   ±517.68%        1.46 μs        1.92 μs
+JSV validate/2                99.85 K       10.02 μs    ±32.59%        9.37 μs       25.25 μs
+JSV valid?/2                  99.72 K       10.03 μs    ±34.07%        9.38 μs       25.04 μs
+
+Comparison:
+JSONSchex defvalidator?      692.31 K
+JSONSchex valid?/2           665.14 K - 1.04x slower +0.0590 μs
+JSONSchex validate/2         648.24 K - 1.07x slower +0.0982 μs
+JSV validate/2                99.85 K - 6.93x slower +8.57 μs
+JSV valid?/2                  99.72 K - 6.94x slower +8.58 μs
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?         2.26 KB
+JSONSchex valid?/2              2.34 KB - 1.03x memory usage +0.0781 KB
+JSONSchex validate/2            2.28 KB - 1.01x memory usage +0.0234 KB
+JSV validate/2                 51.95 KB - 23.01x memory usage +49.69 KB
+JSV valid?/2                   52.01 KB - 23.03x memory usage +49.75 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: formats_email_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex valid?/2          1168.90 K        0.86 μs   ±713.81%        0.79 μs           1 μs
+JSONSchex validate/2        1157.84 K        0.86 μs   ±981.91%        0.79 μs        1.08 μs
+JSONSchex defvalidator?      990.99 K        1.01 μs  ±4273.02%        0.75 μs        1.21 μs
+JSV valid?/2                 245.67 K        4.07 μs   ±204.40%        3.83 μs       12.12 μs
+JSV validate/2               245.23 K        4.08 μs   ±198.09%        3.88 μs       12.13 μs
+
+Comparison:
+JSONSchex valid?/2          1168.90 K
+JSONSchex validate/2        1157.84 K - 1.01x slower +0.00817 μs
+JSONSchex defvalidator?      990.99 K - 1.18x slower +0.154 μs
+JSV valid?/2                 245.67 K - 4.76x slower +3.22 μs
+JSV validate/2               245.23 K - 4.77x slower +3.22 μs
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex valid?/2              1.22 KB
+JSONSchex validate/2            1.30 KB - 1.07x memory usage +0.0859 KB
+JSONSchex defvalidator?         1.14 KB - 0.94x memory usage -0.07813 KB
+JSV valid?/2                   25.91 KB - 21.26x memory usage +24.69 KB
+JSV validate/2                 25.87 KB - 21.22x memory usage +24.65 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: patterns_exact_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       55.07 M       18.16 ns  ±5436.68%       16.70 ns       29.20 ns
+JSONSchex valid?/2            12.76 M       78.36 ns  ±4400.11%          83 ns          84 ns
+JSONSchex validate/2           7.55 M      132.52 ns  ±6032.26%          84 ns         167 ns
+JSV valid?/2                   1.91 M      522.90 ns  ±1387.79%         500 ns         625 ns
+JSV validate/2                 1.90 M      526.08 ns  ±1459.61%         500 ns         625 ns
+
+Comparison:
+JSONSchex defvalidator?       55.07 M
+JSONSchex valid?/2            12.76 M - 4.32x slower +60.20 ns
+JSONSchex validate/2           7.55 M - 7.30x slower +114.36 ns
+JSV valid?/2                   1.91 M - 28.79x slower +504.74 ns
+JSV validate/2                 1.90 M - 28.97x slower +507.92 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?             0 B
+JSONSchex valid?/2                 40 B - ∞ x memory usage +40 B
+JSONSchex validate/2              168 B - ∞ x memory usage +168 B
+JSV valid?/2                      512 B - ∞ x memory usage +512 B
+JSV validate/2                    448 B - ∞ x memory usage +448 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: patterns_digits_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Warning: The function you are trying to benchmark is super fast, making measurements more unreliable!
+This holds especially true for memory measurements or when running with hooks.
+
+See: https://github.com/bencheeorg/benchee/wiki/Benchee-Warnings#fast-execution-warning
+
+You may disable this warning by passing print: [fast_warning: false] as configuration options.
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       32.25 M       31.01 ns  ±3312.83%          25 ns       41.70 ns
+JSONSchex valid?/2            10.24 M       97.63 ns  ±5991.25%          83 ns         125 ns
+JSONSchex validate/2           7.35 M      135.99 ns  ±4536.44%         125 ns         167 ns
+JSV valid?/2                   1.87 M      534.55 ns  ±1364.57%         500 ns         625 ns
+JSV validate/2                 1.37 M      730.11 ns  ±1986.14%         500 ns         875 ns
+
+Comparison:
+JSONSchex defvalidator?       32.25 M
+JSONSchex valid?/2            10.24 M - 3.15x slower +66.62 ns
+JSONSchex validate/2           7.35 M - 4.39x slower +104.98 ns
+JSV valid?/2                   1.87 M - 17.24x slower +503.54 ns
+JSV validate/2                 1.37 M - 23.54x slower +699.10 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?            64 B
+JSONSchex valid?/2                104 B - 1.63x memory usage +40 B
+JSONSchex validate/2              232 B - 3.63x memory usage +168 B
+JSV valid?/2                      512 B - 8.00x memory usage +448 B
+JSV validate/2                    448 B - 7.00x memory usage +384 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: patterns_slug_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?       10.65 M       93.92 ns  ±3603.56%          83 ns         125 ns
+JSONSchex valid?/2             6.75 M      148.25 ns  ±3637.26%         125 ns         209 ns
+JSONSchex validate/2           5.72 M      174.77 ns  ±2995.73%         166 ns         250 ns
+JSV validate/2                 1.83 M      547.84 ns  ±1227.24%         500 ns         667 ns
+JSV valid?/2                   1.77 M      564.10 ns  ±1311.26%         500 ns         708 ns
+
+Comparison:
+JSONSchex defvalidator?       10.65 M
+JSONSchex valid?/2             6.75 M - 1.58x slower +54.33 ns
+JSONSchex validate/2           5.72 M - 1.86x slower +80.86 ns
+JSV validate/2                 1.83 M - 5.83x slower +453.92 ns
+JSV valid?/2                   1.77 M - 6.01x slower +470.19 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?            64 B
+JSONSchex valid?/2                104 B - 1.63x memory usage +40 B
+JSONSchex validate/2              232 B - 3.63x memory usage +168 B
+JSV validate/2                    448 B - 7.00x memory usage +384 B
+JSV valid?/2                      512 B - 8.00x memory usage +448 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: patterns_complex_regex_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex valid?/2             2.46 M      407.30 ns  ±1431.91%         375 ns         500 ns
+JSONSchex validate/2           2.19 M      455.64 ns  ±1688.46%         417 ns         542 ns
+JSV valid?/2                   1.81 M      553.15 ns  ±1270.27%         500 ns         667 ns
+JSV validate/2                 1.75 M      572.38 ns  ±1412.92%         500 ns         708 ns
+JSONSchex defvalidator?        1.41 M      708.80 ns  ±1452.31%         542 ns        1750 ns
+
+Comparison:
+JSONSchex valid?/2             2.46 M
+JSONSchex validate/2           2.19 M - 1.12x slower +48.33 ns
+JSV valid?/2                   1.81 M - 1.36x slower +145.85 ns
+JSV validate/2                 1.75 M - 1.41x slower +165.08 ns
+JSONSchex defvalidator?        1.41 M - 1.74x slower +301.49 ns
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex valid?/2                 40 B
+JSONSchex validate/2              168 B - 4.20x memory usage +128 B
+JSV valid?/2                      512 B - 12.80x memory usage +472 B
+JSV validate/2                    448 B - 11.20x memory usage +408 B
+JSONSchex defvalidator?           128 B - 3.20x memory usage +88 B
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: annotations_free_additional_true_20_keys
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex valid?/2          4.02 M        0.25 μs  ±2096.56%        0.21 μs        0.33 μs
+JSONSchex validate/2        3.37 M        0.30 μs  ±1752.87%        0.25 μs        0.42 μs
+JSV valid?/2                0.31 M        3.21 μs   ±217.93%        3.08 μs        4.42 μs
+JSV validate/2              0.26 M        3.80 μs   ±206.35%        3.63 μs        6.96 μs
+
+Comparison:
+JSONSchex valid?/2          4.02 M
+JSONSchex validate/2        3.37 M - 1.19x slower +0.0479 μs
+JSV valid?/2                0.31 M - 12.92x slower +2.97 μs
+JSV validate/2              0.26 M - 15.26x slower +3.55 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex valid?/2         0.0781 KB
+JSONSchex validate/2         0.37 KB - 4.70x memory usage +0.29 KB
+JSV valid?/2                 5.51 KB - 70.50x memory usage +5.43 KB
+JSV validate/2               7.89 KB - 101.00x memory usage +7.81 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: annotations_unevaluated_props_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex validate/2        1.32 M        0.76 μs   ±977.76%        0.71 μs        0.96 μs
+JSONSchex valid?/2          1.27 M        0.79 μs  ±1043.71%        0.71 μs           1 μs
+JSV valid?/2                0.70 M        1.44 μs   ±577.79%        1.33 μs        2.21 μs
+JSV validate/2              0.57 M        1.76 μs  ±1401.07%        1.46 μs        3.17 μs
+
+Comparison:
+JSONSchex validate/2        1.32 M
+JSONSchex valid?/2          1.27 M - 1.03x slower +0.0259 μs
+JSV valid?/2                0.70 M - 1.89x slower +0.68 μs
+JSV validate/2              0.57 M - 2.31x slower +1.00 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex validate/2         1.55 KB
+JSONSchex valid?/2           1.55 KB - 1.00x memory usage +0 KB
+JSV valid?/2                 4.23 KB - 2.72x memory usage +2.67 KB
+JSV validate/2               4.36 KB - 2.80x memory usage +2.80 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: annotations_unevaluated_props_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 36 s
+Excluding outliers: false
+
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                           ips        average  deviation         median         99th %
+JSONSchex validate/2        1.19 M        0.84 μs   ±704.43%        0.79 μs        1.08 μs
+JSONSchex valid?/2          1.18 M        0.85 μs   ±688.35%        0.79 μs        1.13 μs
+JSV valid?/2                0.60 M        1.65 μs   ±379.66%        1.54 μs        2.42 μs
+JSV validate/2              0.58 M        1.72 μs   ±386.87%        1.63 μs        2.46 μs
+
+Comparison:
+JSONSchex validate/2        1.19 M
+JSONSchex valid?/2          1.18 M - 1.01x slower +0.0103 μs
+JSV valid?/2                0.60 M - 1.97x slower +0.81 μs
+JSV validate/2              0.58 M - 2.05x slower +0.88 μs
+
+Memory usage statistics:
+
+Name                    Memory usage
+JSONSchex validate/2         2.02 KB
+JSONSchex valid?/2           1.98 KB - 0.98x memory usage -0.03906 KB
+JSV valid?/2                 4.53 KB - 2.24x memory usage +2.51 KB
+JSV validate/2               4.95 KB - 2.45x memory usage +2.93 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: ref_recursive_tree_31_nodes_valid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSONSchex defvalidator?      107.37 K        9.31 μs    ±65.20%        9.04 μs       17.08 μs
+JSONSchex valid?/2           107.22 K        9.33 μs    ±48.05%        9.08 μs       16.33 μs
+JSONSchex validate/2         100.69 K        9.93 μs    ±53.89%        9.66 μs       17.50 μs
+JSV valid?/2                  63.01 K       15.87 μs    ±42.83%       15.33 μs          26 μs
+JSV validate/2                57.16 K       17.49 μs    ±16.80%       16.92 μs       26.33 μs
+
+Comparison:
+JSONSchex defvalidator?      107.37 K
+JSONSchex valid?/2           107.22 K - 1.00x slower +0.0131 μs
+JSONSchex validate/2         100.69 K - 1.07x slower +0.62 μs
+JSV valid?/2                  63.01 K - 1.70x slower +6.56 μs
+JSV validate/2                57.16 K - 1.88x slower +8.18 μs
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSONSchex defvalidator?         8.68 KB
+JSONSchex valid?/2              8.75 KB - 1.01x memory usage +0.0703 KB
+JSONSchex validate/2           17.70 KB - 2.04x memory usage +9.02 KB
+JSV valid?/2                   38.48 KB - 4.43x memory usage +29.80 KB
+JSV validate/2                 43.87 KB - 5.05x memory usage +35.19 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: ref_recursive_tree_31_nodes_invalid
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 45 s
+Excluding outliers: false
+
+Benchmarking JSONSchex defvalidator? ...
+Benchmarking JSONSchex valid?/2 ...
+Benchmarking JSONSchex validate/2 ...
+Benchmarking JSV valid?/2 ...
+Benchmarking JSV validate/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                              ips        average  deviation         median         99th %
+JSV valid?/2                 546.87 K        1.83 μs   ±436.78%        1.71 μs        2.92 μs
+JSONSchex defvalidator?      112.30 K        8.91 μs    ±82.68%        8.58 μs       16.29 μs
+JSONSchex valid?/2           108.00 K        9.26 μs   ±523.22%        8.67 μs       17.33 μs
+JSONSchex validate/2          99.59 K       10.04 μs    ±45.89%        9.75 μs       17.63 μs
+JSV validate/2                55.15 K       18.13 μs    ±14.97%       17.58 μs       25.13 μs
+
+Comparison:
+JSV valid?/2                 546.87 K
+JSONSchex defvalidator?      112.30 K - 4.87x slower +7.08 μs
+JSONSchex valid?/2           108.00 K - 5.06x slower +7.43 μs
+JSONSchex validate/2          99.59 K - 5.49x slower +8.21 μs
+JSV validate/2                55.15 K - 9.92x slower +16.30 μs
+
+Memory usage statistics:
+
+Name                       Memory usage
+JSV valid?/2                    3.92 KB
+JSONSchex defvalidator?         8.17 KB - 2.08x memory usage +4.25 KB
+JSONSchex valid?/2              8.24 KB - 2.10x memory usage +4.32 KB
+JSONSchex validate/2           18.19 KB - 4.64x memory usage +14.27 KB
+JSV validate/2                 46.17 KB - 11.77x memory usage +42.25 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Compiled Schema Footprint (BEAM words via :erts_debug.flat_size/1)
+========================================================================
+  User (module/compiled)         JSONSchex:   1111 words | JSV:    637 words
+  Order (nested + items)         JSONSchex:   2624 words | JSV:   1240 words
+  Object (20 typed props)        JSONSchex:   2984 words | JSV:   1778 words
+  Recursive Tree ($defs/$ref)    JSONSchex:   1243 words | JSV:    555 words
+
+========================================================================
+  Benchmark: compile_order_schema
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 27 s
+Excluding outliers: false
+
+Benchmarking JSONSchex.compile/2 (raw map) ...
+Benchmarking JSV.build!/2 (defschema module) ...
+Benchmarking JSV.build!/2 (raw map) ...
+Calculating statistics...
+Formatting results...
+
+Name                                      ips        average  deviation         median         99th %
+JSV.build!/2 (raw map)                39.68 K       25.20 μs   ±121.58%       23.25 μs       38.71 μs
+JSONSchex.compile/2 (raw map)         33.27 K       30.05 μs    ±90.83%       27.29 μs       58.50 μs
+JSV.build!/2 (defschema module)        3.51 K      284.91 μs   ±104.76%      233.44 μs      626.66 μs
+
+Comparison:
+JSV.build!/2 (raw map)                39.68 K
+JSONSchex.compile/2 (raw map)         33.27 K - 1.19x slower +4.86 μs
+JSV.build!/2 (defschema module)        3.51 K - 11.31x slower +259.71 μs
+
+Memory usage statistics:
+
+Name                               Memory usage
+JSV.build!/2 (raw map)                 74.21 KB
+JSONSchex.compile/2 (raw map)          28.90 KB - 0.39x memory usage -45.31250 KB
+JSV.build!/2 (defschema module)       102.32 KB - 1.38x memory usage +28.11 KB
+
+**All measurements for memory usage were the same**
+
+========================================================================
+  Benchmark: compile_object_20_schema
+========================================================================
+Operating System: macOS
+CPU Information: Apple M2 Pro
+Number of Available Cores: 10
+Available memory: 16 GB
+Elixir 1.19.5
+Erlang 28.2
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 5 s
+memory time: 2 s
+reduction time: 0 ns
+parallel: 1
+inputs: none specified
+Estimated total run time: 18 s
+Excluding outliers: false
+
+Benchmarking JSONSchex.compile/2 ...
+Benchmarking JSV.build!/2 ...
+Calculating statistics...
+Formatting results...
+
+Name                          ips        average  deviation         median         99th %
+JSONSchex.compile/2       38.44 K       26.01 μs    ±42.16%       25.25 μs       37.67 μs
+JSV.build!/2              27.63 K       36.20 μs    ±70.36%       35.17 μs       54.62 μs
+
+Comparison:
+JSONSchex.compile/2       38.44 K
+JSV.build!/2              27.63 K - 1.39x slower +10.19 μs
+
+Memory usage statistics:
+
+Name                   Memory usage
+JSONSchex.compile/2        30.20 KB
+JSV.build!/2              120.41 KB - 3.99x memory usage +90.21 KB
+
+**All measurements for memory usage were the same**

@@ -46,18 +46,12 @@ defmodule JSONSchex.Validator do
       true
   """
   @spec validate(Schema.t(), term()) :: :ok | {:error, list(Error.t())}
-  def validate(%Schema{source_id: id} = root_schema, data) do
-    initial_stack = if id != nil, do: [id], else: []
+  def validate(%Schema{needs_evaluated_annotations: needs_eval} = root_schema, data) do
+    ctx = ValidationContext.from_root_schema(root_schema)
 
-    ctx = %ValidationContext{
-      root_schema: root_schema,
-      scope_stack: initial_stack,
-      source_id: id,
-      raw: root_schema.raw,
-      local_refs: root_schema.local_refs
-    }
+    initial_evaluated = if needs_eval, do: @empty_mapset, else: nil
 
-    case validate_entry(root_schema, data, [], ctx) do
+    case validate_entry(root_schema, data, [], ctx, initial_evaluated) do
       {:ok, _annotations} ->
         :ok
 
@@ -115,27 +109,40 @@ defmodule JSONSchex.Validator do
       iex> JSONSchex.Validator.validate_entry(schema, "hello", [], ctx)
       {:ok, MapSet.new()}
   """
-  @spec validate_entry(Schema.t(), term(), list(), ValidationContext.t(), term()) ::
-          {:ok, MapSet.t()} | {:error, validation_error_list()}
-  def validate_entry(schema, data, path, context, initial_evaluted \\ @empty_mapset)
+  @spec validate_entry(Schema.t(), term(), list(), ValidationContext.t(), MapSet.t() | nil) ::
+          {:ok, MapSet.t() | nil} | {:error, validation_error_list()}
+  def validate_entry(schema, data, path, context, initial_evaluated \\ @empty_mapset)
+
+  def validate_entry(%Schema{needs_evaluated_annotations: true} = schema, data, path, context, nil) do
+    case validate_entry(schema, data, path, context, @empty_mapset) do
+      {:ok, _} -> {:ok, nil}
+      {:error, _} = err -> err
+    end
+  end
 
   def validate_entry(%Schema{rules: [], source_id: nil}, _data, _path, _context, evaluated) do
     {:ok, evaluated}
   end
 
-  def validate_entry(%Schema{rules: [rule], source_id: nil}, data, path, context, evaluated) do
-    case Rules.apply(rule, data, {path, evaluated, context}) do
+  def validate_entry(
+        %Schema{rules: [%Rule{name: name, params: params}], source_id: nil},
+        data,
+        path,
+        context,
+        evaluated
+      ) do
+    case Rules.apply_rule(name, params, data, {path, evaluated, context}) do
       :ok ->
         {:ok, evaluated}
 
       {:ok, new_eval_keys} ->
-        {:ok, MapSet.union(evaluated, new_eval_keys)}
+        {:ok, merge_evaluated(evaluated, new_eval_keys)}
 
       {:error, new_errs} when is_list(new_errs) ->
         {:error, new_errs}
 
       {:error, error_context} when is_map(error_context) ->
-        {:error, [%Error{path: path, rule: rule.name, context: error_context, value: data}]}
+        {:error, [%Error{path: path, rule: name, context: error_context, value: data}]}
     end
   end
 
@@ -228,30 +235,44 @@ defmodule JSONSchex.Validator do
 
   # Keep the specialized two-rule execution path for ordinary schemas. Only a
   # direct pair of sibling object keywords enters the cache-aware runner.
-  defp run_two_rules(rule1, rule2, data, path, context, evaluated, ctx) do
+  defp run_two_rules(
+         %Rule{name: name1, params: params1},
+         %Rule{name: name2, params: params2},
+         data,
+         path,
+         context,
+         evaluated,
+         ctx
+       ) do
     {eval1, ctx1, err1} =
-      case Rules.apply(rule1, data, ctx) do
+      case Rules.apply_rule(name1, params1, data, ctx) do
         :ok ->
           {evaluated, ctx, nil}
+
+        {:ok, _new_keys} when evaluated == nil ->
+          {nil, ctx, nil}
 
         {:ok, new_keys} ->
           new_eval = MapSet.union(evaluated, new_keys)
           {new_eval, {path, new_eval, context}, nil}
 
         {:error, error} ->
-          {evaluated, ctx, to_error_entry(error, path, rule1.name, data)}
+          {evaluated, ctx, to_error_entry(error, path, name1, data)}
       end
 
     {eval2, err2} =
-      case Rules.apply(rule2, data, ctx1) do
+      case Rules.apply_rule(name2, params2, data, ctx1) do
         :ok ->
           {eval1, nil}
+
+        {:ok, _new_keys} when eval1 == nil ->
+          {nil, nil}
 
         {:ok, new_keys} ->
           {MapSet.union(eval1, new_keys), nil}
 
         {:error, error} ->
-          {eval1, to_error_entry(error, path, rule2.name, data)}
+          {eval1, to_error_entry(error, path, name2, data)}
       end
 
     case {err1, err2} do
@@ -261,6 +282,9 @@ defmodule JSONSchex.Validator do
       {error1, error2} -> {:error, [error2 | [error1]]}
     end
   end
+
+  defp merge_evaluated(nil, _new_eval_keys), do: nil
+  defp merge_evaluated(evaluated, new_eval_keys), do: MapSet.union(evaluated, new_eval_keys)
 
 
   defp run_rules_with_pattern_cache([], _data, _path, _context, evaluated, _ctx, [], _cache) do
@@ -284,6 +308,19 @@ defmodule JSONSchex.Validator do
           path,
           context,
           evaluated,
+          ctx,
+          errors,
+          updated_cache
+        )
+
+      {:ok, _new_eval_keys} when evaluated == nil ->
+        continue_cached_rules(
+          complete?,
+          rest,
+          data,
+          path,
+          context,
+          nil,
           ctx,
           errors,
           updated_cache
@@ -512,10 +549,13 @@ defmodule JSONSchex.Validator do
     end
   end
 
-  defp run_rules([rule | rest], data, path, context, evaluated, ctx, errors) do
-    case Rules.apply(rule, data, ctx) do
+  defp run_rules([%Rule{name: name, params: params} | rest], data, path, context, evaluated, ctx, errors) do
+    case Rules.apply_rule(name, params, data, ctx) do
       :ok ->
         run_rules(rest, data, path, context, evaluated, ctx, errors)
+
+      {:ok, _new_eval_keys} when evaluated == nil ->
+        run_rules(rest, data, path, context, nil, ctx, errors)
 
       {:ok, new_eval_keys} ->
         cond do
@@ -536,7 +576,7 @@ defmodule JSONSchex.Validator do
         run_rules(rest, data, path, context, evaluated, ctx, [new_errs | errors])
 
       {:error, err_context} when is_map(err_context) ->
-        e = %Error{path: path, rule: rule.name, context: err_context, value: data}
+        e = %Error{path: path, rule: name, context: err_context, value: data}
         run_rules(rest, data, path, context, evaluated, ctx, [e | errors])
     end
   end
@@ -557,10 +597,21 @@ defmodule JSONSchex.Validator do
     {:error, errors}
   end
 
-  defp run_rules_without_pattern_match_cache([rule | rest], data, path, context, evaluated, ctx, errors) do
-    case Rules.apply(rule, data, ctx) do
+  defp run_rules_without_pattern_match_cache(
+         [%Rule{name: name, params: params} | rest],
+         data,
+         path,
+         context,
+         evaluated,
+         ctx,
+         errors
+       ) do
+    case Rules.apply_rule(name, params, data, ctx) do
       :ok ->
         run_rules_without_pattern_match_cache(rest, data, path, context, evaluated, ctx, errors)
+
+      {:ok, _new_eval_keys} when evaluated == nil ->
+        run_rules_without_pattern_match_cache(rest, data, path, context, nil, ctx, errors)
 
       {:ok, new_eval_keys} ->
         cond do
@@ -607,7 +658,7 @@ defmodule JSONSchex.Validator do
         )
 
       {:error, err_context} when is_map(err_context) ->
-        error = %Error{path: path, rule: rule.name, context: err_context, value: data}
+        error = %Error{path: path, rule: name, context: err_context, value: data}
 
         run_rules_without_pattern_match_cache(
           rest,

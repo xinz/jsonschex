@@ -29,7 +29,8 @@ defmodule JSONSchex.Types do
               | nil,
             format_assertion: boolean(),
             content_assertion: boolean(),
-            draft: String.t()
+            draft: String.t(),
+            needs_evaluated_annotations: boolean()
           }
     defstruct [
       :rules,
@@ -41,7 +42,8 @@ defmodule JSONSchex.Types do
       local_refs: %{},
       format_assertion: false,
       content_assertion: false,
-      draft: "draft2020_12"
+      draft: "draft2020_12",
+      needs_evaluated_annotations: false
     ]
   end
 
@@ -67,6 +69,18 @@ defmodule JSONSchex.Types do
       local_refs: %{},
       scope_stack: []
     ]
+
+    @doc false
+    @spec from_root_schema(JSONSchex.Types.Schema.t()) :: t()
+    def from_root_schema(%JSONSchex.Types.Schema{source_id: id} = root_schema) do
+      %__MODULE__{
+        root_schema: root_schema,
+        scope_stack: if(id != nil, do: [id], else: []),
+        source_id: id,
+        raw: root_schema.raw,
+        local_refs: root_schema.local_refs
+      }
+    end
   end
 
   defmodule Rule do

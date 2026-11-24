@@ -26,12 +26,12 @@ defmodule JSONSchex do
       iex> JSONSchex.format_error(error)
       ~s(Invalid email format: "not-an-email")
 
-  For compile-time schema embedding, see:
+  For compile-time schema embedding and static validator generation, see:
 
-  - `JSONSchex.Schema` for the `compile!/2` macro
+  - `JSONSchex.Schema` for `compile!/2`, `compile_fragment!/2`, and `defvalidator/2,3`
   - `JSONSchex.Sigil` for the `~X` sigil
 
-  `use JSONSchex` imports the `~X` sigil as a convenience.
+  `use JSONSchex` imports the `~X` sigil and `defvalidator/2,3` as a convenience.
   """
 
   alias JSONSchex.Compiler
@@ -180,6 +180,27 @@ defmodule JSONSchex do
   defdelegate validate(schema, data), to: Validator
 
   @doc """
+  Returns `true` if `data` is valid against a compiled schema, `false` otherwise.
+
+  This fail-fast entry point short-circuits on the first mismatch (and on the first
+  matching branch in `anyOf` when no `unevaluatedProperties`/`unevaluatedItems`
+  annotations are required), avoiding error struct allocation when detailed
+  diagnostics are not needed. A regex engine error encountered during evaluation
+  returns `false`; branches skipped after the result is known are not checked
+  for such errors. Use `validate/2` when you need full diagnostics.
+
+  ## Examples
+
+      iex> {:ok, schema} = JSONSchex.compile(%{"type" => "integer", "minimum" => 10})
+      iex> JSONSchex.valid?(schema, 15)
+      true
+      iex> JSONSchex.valid?(schema, 5)
+      false
+  """
+  @spec valid?(Schema.t(), term()) :: boolean()
+  defdelegate valid?(schema, data), to: JSONSchex.Validator.ShortCircuit
+
+  @doc """
   Formats a validation error into a human-readable string.
 
   ## Examples
@@ -212,13 +233,22 @@ defmodule JSONSchex do
   defdelegate format_error(error), to: JSONSchex.ErrorFormatter, as: :format
 
   @doc """
-  Imports the `~X` sigil for compile-time schema literals.
+  Imports the `~X` sigil and `defvalidator/2,3` macro for compile-time schemas.
 
-  For the explicit API, use `JSONSchex.Sigil` directly.
+  For the explicit APIs, use `JSONSchex.Sigil` and `JSONSchex.Schema` directly.
+
+  ## Examples
+
+      defmodule MyApp.Validators do
+        use JSONSchex
+
+        defvalidator :validate_email, ~X|%{"type" => "string", "format" => "email"}|f
+      end
   """
   defmacro __using__(_opts) do
     quote do
       import JSONSchex.Sigil, only: [sigil_X: 2]
+      import JSONSchex.Schema, only: [defvalidator: 2, defvalidator: 3]
     end
   end
 end

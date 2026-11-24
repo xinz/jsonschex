@@ -150,6 +150,7 @@ defmodule JSONSchex.Test.SuiteRunner do
                   {:ok, compiled} ->
                     result = JSONSchex.validate(compiled, data)
                     unquote(assertion_block)
+                    assert JSONSchex.valid?(compiled, data) == unquote(expected_valid)
 
                   {:error, msg} ->
                     flunk("Schema Compilation Failed: #{msg}")
