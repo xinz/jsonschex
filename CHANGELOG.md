@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.12.0 (2026-11-24)
+
 ### Bug Fixes and Improvements
 
 Add fast-path validation with `JSONSchex.valid?/2`, compile-time `defvalidator`, binary format parsers, and predefined pattern matchers. ([#22](https://github.com/xinz/jsonschex/pull/22))
